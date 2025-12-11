@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import { NotaFiscal, Cliente, Banco, ConfiguracaoBanco, TipoImpressao, TIPOS_IMPRESSAO } from '@/types/boleto';
-import { gerarCodigoBarras as calcularCodigoBarras, gerarBarrasVisuais, DadosCodigoBarras } from './barcodeCalculator';
+import { gerarCodigoBarras as calcularCodigoBarras, gerarBarrasVisuais, DadosCodigoBarras, BarraVisual } from './barcodeCalculator';
 import { carregarDadosEmpresa, DadosEmpresa } from '@/types/empresa';
 
 interface DadosBoleto {
@@ -204,30 +204,38 @@ function desenharBoleto(
   
   y += 18;
 
-  // Código de barras (calculado corretamente usando ITF - Interleaved 2 of 5)
-  doc.setFillColor(0, 0, 0);
+  // Código de barras (ITF - Interleaved 2 of 5)
   const barras = gerarBarrasVisuais(codigoBarras);
-  let barX = margin;
-  const barHeight = 25;
+  const barHeight = 30;
+  const narrowWidth = 0.35; // Largura da barra estreita em mm
   
-  for (const largura of barras) {
-    if (largura > 0) {
-      // Barra preta
-      const barWidth = largura * 0.5;
-      doc.rect(barX, y + 2, barWidth, barHeight, 'F');
-      barX += barWidth;
-    } else {
-      // Espaço branco
-      barX += Math.abs(largura) * 0.5;
-    }
+  // Calcula largura total do código de barras
+  let totalWidth = 0;
+  for (const barra of barras) {
+    totalWidth += barra.largura * narrowWidth;
   }
   
-  // Adiciona números do código abaixo das barras
-  doc.setFontSize(8);
-  doc.setFont('courier', 'normal');
-  doc.text(codigoBarras, margin, y + barHeight + 6);
+  // Centraliza o código de barras
+  let barX = margin + (contentWidth - totalWidth) / 2;
   
-  y += barHeight + 10;
+  // Desenha as barras
+  for (const barra of barras) {
+    const barWidth = barra.largura * narrowWidth;
+    if (barra.tipo === 'barra') {
+      doc.setFillColor(0, 0, 0);
+      doc.rect(barX, y + 2, barWidth, barHeight, 'F');
+    }
+    barX += barWidth;
+  }
+  
+  // Adiciona números do código abaixo das barras (centralizado)
+  doc.setFontSize(9);
+  doc.setFont('courier', 'bold');
+  doc.setTextColor(0, 0, 0);
+  const textWidth = doc.getTextWidth(codigoBarras);
+  doc.text(codigoBarras, margin + (contentWidth - textWidth) / 2, y + barHeight + 8);
+  
+  y += barHeight + 12;
 
   // Linha de corte
   doc.setDrawColor(150, 150, 150);
