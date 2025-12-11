@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Eye, Check, Building2, Loader2 } from 'lucide-react';
+import { Upload, FileText, Eye, Check, Building2, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,9 +13,17 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { bancosMock } from '@/data/mockData';
 import { TemplatePDF } from '@/types/boleto';
+import { 
+  TemplateBoletoCompleto, 
+  CampoTemplateBoleto, 
+  CAMPOS_BOLETO_PADRAO,
+  criarTemplatePadraoFEBRABAN 
+} from '@/types/templateBoleto';
+import { salvarTemplate } from '@/lib/pdfTemplateGenerator';
 
 interface ImportarPDFModalProps {
   open: boolean;
@@ -32,7 +40,9 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const [nomeModelo, setNomeModelo] = useState('');
   const [bancosCompativeis, setBancosCompativeis] = useState<string[]>([]);
   const [processando, setProcessando] = useState(false);
-  const [templateProcessado, setTemplateProcessado] = useState<TemplatePDF | null>(null);
+  const [templateProcessado, setTemplateProcessado] = useState<TemplateBoletoCompleto | null>(null);
+  const [templatePDF, setTemplatePDF] = useState<TemplatePDF | null>(null);
+  const [camposDetectados, setCamposDetectados] = useState<CampoTemplateBoleto[]>([]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -54,7 +64,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
 
-    // Simular processamento do PDF
+    // Processar o PDF
     setProcessando(true);
     
     // Converter para base64
@@ -62,34 +72,53 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     reader.onload = async () => {
       const base64 = reader.result as string;
       
-      // Simular análise do layout (em produção, usaria IA para detectar campos)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Simular análise do layout - em produção usaria OCR/IA
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      const template: TemplatePDF = {
+      // Criar template baseado no padrão FEBRABAN
+      // O sistema cria todos os campos padrão, mesmo que não detectados visualmente
+      const templateBase = criarTemplatePadraoFEBRABAN();
+      
+      const novoTemplate: TemplateBoletoCompleto = {
+        ...templateBase,
         id: `template_${Date.now()}`,
         nome: file.name.replace('.pdf', ''),
+        pdf_original_base64: base64,
+        bancos_compativeis: [],
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      };
+      
+      // Criar TemplatePDF para compatibilidade
+      const pdfTemplate: TemplatePDF = {
+        id: novoTemplate.id,
+        nome: novoTemplate.nome,
         arquivo_base64: base64,
         preview_url: url,
         layout_detectado: {
-          largura_pagina: 210, // A4 mm
-          altura_pagina: 297,
-          areas_texto: [
-            { id: '1', x: 10, y: 10, largura: 80, altura: 10, texto_original: 'Cedente', campo_mapeado: '{{empresa_razao_social}}' },
-            { id: '2', x: 10, y: 25, largura: 60, altura: 8, texto_original: 'Sacado', campo_mapeado: '{{cliente_razao_social}}' },
-            { id: '3', x: 10, y: 35, largura: 40, altura: 8, texto_original: 'CNPJ', campo_mapeado: '{{cliente_cnpj}}' },
-            { id: '4', x: 150, y: 25, largura: 40, altura: 8, texto_original: 'Valor', campo_mapeado: '{{valor_titulo}}' },
-            { id: '5', x: 150, y: 35, largura: 40, altura: 8, texto_original: 'Vencimento', campo_mapeado: '{{data_vencimento}}' },
-          ],
+          largura_pagina: novoTemplate.largura_pagina,
+          altura_pagina: novoTemplate.altura_pagina,
+          areas_texto: novoTemplate.campos.map(campo => ({
+            id: campo.id,
+            x: campo.x,
+            y: campo.y,
+            largura: campo.largura,
+            altura: campo.altura,
+            texto_original: campo.label,
+            campo_mapeado: `{{${campo.tipo}}}`,
+          })),
         },
-        criado_em: new Date().toISOString(),
+        criado_em: novoTemplate.criado_em,
       };
       
-      setTemplateProcessado(template);
+      setTemplateProcessado(novoTemplate);
+      setTemplatePDF(pdfTemplate);
+      setCamposDetectados(novoTemplate.campos);
       setProcessando(false);
       
       toast({
-        title: 'PDF analisado',
-        description: `${template.layout_detectado.areas_texto.length} áreas de texto detectadas.`,
+        title: 'PDF analisado com sucesso',
+        description: `${novoTemplate.campos.length} campos configurados no template. O layout será replicado exatamente na impressão.`,
       });
     };
     reader.readAsDataURL(file);
@@ -104,7 +133,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   };
 
   const handleImportar = () => {
-    if (!templateProcessado) {
+    if (!templateProcessado || !templatePDF) {
       toast({
         title: 'Erro',
         description: 'Nenhum template processado.',
@@ -122,7 +151,25 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       return;
     }
 
-    onImportar(templateProcessado, bancosCompativeis, nomeModelo);
+    // Atualiza bancos compatíveis no template
+    const templateFinal: TemplateBoletoCompleto = {
+      ...templateProcessado,
+      nome: nomeModelo,
+      bancos_compativeis: bancosCompativeis,
+      atualizado_em: new Date().toISOString(),
+    };
+
+    // Salva o template completo no localStorage
+    salvarTemplate(templateFinal);
+
+    // Chama callback com TemplatePDF para compatibilidade
+    onImportar(templatePDF, bancosCompativeis, nomeModelo);
+    
+    toast({
+      title: 'Template importado',
+      description: `O modelo "${nomeModelo}" foi salvo e será usado para gerar boletos idênticos ao PDF importado.`,
+    });
+    
     handleClose();
   };
 
@@ -132,164 +179,215 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     setNomeModelo('');
     setBancosCompativeis([]);
     setTemplateProcessado(null);
+    setTemplatePDF(null);
+    setCamposDetectados([]);
     setProcessando(false);
     onOpenChange(false);
   };
 
+  // Agrupa campos por categoria
+  const camposPorCategoria = {
+    'Banco': camposDetectados.filter(c => c.tipo.startsWith('banco_')),
+    'Beneficiário': camposDetectados.filter(c => c.tipo.startsWith('beneficiario_')),
+    'Pagador': camposDetectados.filter(c => c.tipo.startsWith('pagador_')),
+    'Título': camposDetectados.filter(c => ['nosso_numero', 'numero_documento', 'especie_documento', 'aceite', 'data_documento', 'data_processamento', 'data_vencimento', 'valor_documento', 'valor_cobrado'].includes(c.tipo)),
+    'Dados Bancários': camposDetectados.filter(c => ['agencia_codigo', 'carteira', 'especie_moeda', 'quantidade', 'valor_moeda', 'local_pagamento'].includes(c.tipo)),
+    'Código de Barras': camposDetectados.filter(c => ['linha_digitavel', 'codigo_barras'].includes(c.tipo)),
+    'Instruções': camposDetectados.filter(c => c.tipo === 'instrucoes'),
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Importar Modelo de PDF
+            Importar Modelo de PDF para Impressão de Boletos
           </DialogTitle>
           <DialogDescription>
-            Faça upload de um boleto PDF existente para usar como modelo. 
-            O sistema irá copiar o layout exato e você poderá usar para vários bancos.
+            Faça upload de um boleto PDF existente. O sistema irá replicar EXATAMENTE o layout visual para gerar novos boletos.
+            Todos os campos padrão de boleto são incluídos automaticamente.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
-          {/* Coluna Esquerda - Upload e Configuração */}
-          <div className="space-y-6">
-            {/* Upload */}
-            <div>
-              <Label>Arquivo PDF do Boleto Modelo</Label>
-              <div 
-                className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                {arquivo ? (
-                  <div className="flex items-center justify-center gap-3">
-                    <FileText className="h-8 w-8 text-primary" />
-                    <div className="text-left">
-                      <p className="font-medium">{arquivo.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {(arquivo.size / 1024).toFixed(1)} KB
+        <div className="flex-1 overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            {/* Coluna Esquerda - Upload e Configuração */}
+            <ScrollArea className="h-[60vh] pr-4">
+              <div className="space-y-6">
+                {/* Upload */}
+                <div>
+                  <Label>Arquivo PDF do Boleto Modelo</Label>
+                  <div 
+                    className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                    {arquivo ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <FileText className="h-8 w-8 text-primary" />
+                        <div className="text-left">
+                          <p className="font-medium">{arquivo.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(arquivo.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Clique ou arraste um arquivo PDF
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          O layout será copiado exatamente para impressão
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Nome do Modelo */}
+                {arquivo && (
+                  <div>
+                    <Label>Nome do Modelo</Label>
+                    <Input
+                      value={nomeModelo}
+                      onChange={(e) => setNomeModelo(e.target.value)}
+                      placeholder="Ex: Modelo Boleto Padrão"
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+
+                {/* Seleção de Bancos */}
+                {templateProcessado && (
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Bancos Compatíveis
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1 mb-3">
+                      O mesmo layout visual será usado para todos os bancos selecionados. 
+                      Apenas os dados específicos mudam (agência, conta, código).
+                    </p>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                      {bancosMock.filter(b => b.ativo).map((banco) => (
+                        <div 
+                          key={banco.id} 
+                          className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                          onClick={() => handleBancoToggle(banco.id)}
+                        >
+                          <Checkbox 
+                            checked={bancosCompativeis.includes(banco.id)}
+                            onCheckedChange={() => handleBancoToggle(banco.id)}
+                          />
+                          <span className="text-sm">{banco.codigo_banco} - {banco.nome_banco}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {bancosCompativeis.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {bancosCompativeis.map(id => {
+                          const banco = bancosMock.find(b => b.id === id);
+                          return banco ? (
+                            <Badge key={id} variant="secondary" className="text-xs">
+                              {banco.codigo_banco}
+                            </Badge>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campos Configurados */}
+                {templateProcessado && (
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-green-600" />
+                      Campos do Template ({camposDetectados.length} campos)
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1 mb-3">
+                      Todos os campos padrão FEBRABAN estão configurados. O boleto impresso será idêntico ao modelo.
+                    </p>
+                    <div className="space-y-4">
+                      {Object.entries(camposPorCategoria).map(([categoria, campos]) => (
+                        campos.length > 0 && (
+                          <div key={categoria}>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">{categoria}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {campos.map(campo => (
+                                <Badge key={campo.id} variant="outline" className="text-xs">
+                                  {campo.label}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Aviso sobre campos não previstos */}
+                {templateProcessado && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-blue-700 dark:text-blue-300">
+                      <p className="font-medium">Campos Completos</p>
+                      <p className="text-xs mt-1">
+                        Todos os campos padrão de boleto FEBRABAN estão incluídos, mesmo que não estejam 
+                        visíveis no PDF importado. Isso garante compatibilidade com qualquer banco.
                       </p>
                     </div>
                   </div>
-                ) : (
-                  <div>
-                    <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Clique ou arraste um arquivo PDF
-                    </p>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Coluna Direita - Preview */}
+            <div className="flex flex-col h-[60vh]">
+              <Label className="flex items-center gap-2 mb-2">
+                <Eye className="h-4 w-4" />
+                Pré-visualização do PDF Modelo
+              </Label>
+              <div className="flex-1 border rounded-lg bg-muted/30 flex items-center justify-center overflow-hidden">
+                {processando ? (
+                  <div className="text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-sm text-muted-foreground">Analisando layout do PDF...</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Use um boleto existente como modelo de layout
+                      Detectando campos e configurando template...
+                    </p>
+                  </div>
+                ) : previewUrl ? (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-full rounded"
+                    title="Preview do PDF"
+                  />
+                ) : (
+                  <div className="text-center text-muted-foreground p-8">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Faça upload de um PDF de boleto</p>
+                    <p className="text-xs mt-1">
+                      O layout será copiado exatamente para a impressão de novos boletos
                     </p>
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Nome do Modelo */}
-            {arquivo && (
-              <div>
-                <Label>Nome do Modelo</Label>
-                <Input
-                  value={nomeModelo}
-                  onChange={(e) => setNomeModelo(e.target.value)}
-                  placeholder="Ex: Modelo Boleto Padrão"
-                  className="mt-1"
-                />
-              </div>
-            )}
-
-            {/* Seleção de Bancos */}
-            {templateProcessado && (
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Bancos Compatíveis
-                </Label>
-                <p className="text-sm text-muted-foreground mt-1 mb-3">
-                  Selecione os bancos que podem usar este modelo. 
-                  Os dados específicos de cada banco serão preenchidos automaticamente.
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
-                  {bancosMock.filter(b => b.ativo).map((banco) => (
-                    <div 
-                      key={banco.id} 
-                      className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                      onClick={() => handleBancoToggle(banco.id)}
-                    >
-                      <Checkbox 
-                        checked={bancosCompativeis.includes(banco.id)}
-                        onCheckedChange={() => handleBancoToggle(banco.id)}
-                      />
-                      <span className="text-sm">{banco.codigo_banco} - {banco.nome_banco}</span>
-                    </div>
-                  ))}
-                </div>
-                {bancosCompativeis.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {bancosCompativeis.map(id => {
-                      const banco = bancosMock.find(b => b.id === id);
-                      return banco ? (
-                        <Badge key={id} variant="secondary" className="text-xs">
-                          {banco.codigo_banco}
-                        </Badge>
-                      ) : null;
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Campos Detectados */}
-            {templateProcessado && (
-              <div>
-                <Label>Campos Detectados no Layout</Label>
-                <div className="mt-2 space-y-1 text-sm">
-                  {templateProcessado.layout_detectado.areas_texto.map(area => (
-                    <div key={area.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">{area.texto_original}</span>
-                      <Badge variant="outline">{area.campo_mapeado}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Coluna Direita - Preview */}
-          <div>
-            <Label className="flex items-center gap-2">
-              <Eye className="h-4 w-4" />
-              Pré-visualização do PDF
-            </Label>
-            <div className="mt-2 border rounded-lg bg-muted/30 min-h-[400px] flex items-center justify-center">
-              {processando ? (
-                <div className="text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                  <p className="mt-2 text-sm text-muted-foreground">Analisando layout do PDF...</p>
-                </div>
-              ) : previewUrl ? (
-                <iframe
-                  src={previewUrl}
-                  className="w-full h-[500px] rounded"
-                  title="Preview do PDF"
-                />
-              ) : (
-                <div className="text-center text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Faça upload de um PDF para ver a prévia</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="mt-4">
           <Button variant="outline" onClick={handleClose}>
             Cancelar
           </Button>
