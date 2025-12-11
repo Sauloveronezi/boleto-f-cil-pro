@@ -301,11 +301,61 @@ export default function ImportarLayout() {
     return campos;
   };
 
+  // Gerar campos padrão CNAB 400 baseado na especificação do banco
+  const gerarCamposPadraoCNAB400 = (): CampoDetectado[] => {
+    const camposPadrao = [
+      { nome: 'Tipo Registro', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const },
+      { nome: 'Código Banco', inicio: 77, fim: 79, destino: 'codigo_banco', tipo: 'numerico' as const },
+      { nome: 'Agência', inicio: 18, fim: 21, destino: 'agencia', tipo: 'numerico' as const },
+      { nome: 'Conta', inicio: 22, fim: 29, destino: 'conta', tipo: 'numerico' as const },
+      { nome: 'Nosso Número', inicio: 63, fim: 73, destino: 'nosso_numero', tipo: 'numerico' as const },
+      { nome: 'Carteira', inicio: 108, fim: 108, destino: 'carteira', tipo: 'numerico' as const },
+      { nome: 'Número Documento', inicio: 117, fim: 126, destino: 'numero_documento', tipo: 'alfanumerico' as const },
+      { nome: 'Data Vencimento', inicio: 121, fim: 126, destino: 'data_vencimento', tipo: 'data' as const },
+      { nome: 'Valor Título', inicio: 127, fim: 139, destino: 'valor', tipo: 'valor' as const },
+      { nome: 'CNPJ/CPF Sacado', inicio: 221, fim: 234, destino: 'cnpj_sacado', tipo: 'numerico' as const },
+      { nome: 'Nome Sacado', inicio: 235, fim: 274, destino: 'nome_sacado', tipo: 'alfanumerico' as const },
+      { nome: 'Endereço Sacado', inicio: 275, fim: 314, destino: 'endereco_sacado', tipo: 'alfanumerico' as const },
+      { nome: 'CEP Sacado', inicio: 327, fim: 334, destino: 'cep_sacado', tipo: 'numerico' as const },
+    ];
+
+    return camposPadrao.map((p, index) => ({
+      id: String(index + 1),
+      nome: p.nome,
+      posicaoInicio: p.inicio,
+      posicaoFim: p.fim,
+      tamanho: p.fim - p.inicio + 1,
+      tipo: p.tipo,
+      destino: p.destino,
+      valor: '(do PDF)',
+      confianca: 95
+    }));
+  };
+
   const handleGerarPadrao = async () => {
-    if (!arquivoRemessa || !bancoSelecionado) {
+    // Validar arquivos conforme modo de importação
+    if (modoImportacao === 'remessa' && !arquivoRemessa) {
       toast({
         title: 'Dados incompletos',
-        description: 'Por favor, carregue o arquivo de remessa e selecione o banco.',
+        description: 'Por favor, carregue o arquivo de remessa.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (modoImportacao === 'pdf_layout' && !arquivoLayoutPDF) {
+      toast({
+        title: 'Dados incompletos',
+        description: 'Por favor, carregue o PDF de layout do banco.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (!bancoSelecionado) {
+      toast({
+        title: 'Dados incompletos',
+        description: 'Por favor, selecione o banco.',
         variant: 'destructive',
       });
       return;
@@ -331,8 +381,16 @@ export default function ImportarLayout() {
       setProgresso(100);
       setProcessando(false);
       
-      // Analisar arquivo
-      const campos = analisarArquivoRemessa(conteudoRemessa);
+      let campos: CampoDetectado[] = [];
+      
+      if (modoImportacao === 'remessa' && conteudoRemessa) {
+        // Analisar arquivo de remessa
+        campos = analisarArquivoRemessa(conteudoRemessa);
+      } else if (modoImportacao === 'pdf_layout') {
+        // Para PDF de layout do banco, gerar campos padrão CNAB 400
+        campos = gerarCamposPadraoCNAB400();
+      }
+      
       setCamposDetectados(campos);
 
       // Gerar configuração CNAB
@@ -353,7 +411,7 @@ export default function ImportarLayout() {
         banco_id: bancoSelecionado,
         tipo_cnab: tipoCNAB,
         nome: nomePadrao || `Padrão ${banco?.nome_banco} - ${tipoCNAB}`,
-        descricao: `Padrão detectado automaticamente`,
+        descricao: modoImportacao === 'pdf_layout' ? `Padrão importado do PDF de layout` : `Padrão detectado automaticamente`,
         campos: configCampos,
         criado_em: now,
         atualizado_em: now
