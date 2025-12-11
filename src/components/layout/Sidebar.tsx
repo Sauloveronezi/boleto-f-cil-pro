@@ -7,7 +7,8 @@ import {
   Settings, 
   Palette,
   Building2,
-  Upload
+  Upload,
+  FileCode
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ const menuItems = [
     title: 'Configurações',
     items: [
       { icon: Palette, label: 'Modelos de Layout', href: '/modelos' },
+      { icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' },
       { icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' },
       { icon: Settings, label: 'Configurações', href: '/configuracoes' },
     ]
