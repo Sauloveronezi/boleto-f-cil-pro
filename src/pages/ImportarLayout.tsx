@@ -816,6 +816,17 @@ export default function ImportarLayout() {
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 )}
+                {modoImportacao === 'pdf_layout' && (
+                  <Button
+                    onClick={handleGerarPadrao}
+                    disabled={!arquivoLayoutPDF || !bancoSelecionado}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Analisar Layout do Banco
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           )}
