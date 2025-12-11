@@ -10,7 +10,7 @@ import { ResumoGeracao } from '@/components/boleto/ResumoGeracao';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TipoOrigem, Cliente, NotaFiscal } from '@/types/boleto';
+import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB } from '@/types/boleto';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import {
@@ -36,6 +36,7 @@ export default function GerarBoletos() {
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
   const [arquivoCNAB, setArquivoCNAB] = useState<File | null>(null);
+  const [padraoCNAB, setPadraoCNAB] = useState<ConfiguracaoCNAB | null>(null);
   const [dadosCNAB, setDadosCNAB] = useState<DadosCNAB | null>(null);
   const [clientesSelecionados, setClientesSelecionados] = useState<string[]>([]);
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
@@ -52,11 +53,11 @@ export default function GerarBoletos() {
 
   // Processar arquivo CNAB quando selecionado
   useEffect(() => {
-    if (arquivoCNAB && tipoOrigem && isCNAB) {
+    if (arquivoCNAB && tipoOrigem && isCNAB && padraoCNAB) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const conteudo = e.target?.result as string;
-        const dados = parseCNAB(conteudo, tipoOrigem);
+        const dados = parseCNAB(conteudo, tipoOrigem, padraoCNAB);
         setDadosCNAB(dados);
         
         // Resetar seleções
@@ -70,7 +71,7 @@ export default function GerarBoletos() {
       };
       reader.readAsText(arquivoCNAB);
     }
-  }, [arquivoCNAB, tipoOrigem, isCNAB, toast]);
+  }, [arquivoCNAB, tipoOrigem, isCNAB, padraoCNAB, toast]);
 
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function GerarBoletos() {
     if (!isCNAB) {
       setDadosCNAB(null);
       setArquivoCNAB(null);
+      setPadraoCNAB(null);
     }
   }, [tipoOrigem, isCNAB]);
 
@@ -96,7 +98,7 @@ export default function GerarBoletos() {
     switch (currentStep) {
       case 1:
         if (isCNAB) {
-          return tipoOrigem && bancoSelecionado && arquivoCNAB;
+          return tipoOrigem && bancoSelecionado && arquivoCNAB && padraoCNAB;
         }
         return tipoOrigem && bancoSelecionado;
       case 2:
@@ -153,9 +155,11 @@ export default function GerarBoletos() {
             bancoSelecionado={bancoSelecionado}
             tipoImpressao={tipoOrigem}
             arquivoCNAB={arquivoCNAB}
+            padraoCNAB={padraoCNAB}
             onBancoChange={setBancoSelecionado}
             onTipoImpressaoChange={setTipoOrigem}
             onArquivoChange={setArquivoCNAB}
+            onPadraoCNABChange={setPadraoCNAB}
           />
         );
       case 2:

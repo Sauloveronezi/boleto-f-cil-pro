@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
-import { Building2, Check, Upload, FileText, CheckCircle2 } from 'lucide-react';
+import { Building2, Check, Upload, FileText, CheckCircle2, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Banco, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
+import { Banco, TipoOrigem, TIPOS_ORIGEM, ConfiguracaoCNAB } from '@/types/boleto';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Tooltip,
   TooltipContent,
@@ -13,15 +14,53 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+// Dados mock de configurações CNAB (deve vir do contexto/store futuramente)
+const configuracoesCNABMock: ConfiguracaoCNAB[] = [
+  {
+    id: '1',
+    banco_id: '2',
+    tipo_cnab: 'CNAB_400',
+    nome: 'Bradesco Padrão 400',
+    descricao: 'Layout padrão do Bradesco para CNAB 400',
+    campos: [
+      { id: '1', nome: 'CNPJ Sacado', campo_destino: 'cnpj', posicao_inicio: 4, posicao_fim: 17, tipo_registro: '1', formato: 'texto' },
+      { id: '2', nome: 'Razão Social', campo_destino: 'razao_social', posicao_inicio: 235, posicao_fim: 274, tipo_registro: '1', formato: 'texto' },
+      { id: '3', nome: 'Valor', campo_destino: 'valor', posicao_inicio: 127, posicao_fim: 139, tipo_registro: '1', formato: 'valor_centavos' },
+      { id: '4', nome: 'Vencimento', campo_destino: 'vencimento', posicao_inicio: 121, posicao_fim: 126, tipo_registro: '1', formato: 'data_ddmmaa' },
+      { id: '5', nome: 'Nosso Número', campo_destino: 'nosso_numero', posicao_inicio: 63, posicao_fim: 73, tipo_registro: '1', formato: 'texto' },
+    ],
+    criado_em: '2024-01-15',
+    atualizado_em: '2024-12-10'
+  },
+  {
+    id: '2',
+    banco_id: '1',
+    tipo_cnab: 'CNAB_240',
+    nome: 'Banco do Brasil 240',
+    descricao: 'Layout padrão do BB para CNAB 240',
+    campos: [
+      { id: '1', nome: 'CNPJ Sacado', campo_destino: 'cnpj', posicao_inicio: 19, posicao_fim: 32, tipo_registro: 'P', formato: 'texto' },
+      { id: '2', nome: 'Valor', campo_destino: 'valor', posicao_inicio: 78, posicao_fim: 92, tipo_registro: 'P', formato: 'valor_centavos' },
+      { id: '3', nome: 'Vencimento', campo_destino: 'vencimento', posicao_inicio: 78, posicao_fim: 85, tipo_registro: 'P', formato: 'data_ddmmaaaa' },
+      { id: '4', nome: 'Nosso Número', campo_destino: 'nosso_numero', posicao_inicio: 38, posicao_fim: 57, tipo_registro: 'P', formato: 'texto' },
+    ],
+    criado_em: '2024-01-20',
+    atualizado_em: '2024-12-10'
+  }
+];
 
 interface BancoSelectorProps {
   bancos: Banco[];
   bancoSelecionado: string | null;
   tipoImpressao: TipoOrigem | null;
   arquivoCNAB: File | null;
+  padraoCNAB: ConfiguracaoCNAB | null;
   onBancoChange: (bancoId: string) => void;
   onTipoImpressaoChange: (tipo: TipoOrigem) => void;
   onArquivoChange: (arquivo: File | null) => void;
+  onPadraoCNABChange: (padrao: ConfiguracaoCNAB | null) => void;
 }
 
 export function BancoSelector({
@@ -29,11 +68,18 @@ export function BancoSelector({
   bancoSelecionado,
   tipoImpressao,
   arquivoCNAB,
+  padraoCNAB,
   onBancoChange,
   onTipoImpressaoChange,
   onArquivoChange,
+  onPadraoCNABChange,
 }: BancoSelectorProps) {
   const isCNAB = tipoImpressao === 'CNAB_240' || tipoImpressao === 'CNAB_400';
+
+  // Filtrar padrões disponíveis para o banco e tipo selecionados
+  const padroesDisponiveis = configuracoesCNABMock.filter(
+    p => p.banco_id === bancoSelecionado && p.tipo_cnab === tipoImpressao
+  );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -52,6 +98,12 @@ export function BancoSelector({
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+  };
+
+  const handleBancoChange = (bancoId: string) => {
+    onBancoChange(bancoId);
+    // Limpar padrão ao trocar banco
+    onPadraoCNABChange(null);
   };
 
   return (
@@ -224,7 +276,7 @@ export function BancoSelector({
                   ? 'border-primary ring-2 ring-primary/20'
                   : 'hover:border-muted-foreground/30'
               )}
-              onClick={() => onBancoChange(banco.id)}
+              onClick={() => handleBancoChange(banco.id)}
             >
               <CardContent className="p-4 flex flex-col items-center text-center">
                 {bancoSelecionado === banco.id && (
@@ -244,6 +296,79 @@ export function BancoSelector({
           ))}
         </div>
       </div>
+
+      {/* Seleção de Padrão CNAB */}
+      {isCNAB && bancoSelecionado && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Label className="text-base font-semibold">Padrão CNAB do Banco</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    Selecione o padrão de leitura do arquivo CNAB configurado para este banco.
+                    Configure novos padrões na tela de Padrões CNAB.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {padroesDisponiveis.length > 0 ? (
+            <div className="space-y-3">
+              <Select
+                value={padraoCNAB?.id || ''}
+                onValueChange={(value) => {
+                  const padrao = configuracoesCNABMock.find(p => p.id === value);
+                  onPadraoCNABChange(padrao || null);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-96">
+                  <SelectValue placeholder="Selecione o padrão de leitura" />
+                </SelectTrigger>
+                <SelectContent>
+                  {padroesDisponiveis.map(padrao => (
+                    <SelectItem key={padrao.id} value={padrao.id}>
+                      <div className="flex flex-col">
+                        <span>{padrao.nome}</span>
+                        {padrao.descricao && (
+                          <span className="text-xs text-muted-foreground">{padrao.descricao}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {padraoCNAB && (
+                <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                  <p className="font-medium">{padraoCNAB.nome}</p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    {padraoCNAB.campos.length} campo(s) configurado(s)
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 bg-warning/5 border border-warning/20 rounded-lg">
+              <p className="text-sm text-warning font-medium">Nenhum padrão configurado</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Não há padrão CNAB configurado para este banco e tipo de origem.
+              </p>
+              <Link 
+                to="/configuracao-cnab" 
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-2"
+              >
+                <FileText className="h-3 w-3" />
+                Configurar padrão CNAB
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

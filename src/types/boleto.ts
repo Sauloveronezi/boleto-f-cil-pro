@@ -146,6 +146,29 @@ export interface ConfiguracaoSistema {
   api_token?: string;
 }
 
+// Configuração de layout CNAB por banco
+export interface ConfiguracaoCNAB {
+  id: string;
+  banco_id: string;
+  tipo_cnab: 'CNAB_240' | 'CNAB_400';
+  nome: string;
+  descricao?: string;
+  // Posições dos campos no arquivo (início-fim, 1-indexed)
+  campos: CampoCNAB[];
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export interface CampoCNAB {
+  id: string;
+  nome: string;
+  campo_destino: 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep';
+  posicao_inicio: number;
+  posicao_fim: number;
+  tipo_registro?: string; // Ex: '1', '3', 'P', etc.
+  formato?: 'texto' | 'numero' | 'data_ddmmaa' | 'data_ddmmaaaa' | 'valor_centavos';
+}
+
 // Resumo de geração de boletos
 export interface ResumoGeracao {
   tipo_impressao: TipoImpressao;
