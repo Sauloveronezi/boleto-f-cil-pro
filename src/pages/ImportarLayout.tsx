@@ -77,7 +77,8 @@ export default function ImportarLayout() {
   const [etapa, setEtapa] = useState<'upload' | 'processando' | 'resultado'>('upload');
   const [padraoGerado, setPadraoGerado] = useState<ConfiguracaoCNAB | null>(null);
   const [camposExtraidos, setCamposExtraidos] = useState<Record<string, string>>({});
-  const [modoImportacao, setModoImportacao] = useState<'remessa' | 'json'>('remessa');
+  const [modoImportacao, setModoImportacao] = useState<'remessa' | 'json' | 'pdf_layout'>('remessa');
+  const [arquivoLayoutPDF, setArquivoLayoutPDF] = useState<File | null>(null);
 
   const handleArquivoRemessa = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -488,11 +489,15 @@ export default function ImportarLayout() {
           {etapa === 'upload' && (
             <div className="space-y-6">
               {/* Tabs de Modo de Importação */}
-              <Tabs value={modoImportacao} onValueChange={(v) => setModoImportacao(v as 'remessa' | 'json')}>
-                <TabsList className="grid w-full max-w-md grid-cols-2">
+              <Tabs value={modoImportacao} onValueChange={(v) => setModoImportacao(v as 'remessa' | 'json' | 'pdf_layout')}>
+                <TabsList className="grid w-full max-w-xl grid-cols-3">
                   <TabsTrigger value="remessa" className="gap-2">
                     <FileText className="h-4 w-4" />
                     Arquivo Remessa
+                  </TabsTrigger>
+                  <TabsTrigger value="pdf_layout" className="gap-2">
+                    <FileImage className="h-4 w-4" />
+                    Layout do Banco (PDF)
                   </TabsTrigger>
                   <TabsTrigger value="json" className="gap-2">
                     <FileJson className="h-4 w-4" />
@@ -656,6 +661,83 @@ export default function ImportarLayout() {
                           </div>
                         )}
                       </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="pdf_layout" className="mt-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <FileImage className="h-5 w-5" />
+                        Layout do Banco (PDF)
+                      </CardTitle>
+                      <CardDescription>
+                        Carregue o PDF de especificação de layout CNAB fornecido pelo banco
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <Sparkles className="h-5 w-5 text-primary mt-0.5" />
+                          <div>
+                            <p className="font-medium text-sm">Análise inteligente de layout</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              O sistema irá analisar o PDF de especificação do banco e identificar automaticamente
+                              as posições dos campos (Nome do Sacado, Valor, Vencimento, etc.)
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div
+                        className={`
+                          border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+                          ${arquivoLayoutPDF ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
+                        `}
+                        onClick={() => document.getElementById('file-layout-pdf')?.click()}
+                      >
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setArquivoLayoutPDF(file);
+                              toast({ title: 'PDF de layout carregado', description: file.name });
+                            }
+                          }}
+                          className="hidden"
+                          id="file-layout-pdf"
+                        />
+                        {arquivoLayoutPDF ? (
+                          <div className="space-y-2">
+                            <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
+                            <p className="font-medium">{arquivoLayoutPDF.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(arquivoLayoutPDF.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Clique para selecionar outro arquivo
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <FileImage className="h-10 w-10 mx-auto text-muted-foreground" />
+                            <p className="text-sm font-medium">Clique para selecionar PDF de layout</p>
+                            <p className="text-xs text-muted-foreground">
+                              PDF de especificação de layout CNAB do banco
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {arquivoLayoutPDF && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Opcionalmente, carregue também um arquivo de remessa para validar o layout</span>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
