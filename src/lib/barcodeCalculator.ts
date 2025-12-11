@@ -219,9 +219,16 @@ export function gerarLinhaDigitavel(codigoBarras: string): string {
   return `${campo1Formatado} ${campo2Formatado} ${campo3Formatado} ${campo4} ${campo5}`;
 }
 
-// Gera representação visual do código de barras (array de larguras)
-export function gerarBarrasVisuais(codigoBarras: string): number[] {
+// Estrutura para representar uma barra ou espaço
+export interface BarraVisual {
+  tipo: 'barra' | 'espaco';
+  largura: number; // 1 = narrow, 3 = wide
+}
+
+// Gera representação visual do código de barras ITF-14 (Interleaved 2 of 5)
+export function gerarBarrasVisuais(codigoBarras: string): BarraVisual[] {
   // Tabela de codificação ITF (Interleaved 2 of 5)
+  // N = Narrow (1), W = Wide (3)
   const ITF_PATTERNS: Record<string, string> = {
     '0': 'NNWWN',
     '1': 'WNNNW',
@@ -235,30 +242,41 @@ export function gerarBarrasVisuais(codigoBarras: string): number[] {
     '9': 'NWNWN'
   };
   
-  const barras: number[] = [];
+  const barras: BarraVisual[] = [];
   
-  // Start pattern: NNNN
-  barras.push(1, 1, 1, 1);
+  // Start pattern: barra-espaço-barra-espaço (todos narrow)
+  barras.push({ tipo: 'barra', largura: 1 });
+  barras.push({ tipo: 'espaco', largura: 1 });
+  barras.push({ tipo: 'barra', largura: 1 });
+  barras.push({ tipo: 'espaco', largura: 1 });
   
   // Codifica pares de dígitos
   for (let i = 0; i < codigoBarras.length; i += 2) {
     const d1 = codigoBarras[i];
     const d2 = codigoBarras[i + 1] || '0';
     
-    const p1 = ITF_PATTERNS[d1] || 'NNWWN';
-    const p2 = ITF_PATTERNS[d2] || 'NNWWN';
+    const p1 = ITF_PATTERNS[d1] || 'NNWWN'; // Padrão das barras
+    const p2 = ITF_PATTERNS[d2] || 'NNWWN'; // Padrão dos espaços
     
-    // Intercala barras (ímpares) com espaços (pares)
+    // Intercala barras (primeiro dígito) com espaços (segundo dígito)
     for (let j = 0; j < 5; j++) {
-      // Barra (preto)
-      barras.push(p1[j] === 'W' ? 3 : 1);
-      // Espaço (branco) - representado como negativo
-      barras.push(p2[j] === 'W' ? -3 : -1);
+      // Barra preta
+      barras.push({ 
+        tipo: 'barra', 
+        largura: p1[j] === 'W' ? 3 : 1 
+      });
+      // Espaço branco
+      barras.push({ 
+        tipo: 'espaco', 
+        largura: p2[j] === 'W' ? 3 : 1 
+      });
     }
   }
   
-  // Stop pattern: WNN
-  barras.push(3, 1, 1);
+  // Stop pattern: barra wide, espaço narrow, barra narrow
+  barras.push({ tipo: 'barra', largura: 3 });
+  barras.push({ tipo: 'espaco', largura: 1 });
+  barras.push({ tipo: 'barra', largura: 1 });
   
   return barras;
 }
