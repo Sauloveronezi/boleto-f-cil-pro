@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ import { bancosMock } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { ConfiguracaoCNAB, CampoCNAB } from '@/types/boleto';
+import { BoletoPreview } from '@/components/boleto/BoletoPreview';
 
 type CampoDestino = 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep';
 
@@ -60,9 +62,11 @@ interface CampoDetectado {
 export default function ImportarLayout() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const jsonInputRef = useRef<HTMLInputElement>(null);
   
   const [arquivoRemessa, setArquivoRemessa] = useState<File | null>(null);
   const [arquivoPDF, setArquivoPDF] = useState<File | null>(null);
+  const [arquivoJSON, setArquivoJSON] = useState<File | null>(null);
   const [conteudoRemessa, setConteudoRemessa] = useState<string>('');
   const [processando, setProcessando] = useState(false);
   const [progresso, setProgresso] = useState(0);
@@ -72,6 +76,8 @@ export default function ImportarLayout() {
   const [nomePadrao, setNomePadrao] = useState('');
   const [etapa, setEtapa] = useState<'upload' | 'processando' | 'resultado'>('upload');
   const [padraoGerado, setPadraoGerado] = useState<ConfiguracaoCNAB | null>(null);
+  const [camposExtraidos, setCamposExtraidos] = useState<Record<string, string>>({});
+  const [modoImportacao, setModoImportacao] = useState<'remessa' | 'json'>('remessa');
 
   const handleArquivoRemessa = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -80,6 +86,11 @@ export default function ImportarLayout() {
       const texto = await file.text();
       setConteudoRemessa(texto);
       toast({ title: 'Arquivo de remessa carregado', description: file.name });
+      
+      // Auto-extrair campos se já houver padrão
+      if (padraoGerado) {
+        extrairCamposDoArquivo(texto, padraoGerado);
+      }
     }
   };
 
@@ -96,6 +107,49 @@ export default function ImportarLayout() {
       }
       setArquivoPDF(file);
       toast({ title: 'Arquivo PDF carregado', description: file.name });
+    }
+  };
+
+  const handleArquivoJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      try {
+        const texto = await file.text();
+        const config = JSON.parse(texto) as ConfiguracaoCNAB;
+        
+        if (!config.campos || !config.tipo_cnab) {
+          throw new Error('Formato de JSON inválido');
+        }
+        
+        setArquivoJSON(file);
+        setPadraoGerado(config);
+        setTipoCNAB(config.tipo_cnab);
+        setBancoSelecionado(config.banco_id || '');
+        setNomePadrao(config.nome || file.name.replace('.json', ''));
+        setEtapa('resultado');
+        
+        // Converter campos para o formato de detecção
+        const camposConvertidos: CampoDetectado[] = config.campos.map((c, i) => ({
+          id: String(i + 1),
+          nome: c.nome,
+          posicaoInicio: c.posicao_inicio,
+          posicaoFim: c.posicao_fim,
+          tamanho: c.posicao_fim - c.posicao_inicio + 1,
+          tipo: c.formato === 'valor_centavos' ? 'valor' : c.formato?.includes('data') ? 'data' : 'alfanumerico',
+          destino: c.campo_destino,
+          valor: '',
+          confianca: 100
+        }));
+        setCamposDetectados(camposConvertidos);
+        
+        toast({ title: 'Padrão JSON importado!', description: `${config.campos.length} campos carregados.` });
+      } catch (err) {
+        toast({
+          title: 'Erro ao importar JSON',
+          description: 'O arquivo não está em formato válido de padrão CNAB.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -121,6 +175,60 @@ export default function ImportarLayout() {
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+  };
+
+  const extrairCamposDoArquivo = (conteudo: string, config: ConfiguracaoCNAB) => {
+    const linhas = conteudo.split('\n').filter(l => l.trim());
+    const linhaDetalhe = linhas.find(l => {
+      const tipo = l.charAt(0);
+      return tipo === '1' || tipo === '3';
+    }) || linhas[1] || linhas[0];
+
+    const extraidos: Record<string, string> = {};
+    
+    for (const campo of config.campos) {
+      let valor = linhaDetalhe.substring(campo.posicao_inicio - 1, campo.posicao_fim).trim();
+      
+      // Aplicar formato
+      if (campo.formato === 'valor_centavos' && valor) {
+        const num = parseInt(valor) / 100;
+        valor = `R$ ${num.toFixed(2).replace('.', ',')}`;
+      } else if ((campo.formato === 'data_ddmmaa' || campo.formato === 'data_ddmmaaaa') && valor.length >= 6) {
+        const dia = valor.substring(0, 2);
+        const mes = valor.substring(2, 4);
+        const ano = valor.substring(4);
+        valor = `${dia}/${mes}/${ano.length === 2 ? '20' + ano : ano}`;
+      } else if (campo.campo_destino === 'cnpj' && valor.length >= 11) {
+        // Formatar CNPJ/CPF
+        const numeros = valor.replace(/\D/g, '');
+        if (numeros.length === 14) {
+          valor = numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+        } else if (numeros.length === 11) {
+          valor = numeros.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+        }
+      }
+      
+      extraidos[campo.campo_destino] = valor;
+      extraidos[campo.nome.toLowerCase().replace(/\s/g, '_')] = valor;
+    }
+    
+    setCamposExtraidos(extraidos);
+    return extraidos;
+  };
+
+  const handleExportarJSON = () => {
+    if (!padraoGerado) return;
+    
+    const dataStr = JSON.stringify(padraoGerado, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileName = `${nomePadrao || 'padrao_cnab'}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileName);
+    linkElement.click();
+    
+    toast({ title: 'JSON exportado!', description: exportFileName });
   };
 
   const analisarArquivoRemessa = (conteudo: string): CampoDetectado[] => {
@@ -291,12 +399,14 @@ export default function ImportarLayout() {
   const handleReset = () => {
     setArquivoRemessa(null);
     setArquivoPDF(null);
+    setArquivoJSON(null);
     setConteudoRemessa('');
     setCamposDetectados([]);
     setNomePadrao('');
     setPadraoGerado(null);
     setEtapa('upload');
     setResultadoTeste(null);
+    setCamposExtraidos({});
   };
 
   const [resultadoTeste, setResultadoTeste] = useState<{ campo: string; valor: string }[] | null>(null);
@@ -311,31 +421,13 @@ export default function ImportarLayout() {
       return;
     }
 
-    const linhas = conteudoRemessa.split('\n').filter(l => l.trim());
-    const linhaDetalhe = linhas.find(l => {
-      const tipo = l.charAt(0);
-      return tipo === '1' || tipo === '3';
-    }) || linhas[1] || linhas[0];
-
+    const extraidos = extrairCamposDoArquivo(conteudoRemessa, padraoGerado);
+    
     const resultados: { campo: string; valor: string }[] = [];
-
     for (const campo of padraoGerado.campos) {
-      let valor = linhaDetalhe.substring(campo.posicao_inicio - 1, campo.posicao_fim).trim();
-      
-      // Aplicar formato
-      if (campo.formato === 'valor_centavos' && valor) {
-        const num = parseInt(valor) / 100;
-        valor = `R$ ${num.toFixed(2).replace('.', ',')}`;
-      } else if ((campo.formato === 'data_ddmmaa' || campo.formato === 'data_ddmmaaaa') && valor.length >= 6) {
-        const dia = valor.substring(0, 2);
-        const mes = valor.substring(2, 4);
-        const ano = valor.substring(4);
-        valor = `${dia}/${mes}/${ano.length === 2 ? '20' + ano : ano}`;
-      }
-
       resultados.push({
         campo: campo.nome || CAMPOS_DESTINO_LABELS[campo.campo_destino] || campo.campo_destino,
-        valor: valor || '(vazio)'
+        valor: extraidos[campo.campo_destino] || extraidos[campo.nome?.toLowerCase().replace(/\s/g, '_') || ''] || '(vazio)'
       });
     }
 
@@ -395,115 +487,179 @@ export default function ImportarLayout() {
           {/* Etapa: Upload */}
           {etapa === 'upload' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Upload Remessa */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Arquivo de Remessa CNAB
-                    </CardTitle>
-                    <CardDescription>
-                      Arquivo .txt ou .rem com os dados de cobrança
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div
-                      onDrop={handleDropRemessa}
-                      onDragOver={handleDragOver}
-                      className={`
-                        border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
-                        ${arquivoRemessa ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
-                      `}
-                    >
-                      <input
-                        type="file"
-                        accept=".txt,.rem,.ret"
-                        onChange={handleArquivoRemessa}
-                        className="hidden"
-                        id="file-remessa"
-                      />
-                      <label htmlFor="file-remessa" className="cursor-pointer">
-                        {arquivoRemessa ? (
-                          <div className="space-y-2">
-                            <CheckCircle2 className="h-8 w-8 mx-auto text-primary" />
-                            <p className="font-medium">{arquivoRemessa.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {(arquivoRemessa.size / 1024).toFixed(1)} KB
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                            <p className="text-sm">Arraste ou clique para selecionar</p>
-                            <p className="text-xs text-muted-foreground">
-                              Formatos: .txt, .rem, .ret
-                            </p>
-                          </div>
-                        )}
-                      </label>
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Tabs de Modo de Importação */}
+              <Tabs value={modoImportacao} onValueChange={(v) => setModoImportacao(v as 'remessa' | 'json')}>
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                  <TabsTrigger value="remessa" className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    Arquivo Remessa
+                  </TabsTrigger>
+                  <TabsTrigger value="json" className="gap-2">
+                    <FileJson className="h-4 w-4" />
+                    Importar JSON
+                  </TabsTrigger>
+                </TabsList>
 
-                {/* Upload PDF (opcional) */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileImage className="h-5 w-5" />
-                      PDF do Boleto (opcional)
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>PDF de um boleto para referência visual</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
-                    <CardDescription>
-                      PDF de um boleto gerado para comparação
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div
-                      onDrop={handleDropPDF}
-                      onDragOver={handleDragOver}
-                      className={`
-                        border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
-                        ${arquivoPDF ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
-                      `}
-                    >
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        onChange={handleArquivoPDF}
-                        className="hidden"
-                        id="file-pdf"
-                      />
-                      <label htmlFor="file-pdf" className="cursor-pointer">
-                        {arquivoPDF ? (
+                <TabsContent value="remessa" className="mt-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Upload Remessa */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <FileText className="h-5 w-5" />
+                          Arquivo de Remessa CNAB
+                        </CardTitle>
+                        <CardDescription>
+                          Arquivo .txt ou .rem com os dados de cobrança
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div
+                          onDrop={handleDropRemessa}
+                          onDragOver={handleDragOver}
+                          className={`
+                            border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
+                            ${arquivoRemessa ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
+                          `}
+                        >
+                          <input
+                            type="file"
+                            accept=".txt,.rem,.ret"
+                            onChange={handleArquivoRemessa}
+                            className="hidden"
+                            id="file-remessa"
+                          />
+                          <label htmlFor="file-remessa" className="cursor-pointer">
+                            {arquivoRemessa ? (
+                              <div className="space-y-2">
+                                <CheckCircle2 className="h-8 w-8 mx-auto text-primary" />
+                                <p className="font-medium">{arquivoRemessa.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {(arquivoRemessa.size / 1024).toFixed(1)} KB
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                                <p className="text-sm">Arraste ou clique para selecionar</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Formatos: .txt, .rem, .ret
+                                </p>
+                              </div>
+                            )}
+                          </label>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Upload PDF (opcional) */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <FileImage className="h-5 w-5" />
+                          PDF do Boleto (opcional)
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>PDF de um boleto para referência visual</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </CardTitle>
+                        <CardDescription>
+                          PDF de um boleto gerado para comparação
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div
+                          onDrop={handleDropPDF}
+                          onDragOver={handleDragOver}
+                          className={`
+                            border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer
+                            ${arquivoPDF ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
+                          `}
+                        >
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handleArquivoPDF}
+                            className="hidden"
+                            id="file-pdf"
+                          />
+                          <label htmlFor="file-pdf" className="cursor-pointer">
+                            {arquivoPDF ? (
+                              <div className="space-y-2">
+                                <CheckCircle2 className="h-8 w-8 mx-auto text-primary" />
+                                <p className="font-medium">{arquivoPDF.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {(arquivoPDF.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                                <p className="text-sm">Arraste ou clique para selecionar</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Formato: .pdf
+                                </p>
+                              </div>
+                            )}
+                          </label>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="json" className="mt-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <FileJson className="h-5 w-5" />
+                        Importar Padrão CNAB de Arquivo JSON
+                      </CardTitle>
+                      <CardDescription>
+                        Carregue um arquivo JSON com a configuração de campos exportada anteriormente
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div
+                        className={`
+                          border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+                          ${arquivoJSON ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}
+                        `}
+                        onClick={() => jsonInputRef.current?.click()}
+                      >
+                        <input
+                          ref={jsonInputRef}
+                          type="file"
+                          accept=".json"
+                          onChange={handleArquivoJSON}
+                          className="hidden"
+                        />
+                        {arquivoJSON ? (
                           <div className="space-y-2">
-                            <CheckCircle2 className="h-8 w-8 mx-auto text-primary" />
-                            <p className="font-medium">{arquivoPDF.name}</p>
+                            <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
+                            <p className="font-medium">{arquivoJSON.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {(arquivoPDF.size / 1024 / 1024).toFixed(2)} MB
+                              Clique para selecionar outro arquivo
                             </p>
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                            <p className="text-sm">Arraste ou clique para selecionar</p>
+                            <FileJson className="h-10 w-10 mx-auto text-muted-foreground" />
+                            <p className="text-sm font-medium">Clique para selecionar arquivo JSON</p>
                             <p className="text-xs text-muted-foreground">
-                              Formato: .pdf
+                              Formato esperado: configuração de padrão CNAB exportada
                             </p>
                           </div>
                         )}
-                      </label>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
 
               {/* Configurações */}
               <Card>
@@ -566,16 +722,18 @@ export default function ImportarLayout() {
                 </Card>
               )}
 
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleGerarPadrao}
-                  disabled={!arquivoRemessa || !bancoSelecionado}
-                  className="gap-2"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Gerar Padrão CNAB
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
+              <div className="flex justify-end gap-2">
+                {modoImportacao === 'remessa' && (
+                  <Button
+                    onClick={handleGerarPadrao}
+                    disabled={!arquivoRemessa || !bancoSelecionado}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Gerar Padrão CNAB
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -695,13 +853,90 @@ export default function ImportarLayout() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {resultadoTeste.map((r, i) => (
-                        <div key={i} className="flex justify-between p-2 bg-background rounded border">
-                          <span className="text-sm font-medium">{r.campo}:</span>
-                          <span className="text-sm font-mono">{r.valor}</span>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Campos Extraídos</h4>
+                        <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
+                          {resultadoTeste.map((r, i) => (
+                            <div key={i} className="flex justify-between p-2 bg-background rounded border">
+                              <span className="text-sm font-medium">{r.campo}:</span>
+                              <span className="text-sm font-mono">{r.valor}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Preview do Boleto
+                        </h4>
+                        <div className="transform scale-75 origin-top-left">
+                          <BoletoPreview
+                            nota={null}
+                            cliente={null}
+                            banco={bancosMock.find(b => b.id === bancoSelecionado) || null}
+                            campos={camposExtraidos}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Preview do Boleto (quando há campos extraídos) */}
+              {Object.keys(camposExtraidos).length > 0 && !resultadoTeste && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Eye className="h-5 w-5 text-primary" />
+                      Preview do Boleto
+                    </CardTitle>
+                    <CardDescription>
+                      Visualização do boleto com os dados extraídos do arquivo
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-w-2xl mx-auto">
+                      <BoletoPreview
+                        nota={null}
+                        cliente={null}
+                        banco={bancosMock.find(b => b.id === bancoSelecionado) || null}
+                        campos={camposExtraidos}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Upload de arquivo para testar */}
+              {padraoGerado && !conteudoRemessa && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Carregar Arquivo para Teste</CardTitle>
+                    <CardDescription>
+                      Carregue um arquivo de remessa para testar o padrão importado
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      onDrop={handleDropRemessa}
+                      onDragOver={handleDragOver}
+                      className="border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer border-border hover:border-primary/50 hover:bg-muted/50"
+                    >
+                      <input
+                        type="file"
+                        accept=".txt,.rem,.ret"
+                        onChange={handleArquivoRemessa}
+                        className="hidden"
+                        id="file-remessa-test"
+                      />
+                      <label htmlFor="file-remessa-test" className="cursor-pointer">
+                        <div className="space-y-2">
+                          <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                          <p className="text-sm">Arraste ou clique para carregar arquivo de remessa</p>
+                        </div>
+                      </label>
                     </div>
                   </CardContent>
                 </Card>
@@ -712,7 +947,11 @@ export default function ImportarLayout() {
                   Analisar outro arquivo
                 </Button>
                 <div className="flex gap-2">
-                  <Button variant="secondary" onClick={handleTestarPadrao} className="gap-2">
+                  <Button variant="outline" onClick={handleExportarJSON} className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Exportar JSON
+                  </Button>
+                  <Button variant="secondary" onClick={handleTestarPadrao} disabled={!conteudoRemessa} className="gap-2">
                     <PlayCircle className="h-4 w-4" />
                     Testar Padrão
                   </Button>

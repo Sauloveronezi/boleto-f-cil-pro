@@ -14,11 +14,14 @@ function extrairCampo(linha: string, campo: CampoCNAB): string {
   // Posições são 1-indexed no arquivo CNAB
   const inicio = campo.posicao_inicio - 1;
   const fim = campo.posicao_fim;
+  if (inicio < 0 || fim > linha.length) return '';
   return linha.substring(inicio, fim).trim();
 }
 
 // Formatar valor baseado no formato configurado
 function formatarValor(valor: string, formato?: string): any {
+  if (!valor || valor.trim() === '') return null;
+  
   switch (formato) {
     case 'valor_centavos':
       const num = parseFloat(valor.replace(/\D/g, ''));
@@ -73,12 +76,33 @@ function verificarTipoRegistro(linha: string, tipoRegistro: string | undefined, 
   }
 }
 
+// Encontrar linhas de detalhe no arquivo CNAB
+function encontrarLinhasDetalhe(linhas: string[], tipoCNAB: 'CNAB_240' | 'CNAB_400'): string[] {
+  return linhas.filter(linha => {
+    if (tipoCNAB === 'CNAB_400') {
+      // CNAB 400: tipo de registro '1' = detalhe
+      return linha.length >= 400 && linha.charAt(0) === '1';
+    } else {
+      // CNAB 240: tipo de registro '3' = detalhe
+      return linha.length >= 240 && linha.charAt(7) === '3';
+    }
+  });
+}
+
 // Parser configurável usando as definições do usuário
 function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): DadosCNAB {
   const linhas = conteudo.split('\n').filter(l => l.trim().length > 0);
   const clientes: Cliente[] = [];
   const notas: NotaFiscal[] = [];
   const clientesMap = new Map<string, Cliente>();
+
+  // Encontrar linhas de detalhe
+  let linhasDetalhe = encontrarLinhasDetalhe(linhas, config.tipo_cnab);
+  
+  // Se não encontrou linhas de detalhe, usar todas as linhas (exceto header/trailer)
+  if (linhasDetalhe.length === 0) {
+    linhasDetalhe = linhas.filter((l, i) => i > 0 && i < linhas.length - 1);
+  }
 
   // Agrupar campos por tipo de registro
   const camposPorTipoRegistro = new Map<string, CampoCNAB[]>();
@@ -90,76 +114,76 @@ function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): Dado
     camposPorTipoRegistro.get(tipo)!.push(campo);
   });
 
-  linhas.forEach((linha, index) => {
-    // Verificar tamanho mínimo da linha
-    const tamanhoMinimo = config.tipo_cnab === 'CNAB_400' ? 400 : 240;
-    if (linha.length < tamanhoMinimo * 0.9) return; // Permitir pequena variação
-
+  linhasDetalhe.forEach((linha, index) => {
     // Para cada tipo de registro configurado, tentar extrair dados
+    let valoresExtraidos: Record<string, any> = {};
+    
     camposPorTipoRegistro.forEach((campos, tipoRegistro) => {
       const tipoParaVerificar = tipoRegistro === '__default__' ? undefined : tipoRegistro;
       
       if (!verificarTipoRegistro(linha, tipoParaVerificar, config.tipo_cnab)) return;
 
       // Extrair valores dos campos
-      const valores: Record<string, any> = {};
       campos.forEach(campo => {
-        valores[campo.campo_destino] = formatarValor(
-          extrairCampo(linha, campo),
-          campo.formato
-        );
-      });
-
-      // Se temos CNPJ ou razão social, criar/atualizar cliente
-      const cnpj = valores.cnpj;
-      if (cnpj && !clientesMap.has(cnpj)) {
-        const clienteId = gerarId();
-        const cliente: Cliente = {
-          id: clienteId,
-          business_partner: `BP${(index + 1).toString().padStart(3, '0')}`,
-          razao_social: valores.razao_social || `Cliente ${cnpj}`,
-          cnpj: formatarCNPJ(cnpj),
-          lzone: 'Importado',
-          estado: valores.estado || 'SP',
-          cidade: valores.cidade || 'São Paulo',
-          parceiro_negocio: 'CNAB Import',
-          agente_frete: 'N/A',
-          endereco: valores.endereco || 'Endereço não informado',
-          cep: valores.cep || '00000-000',
-        };
-        clientesMap.set(cnpj, cliente);
-        clientes.push(cliente);
-      }
-
-      // Se temos valor ou nosso número, criar nota
-      const temDadosNota = valores.valor || valores.nosso_numero || valores.numero_nota;
-      if (temDadosNota) {
-        const cliente = cnpj ? clientesMap.get(cnpj) : clientes[clientes.length - 1];
-        if (cliente) {
-          const nota: NotaFiscal = {
-            id: gerarId(),
-            numero_nota: valores.numero_nota || valores.nosso_numero || `NF${(index + 1).toString().padStart(6, '0')}`,
-            serie: '1',
-            data_emissao: new Date().toISOString().split('T')[0],
-            data_vencimento: valores.vencimento || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            valor_titulo: valores.valor || 0,
-            moeda: 'BRL',
-            codigo_cliente: cliente.id,
-            status: 'aberta',
-            referencia_interna: `CNAB-${valores.nosso_numero || index}`,
-          };
-          
-          // Evitar duplicatas
-          if (nota.valor_titulo > 0 && !notas.some(n => n.numero_nota === nota.numero_nota && n.valor_titulo === nota.valor_titulo)) {
-            notas.push(nota);
-          }
+        const valorBruto = extrairCampo(linha, campo);
+        const valorFormatado = formatarValor(valorBruto, campo.formato);
+        if (valorFormatado !== null) {
+          valoresExtraidos[campo.campo_destino] = valorFormatado;
         }
-      }
+      });
     });
+
+    // Se temos CNPJ ou razão social, criar/atualizar cliente
+    const cnpj = valoresExtraidos.cnpj;
+    let cliente: Cliente | undefined;
+    
+    if (cnpj && !clientesMap.has(cnpj)) {
+      const clienteId = gerarId();
+      cliente = {
+        id: clienteId,
+        business_partner: `BP${(index + 1).toString().padStart(3, '0')}`,
+        razao_social: valoresExtraidos.razao_social || `Cliente ${formatarCNPJ(cnpj)}`,
+        cnpj: formatarCNPJ(cnpj),
+        lzone: 'Importado',
+        estado: valoresExtraidos.estado || 'SP',
+        cidade: valoresExtraidos.cidade || 'São Paulo',
+        parceiro_negocio: 'CNAB Import',
+        agente_frete: 'N/A',
+        endereco: valoresExtraidos.endereco || 'Endereço não informado',
+        cep: valoresExtraidos.cep || '00000-000',
+      };
+      clientesMap.set(cnpj, cliente);
+      clientes.push(cliente);
+    } else if (cnpj) {
+      cliente = clientesMap.get(cnpj);
+    }
+
+    // Se temos valor ou nosso número, criar nota
+    const temDadosNota = valoresExtraidos.valor || valoresExtraidos.nosso_numero || valoresExtraidos.numero_nota;
+    if (temDadosNota && cliente) {
+      const nota: NotaFiscal = {
+        id: gerarId(),
+        numero_nota: valoresExtraidos.numero_nota || valoresExtraidos.nosso_numero || `NF${(index + 1).toString().padStart(6, '0')}`,
+        serie: '1',
+        data_emissao: valoresExtraidos.data_emissao || new Date().toISOString().split('T')[0],
+        data_vencimento: valoresExtraidos.vencimento || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        valor_titulo: valoresExtraidos.valor || 0,
+        moeda: 'BRL',
+        codigo_cliente: cliente.id,
+        status: 'aberta',
+        referencia_interna: valoresExtraidos.nosso_numero || `CNAB-${index + 1}`,
+      };
+      
+      // Evitar duplicatas
+      if (nota.valor_titulo > 0 && !notas.some(n => n.numero_nota === nota.numero_nota && n.valor_titulo === nota.valor_titulo)) {
+        notas.push(nota);
+      }
+    }
   });
 
   // Se não conseguiu parsear, gerar dados de exemplo
   if (notas.length === 0) {
+    console.warn('CNAB Parser: Nenhuma nota extraída, gerando dados de exemplo');
     return gerarDadosExemplo(Math.min(linhas.length, 5));
   }
 
