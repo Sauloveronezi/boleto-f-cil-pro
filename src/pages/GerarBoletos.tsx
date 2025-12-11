@@ -10,9 +10,10 @@ import { ResumoGeracao } from '@/components/boleto/ResumoGeracao';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB } from '@/types/boleto';
+import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from '@/types/boleto';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
+import { listarTemplates } from '@/lib/pdfTemplateGenerator';
 import {
   bancosMock,
   clientesMock,
@@ -42,9 +43,41 @@ export default function GerarBoletos() {
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
+  const [modelos, setModelos] = useState<ModeloBoleto[]>(modelosBoletoMock);
 
   const banco = bancosMock.find((b) => b.id === bancoSelecionado) || null;
   const configuracao = configuracoesBancoMock.find((c) => c.banco_id === bancoSelecionado);
+
+  // Carregar modelos salvos do localStorage (templates importados)
+  useEffect(() => {
+    const templatesImportados = listarTemplates();
+    
+    // Converter templates para ModeloBoleto
+    const modelosImportados: ModeloBoleto[] = templatesImportados.map((template) => ({
+      id: template.id,
+      nome_modelo: template.nome,
+      banco_id: template.bancos_compativeis[0] || '',
+      bancos_compativeis: template.bancos_compativeis,
+      tipo_layout: 'CNAB_400',
+      padrao: false,
+      campos_mapeados: template.campos.map((campo) => ({
+        id: campo.tipo,
+        nome: campo.label,
+        variavel: `{{${campo.tipo}}}`,
+        posicao_x: campo.x,
+        posicao_y: campo.y,
+        largura: campo.largura,
+        altura: campo.altura,
+      })),
+      texto_instrucoes: '',
+      criado_em: template.criado_em,
+      atualizado_em: template.atualizado_em,
+      template_pdf_id: template.id,
+    }));
+
+    // Combinar com modelos mock
+    setModelos([...modelosBoletoMock, ...modelosImportados]);
+  }, []);
 
   // Dados a usar (CNAB importado ou mock)
   const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
@@ -76,14 +109,22 @@ export default function GerarBoletos() {
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
     if (bancoSelecionado) {
-      const modeloPadrao = modelosBoletoMock.find(
-        (m) => m.banco_id === bancoSelecionado && m.padrao
+      const modeloPadrao = modelos.find(
+        (m) => (m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)) && m.padrao
       );
       if (modeloPadrao) {
         setModeloSelecionado(modeloPadrao.id);
+      } else {
+        // Se não houver modelo padrão, seleciona o primeiro disponível para o banco
+        const primeiroModelo = modelos.find(
+          (m) => m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)
+        );
+        if (primeiroModelo) {
+          setModeloSelecionado(primeiroModelo.id);
+        }
       }
     }
-  }, [bancoSelecionado]);
+  }, [bancoSelecionado, modelos]);
 
   // Limpar dados CNAB ao trocar tipo de origem
   useEffect(() => {
@@ -189,7 +230,7 @@ export default function GerarBoletos() {
             clientesSelecionados={clientesSelecionados}
             notas={notas}
             notasSelecionadas={notasSelecionadas}
-            modelos={modelosBoletoMock}
+            modelos={modelos}
             modeloSelecionado={modeloSelecionado}
             onModeloChange={setModeloSelecionado}
             tipoSaida={tipoSaida}
