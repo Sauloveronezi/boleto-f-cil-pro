@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Building2, Check, Upload, FileText, CheckCircle2, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Banco, TipoOrigem, TIPOS_ORIGEM, ConfiguracaoCNAB } from '@/types/boleto';
@@ -16,7 +16,23 @@ import {
 import { HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-// Dados mock de configurações CNAB (deve vir do contexto/store futuramente)
+// Chave para armazenar padrões CNAB no localStorage
+const CNAB_PATTERNS_STORAGE_KEY = 'cnab-patterns';
+
+// Função para carregar padrões do localStorage
+const carregarPadroesLocalStorage = (): ConfiguracaoCNAB[] => {
+  try {
+    const stored = localStorage.getItem(CNAB_PATTERNS_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Erro ao carregar padrões CNAB:', error);
+  }
+  return [];
+};
+
+// Dados mock de configurações CNAB (usados como fallback)
 const configuracoesCNABMock: ConfiguracaoCNAB[] = [
   {
     id: '1',
@@ -76,8 +92,22 @@ export function BancoSelector({
 }: BancoSelectorProps) {
   const isCNAB = tipoImpressao === 'CNAB_240' || tipoImpressao === 'CNAB_400';
 
+  // Carregar padrões CNAB do localStorage
+  const [padroesSalvos, setPadroesSalvos] = useState<ConfiguracaoCNAB[]>([]);
+  
+  useEffect(() => {
+    const padroesLocalStorage = carregarPadroesLocalStorage();
+    // Combinar padrões do localStorage com os mock (localStorage tem prioridade)
+    const todosPadroes = [...padroesLocalStorage, ...configuracoesCNABMock];
+    // Remover duplicados por ID
+    const padroesUnicos = todosPadroes.filter((p, i, arr) => 
+      arr.findIndex(x => x.id === p.id) === i
+    );
+    setPadroesSalvos(padroesUnicos);
+  }, []);
+
   // Filtrar padrões disponíveis para o banco e tipo selecionados
-  const padroesDisponiveis = configuracoesCNABMock.filter(
+  const padroesDisponiveis = padroesSalvos.filter(
     p => p.banco_id === bancoSelecionado && p.tipo_cnab === tipoImpressao
   );
 
@@ -322,7 +352,7 @@ export function BancoSelector({
               <Select
                 value={padraoCNAB?.id || ''}
                 onValueChange={(value) => {
-                  const padrao = configuracoesCNABMock.find(p => p.id === value);
+                  const padrao = padroesSalvos.find(p => p.id === value);
                   onPadraoCNABChange(padrao || null);
                 }}
               >
