@@ -159,14 +159,19 @@ export interface ConfiguracaoCNAB {
   atualizado_em: string;
 }
 
+// Tipo de linha no arquivo CNAB
+export type TipoLinhaCNAB = 'header' | 'detalhe' | 'trailer' | 'header_lote' | 'trailer_lote';
+
 export interface CampoCNAB {
   id: string;
   nome: string;
-  campo_destino: 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep';
+  campo_destino: 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep' | 'custom';
   posicao_inicio: number;
   posicao_fim: number;
   tipo_registro?: string; // Ex: '1', '3', 'P', etc.
   formato?: 'texto' | 'numero' | 'data_ddmmaa' | 'data_ddmmaaaa' | 'valor_centavos';
+  tipo_linha?: TipoLinhaCNAB; // Em qual tipo de linha este campo aparece
+  cor?: string; // Cor para destaque visual
 }
 
 // Resumo de geração de boletos

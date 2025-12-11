@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit } from 'lucide-react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +26,9 @@ import { HelpCircle } from 'lucide-react';
 import { bancosMock } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { ConfiguracaoCNAB, CampoCNAB } from '@/types/boleto';
+import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB } from '@/types/boleto';
 import { BoletoPreview } from '@/components/boleto/BoletoPreview';
+import { CnabTextEditor, CampoMapeado, TipoLinha } from '@/components/cnab/CnabTextEditor';
 
 type CampoDestino = 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep';
 
@@ -57,7 +58,20 @@ interface CampoDetectado {
   destino: string;
   valor: string;
   confianca: number;
+  tipoLinha: TipoLinha;
+  cor: string;
 }
+
+const CORES_CAMPOS = [
+  'bg-blue-200 dark:bg-blue-900',
+  'bg-green-200 dark:bg-green-900',
+  'bg-yellow-200 dark:bg-yellow-900',
+  'bg-purple-200 dark:bg-purple-900',
+  'bg-pink-200 dark:bg-pink-900',
+  'bg-orange-200 dark:bg-orange-900',
+  'bg-cyan-200 dark:bg-cyan-900',
+  'bg-red-200 dark:bg-red-900',
+];
 
 export default function ImportarLayout() {
   const { toast } = useToast();
@@ -79,6 +93,8 @@ export default function ImportarLayout() {
   const [camposExtraidos, setCamposExtraidos] = useState<Record<string, string>>({});
   const [modoImportacao, setModoImportacao] = useState<'remessa' | 'json' | 'pdf_layout'>('remessa');
   const [arquivoLayoutPDF, setArquivoLayoutPDF] = useState<File | null>(null);
+  const [mostrarEditorVisual, setMostrarEditorVisual] = useState(false);
+  const [errosLeitura, setErrosLeitura] = useState<{ campo: string; mensagem: string }[]>([]);
 
   const handleArquivoRemessa = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -139,7 +155,9 @@ export default function ImportarLayout() {
           tipo: c.formato === 'valor_centavos' ? 'valor' : c.formato?.includes('data') ? 'data' : 'alfanumerico',
           destino: c.campo_destino,
           valor: '',
-          confianca: 100
+          confianca: 100,
+          tipoLinha: (c.tipo_linha || 'detalhe') as TipoLinha,
+          cor: c.cor || CORES_CAMPOS[i % CORES_CAMPOS.length]
         }));
         setCamposDetectados(camposConvertidos);
         
@@ -238,64 +256,94 @@ export default function ImportarLayout() {
     
     if (linhas.length === 0) return campos;
 
-    // Encontra linha de detalhe
+    // Identificar linhas por tipo
+    const linhaHeader = linhas.find(l => l.charAt(0) === '0');
     const linhaDetalhe = linhas.find(l => {
       const tipo = l.charAt(0);
-      return tipo === '1' || tipo === '3' || (tipoCNAB === 'CNAB_400' && l.length >= 400);
+      return tipo === '1' || tipo === '3' || (tipoCNAB === 'CNAB_400' && l.length >= 400 && tipo !== '0' && tipo !== '9');
     }) || linhas[1] || linhas[0];
+    const linhaTrailer = linhas.find(l => l.charAt(0) === '9');
 
-    // Padrões comuns de CNAB
-    const padroesComuns = tipoCNAB === 'CNAB_400' ? [
-      { nome: 'Tipo Registro', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const },
-      { nome: 'Código Banco', inicio: 77, fim: 79, destino: 'codigo_banco', tipo: 'numerico' as const },
-      { nome: 'Agência', inicio: 18, fim: 21, destino: 'agencia', tipo: 'numerico' as const },
-      { nome: 'Conta', inicio: 22, fim: 29, destino: 'conta', tipo: 'numerico' as const },
-      { nome: 'Nosso Número', inicio: 63, fim: 73, destino: 'nosso_numero', tipo: 'numerico' as const },
-      { nome: 'Carteira', inicio: 108, fim: 108, destino: 'carteira', tipo: 'numerico' as const },
-      { nome: 'Número Documento', inicio: 117, fim: 126, destino: 'numero_documento', tipo: 'alfanumerico' as const },
-      { nome: 'Data Vencimento', inicio: 121, fim: 126, destino: 'data_vencimento', tipo: 'data' as const },
-      { nome: 'Valor Título', inicio: 127, fim: 139, destino: 'valor', tipo: 'valor' as const },
-      { nome: 'Espécie Título', inicio: 148, fim: 149, destino: 'especie', tipo: 'numerico' as const },
-      { nome: 'Data Emissão', inicio: 151, fim: 156, destino: 'data_emissao', tipo: 'data' as const },
-      { nome: 'Juros Mora', inicio: 161, fim: 173, destino: 'juros_mora', tipo: 'valor' as const },
-      { nome: 'Desconto Até', inicio: 174, fim: 179, destino: 'desconto_ate', tipo: 'data' as const },
-      { nome: 'Valor Desconto', inicio: 180, fim: 192, destino: 'valor_desconto', tipo: 'valor' as const },
-      { nome: 'Tipo Inscricao Sacado', inicio: 219, fim: 220, destino: 'tipo_inscricao_sacado', tipo: 'numerico' as const },
-      { nome: 'CNPJ/CPF Sacado', inicio: 221, fim: 234, destino: 'cnpj_sacado', tipo: 'numerico' as const },
-      { nome: 'Nome Sacado', inicio: 235, fim: 274, destino: 'nome_sacado', tipo: 'alfanumerico' as const },
-      { nome: 'Endereço Sacado', inicio: 275, fim: 314, destino: 'endereco_sacado', tipo: 'alfanumerico' as const },
-      { nome: 'CEP Sacado', inicio: 327, fim: 334, destino: 'cep_sacado', tipo: 'numerico' as const },
-    ] : [
-      { nome: 'Tipo Registro', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const },
-      { nome: 'Código Banco', inicio: 1, fim: 3, destino: 'codigo_banco', tipo: 'numerico' as const },
-      { nome: 'Lote Serviço', inicio: 4, fim: 7, destino: 'lote', tipo: 'numerico' as const },
-      { nome: 'Agência', inicio: 24, fim: 28, destino: 'agencia', tipo: 'numerico' as const },
-      { nome: 'Conta', inicio: 29, fim: 36, destino: 'conta', tipo: 'numerico' as const },
-      { nome: 'Nosso Número', inicio: 58, fim: 73, destino: 'nosso_numero', tipo: 'numerico' as const },
-      { nome: 'Data Vencimento', inicio: 78, fim: 85, destino: 'data_vencimento', tipo: 'data' as const },
-      { nome: 'Valor Título', inicio: 120, fim: 134, destino: 'valor', tipo: 'valor' as const },
-      { nome: 'CNPJ/CPF Sacado', inicio: 134, fim: 147, destino: 'cnpj_sacado', tipo: 'numerico' as const },
-      { nome: 'Nome Sacado', inicio: 144, fim: 183, destino: 'nome_sacado', tipo: 'alfanumerico' as const },
+    // Padrões por tipo de linha para CNAB 400
+    const padroesHeader400 = [
+      { nome: 'Tipo Registro Header', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const, tipoLinha: 'header' as TipoLinha },
+      { nome: 'Código Banco Header', inicio: 77, fim: 79, destino: 'codigo_banco', tipo: 'numerico' as const, tipoLinha: 'header' as TipoLinha },
+      { nome: 'Razão Social Cedente', inicio: 47, fim: 76, destino: 'razao_social_cedente', tipo: 'alfanumerico' as const, tipoLinha: 'header' as TipoLinha },
+      { nome: 'Data Gravação', inicio: 95, fim: 100, destino: 'data_gravacao', tipo: 'data' as const, tipoLinha: 'header' as TipoLinha },
     ];
 
-    let idCounter = 1;
-    for (const padrao of padroesComuns) {
-      if (padrao.fim <= linhaDetalhe.length) {
-        const valor = linhaDetalhe.substring(padrao.inicio - 1, padrao.fim).trim();
-        if (valor) {
-          campos.push({
-            id: String(idCounter++),
-            nome: padrao.nome,
-            valor: valor,
-            posicaoInicio: padrao.inicio,
-            posicaoFim: padrao.fim,
-            tamanho: padrao.fim - padrao.inicio + 1,
-            tipo: padrao.tipo,
-            destino: padrao.destino,
-            confianca: Math.floor(Math.random() * 15) + 85 // 85-100%
-          });
+    const padroesDetalhe400 = [
+      { nome: 'Tipo Registro', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Código Banco', inicio: 77, fim: 79, destino: 'codigo_banco', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Agência', inicio: 18, fim: 21, destino: 'agencia', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Conta', inicio: 22, fim: 29, destino: 'conta', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Nosso Número', inicio: 63, fim: 73, destino: 'nosso_numero', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Carteira', inicio: 108, fim: 108, destino: 'carteira', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Número Documento', inicio: 117, fim: 126, destino: 'numero_documento', tipo: 'alfanumerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Data Vencimento', inicio: 121, fim: 126, destino: 'data_vencimento', tipo: 'data' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Valor Título', inicio: 127, fim: 139, destino: 'valor', tipo: 'valor' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Espécie Título', inicio: 148, fim: 149, destino: 'especie', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Data Emissão', inicio: 151, fim: 156, destino: 'data_emissao', tipo: 'data' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Juros Mora', inicio: 161, fim: 173, destino: 'juros_mora', tipo: 'valor' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Tipo Inscricao Sacado', inicio: 219, fim: 220, destino: 'tipo_inscricao_sacado', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'CNPJ/CPF Sacado', inicio: 221, fim: 234, destino: 'cnpj_sacado', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Nome Sacado', inicio: 235, fim: 274, destino: 'nome_sacado', tipo: 'alfanumerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Endereço Sacado', inicio: 275, fim: 314, destino: 'endereco_sacado', tipo: 'alfanumerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'CEP Sacado', inicio: 327, fim: 334, destino: 'cep_sacado', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+    ];
+
+    const padroesTrailer400 = [
+      { nome: 'Tipo Registro Trailer', inicio: 1, fim: 1, destino: 'tipo_registro', tipo: 'numerico' as const, tipoLinha: 'trailer' as TipoLinha },
+      { nome: 'Quantidade Registros', inicio: 2, fim: 7, destino: 'qtd_registros', tipo: 'numerico' as const, tipoLinha: 'trailer' as TipoLinha },
+    ];
+
+    // Padrões para CNAB 240
+    const padroesDetalhe240 = [
+      { nome: 'Código Banco', inicio: 1, fim: 3, destino: 'codigo_banco', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Lote Serviço', inicio: 4, fim: 7, destino: 'lote', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Tipo Registro', inicio: 8, fim: 8, destino: 'tipo_registro', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Agência', inicio: 24, fim: 28, destino: 'agencia', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Conta', inicio: 29, fim: 36, destino: 'conta', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Nosso Número', inicio: 58, fim: 73, destino: 'nosso_numero', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Data Vencimento', inicio: 78, fim: 85, destino: 'data_vencimento', tipo: 'data' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Valor Título', inicio: 120, fim: 134, destino: 'valor', tipo: 'valor' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'CNPJ/CPF Sacado', inicio: 134, fim: 147, destino: 'cnpj_sacado', tipo: 'numerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+      { nome: 'Nome Sacado', inicio: 144, fim: 183, destino: 'nome_sacado', tipo: 'alfanumerico' as const, tipoLinha: 'detalhe' as TipoLinha },
+    ];
+
+    // Função para processar campos de uma linha
+    const processarLinha = (linha: string | undefined, padroes: typeof padroesDetalhe400) => {
+      if (!linha) return;
+      
+      for (const padrao of padroes) {
+        if (padrao.fim <= linha.length) {
+          const valor = linha.substring(padrao.inicio - 1, padrao.fim).trim();
+          if (valor) {
+            const idCounter = campos.length + 1;
+            campos.push({
+              id: String(idCounter),
+              nome: padrao.nome,
+              valor: valor,
+              posicaoInicio: padrao.inicio,
+              posicaoFim: padrao.fim,
+              tamanho: padrao.fim - padrao.inicio + 1,
+              tipo: padrao.tipo,
+              destino: padrao.destino,
+              confianca: Math.floor(Math.random() * 15) + 85,
+              tipoLinha: padrao.tipoLinha,
+              cor: CORES_CAMPOS[(idCounter - 1) % CORES_CAMPOS.length]
+            });
+          }
         }
       }
+    };
+
+    if (tipoCNAB === 'CNAB_400') {
+      processarLinha(linhaHeader, padroesHeader400);
+      processarLinha(linhaDetalhe, padroesDetalhe400);
+      processarLinha(linhaTrailer, padroesTrailer400);
+    } else {
+      processarLinha(linhaDetalhe, padroesDetalhe240);
     }
 
     return campos;
@@ -328,7 +376,9 @@ export default function ImportarLayout() {
       tipo: p.tipo,
       destino: p.destino,
       valor: '(do PDF)',
-      confianca: 95
+      confianca: 95,
+      tipoLinha: 'detalhe' as TipoLinha,
+      cor: CORES_CAMPOS[index % CORES_CAMPOS.length]
     }));
   };
 
@@ -915,50 +965,126 @@ export default function ImportarLayout() {
           {/* Etapa: Resultado */}
           {etapa === 'resultado' && (
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                    Campos Detectados
-                  </CardTitle>
-                  <CardDescription>
-                    {camposDetectados.length} campos identificados no arquivo
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {camposDetectados.map((campo) => (
-                      <div
-                        key={campo.id}
-                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center text-xs font-mono">
-                            {campo.id}
+              {/* Botões de modo de visualização */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={mostrarEditorVisual ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMostrarEditorVisual(true)}
+                    className="gap-2"
+                  >
+                    <Palette className="h-4 w-4" />
+                    Editor Visual (Texto Colorido)
+                  </Button>
+                  <Button
+                    variant={!mostrarEditorVisual ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMostrarEditorVisual(false)}
+                    className="gap-2"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Lista de Campos
+                  </Button>
+                </div>
+                {errosLeitura.length > 0 && (
+                  <Badge variant="destructive" className="gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errosLeitura.length} erro(s) de leitura
+                  </Badge>
+                )}
+              </div>
+
+              {/* Editor Visual com Texto Colorido */}
+              {mostrarEditorVisual && conteudoRemessa && (
+                <CnabTextEditor
+                  conteudo={conteudoRemessa}
+                  campos={camposDetectados.map(c => ({
+                    id: c.id,
+                    nome: c.nome,
+                    posicaoInicio: c.posicaoInicio,
+                    posicaoFim: c.posicaoFim,
+                    tamanho: c.tamanho,
+                    tipo: c.tipo,
+                    destino: c.destino,
+                    valor: c.valor,
+                    tipoLinha: c.tipoLinha,
+                    cor: c.cor,
+                  }))}
+                  tipoCNAB={tipoCNAB}
+                  onCamposChange={(novosCampos) => {
+                    setCamposDetectados(novosCampos.map((c, i) => ({
+                      ...c,
+                      confianca: camposDetectados[i]?.confianca || 90,
+                    })));
+                    // Atualizar padrão gerado também
+                    if (padraoGerado) {
+                      const configCampos: CampoCNAB[] = novosCampos.map((c, index) => ({
+                        id: `campo_${index + 1}`,
+                        nome: c.nome,
+                        campo_destino: mapDestino(c.destino),
+                        posicao_inicio: c.posicaoInicio,
+                        posicao_fim: c.posicaoFim,
+                        tipo_registro: '1',
+                        formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
+                        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
+                        cor: c.cor
+                      }));
+                      setPadraoGerado({ ...padraoGerado, campos: configCampos });
+                    }
+                  }}
+                  onErrosDetectados={setErrosLeitura}
+                />
+              )}
+
+              {/* Lista tradicional de campos */}
+              {!mostrarEditorVisual && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                      Campos Detectados
+                    </CardTitle>
+                    <CardDescription>
+                      {camposDetectados.length} campos identificados no arquivo
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                      {camposDetectados.map((campo) => (
+                        <div
+                          key={campo.id}
+                          className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded ${campo.cor}`} />
+                            <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center text-xs font-mono">
+                              {campo.id}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{campo.nome}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Posição: {campo.posicaoInicio}-{campo.posicaoFim} ({campo.tamanho} chars) | Linha: {campo.tipoLinha}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{campo.nome}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Posição: {campo.posicaoInicio}-{campo.posicaoFim} ({campo.tamanho} chars)
-                            </p>
+                          <div className="text-right flex items-center gap-3">
+                            <div>
+                              <Badge variant="outline" className="mb-1">{campo.tipo}</Badge>
+                              <p className="text-xs font-mono bg-background px-2 py-1 rounded">
+                                {campo.valor.substring(0, 15)}{campo.valor.length > 15 ? '...' : ''}
+                              </p>
+                            </div>
+                            <Badge className={campo.confianca >= 90 ? 'bg-primary' : 'bg-muted'}>
+                              {campo.confianca}%
+                            </Badge>
                           </div>
                         </div>
-                        <div className="text-right flex items-center gap-3">
-                          <div>
-                            <Badge variant="outline" className="mb-1">{campo.tipo}</Badge>
-                            <p className="text-xs font-mono bg-background px-2 py-1 rounded">
-                              {campo.valor.substring(0, 15)}{campo.valor.length > 15 ? '...' : ''}
-                            </p>
-                          </div>
-                          <Badge className={campo.confianca >= 90 ? 'bg-primary' : 'bg-muted'}>
-                            {campo.confianca}%
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader>
