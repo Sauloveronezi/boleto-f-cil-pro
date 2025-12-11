@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { WizardSteps, WizardStep } from '@/components/boleto/WizardSteps';
 import { BancoSelector } from '@/components/boleto/BancoSelector';
@@ -10,16 +10,18 @@ import { ResumoGeracao } from '@/components/boleto/ResumoGeracao';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TipoImpressao, Banco } from '@/types/boleto';
+import { TipoOrigem } from '@/types/boleto';
+import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import {
   bancosMock,
   clientesMock,
   notasFiscaisMock,
   modelosBoletoMock,
+  configuracoesBancoMock,
 } from '@/data/mockData';
 
 const WIZARD_STEPS: WizardStep[] = [
-  { id: 1, title: 'Banco e Tipo', description: 'Selecione o banco e tipo de impressão' },
+  { id: 1, title: 'Origem e Banco', description: 'Selecione a origem dos dados e o banco' },
   { id: 2, title: 'Clientes', description: 'Filtre e selecione os clientes' },
   { id: 3, title: 'Notas Fiscais', description: 'Selecione as notas para gerar boletos' },
   { id: 4, title: 'Gerar', description: 'Configure e gere os boletos' },
@@ -30,7 +32,7 @@ export default function GerarBoletos() {
   const { toast } = useToast();
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [tipoImpressao, setTipoImpressao] = useState<TipoImpressao | null>(null);
+  const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
   const [clientesSelecionados, setClientesSelecionados] = useState<string[]>([]);
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
@@ -38,6 +40,7 @@ export default function GerarBoletos() {
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
 
   const banco = bancosMock.find((b) => b.id === bancoSelecionado) || null;
+  const configuracao = configuracoesBancoMock.find((c) => c.banco_id === bancoSelecionado);
 
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function GerarBoletos() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return tipoImpressao && bancoSelecionado;
+        return tipoOrigem && bancoSelecionado;
       case 2:
         return clientesSelecionados.length > 0;
       case 3:
@@ -79,16 +82,25 @@ export default function GerarBoletos() {
   };
 
   const handleGerar = () => {
+    if (!banco || !tipoOrigem) return;
+
+    // Filtrar notas selecionadas
+    const notasParaGerar = notasFiscaisMock.filter((n) => notasSelecionadas.includes(n.id));
+
+    // Gerar o PDF
+    gerarPDFBoletos(
+      notasParaGerar,
+      clientesMock,
+      banco,
+      configuracao,
+      tipoOrigem,
+      tipoSaida
+    );
+
     toast({
       title: 'Boletos gerados com sucesso!',
-      description: `${notasSelecionadas.length} boleto(s) foram gerados e estão prontos para download.`,
+      description: `${notasSelecionadas.length} boleto(s) foram gerados e o download foi iniciado.`,
     });
-
-    // Em uma implementação real, aqui seria feita a geração dos boletos
-    // e o download do arquivo
-    setTimeout(() => {
-      navigate('/');
-    }, 2000);
   };
 
   const renderStepContent = () => {
@@ -98,9 +110,9 @@ export default function GerarBoletos() {
           <BancoSelector
             bancos={bancosMock}
             bancoSelecionado={bancoSelecionado}
-            tipoImpressao={tipoImpressao}
+            tipoImpressao={tipoOrigem}
             onBancoChange={setBancoSelecionado}
-            onTipoImpressaoChange={setTipoImpressao}
+            onTipoImpressaoChange={setTipoOrigem}
           />
         );
       case 2:
@@ -124,7 +136,7 @@ export default function GerarBoletos() {
       case 4:
         return (
           <ResumoGeracao
-            tipoImpressao={tipoImpressao}
+            tipoOrigem={tipoOrigem}
             banco={banco}
             clientes={clientesMock}
             clientesSelecionados={clientesSelecionados}

@@ -29,10 +29,10 @@ export function BancoSelector({
 }: BancoSelectorProps) {
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Tipo de Impressão */}
+      {/* Tipo de Origem */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Label className="text-base font-semibold">Tipo de Impressão</Label>
+          <Label className="text-base font-semibold">Tipo de Origem dos Dados</Label>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
@@ -40,8 +40,8 @@ export function BancoSelector({
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <p>
-                  Escolha o formato de saída dos boletos. CNAB 240 e 400 geram arquivos
-                  de remessa para registro em banco. API/CDS integra diretamente com o sistema bancário.
+                  Escolha o formato de leitura dos dados. CNAB 240 e 400 leem arquivos de retorno bancário.
+                  API/CDS integra diretamente com sistemas ERP (SAP, etc.).
                 </p>
               </TooltipContent>
             </Tooltip>

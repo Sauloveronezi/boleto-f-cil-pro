@@ -1,5 +1,5 @@
-import { FileText, Download, Building2, Users, Receipt, Palette } from 'lucide-react';
-import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoImpressao, TIPOS_IMPRESSAO } from '@/types/boleto';
+import { FileText, Download, Building2, Users, Receipt, Palette, Database } from 'lucide-react';
+import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 
 interface ResumoGeracaoProps {
-  tipoImpressao: TipoImpressao | null;
+  tipoOrigem: TipoOrigem | null;
   banco: Banco | null;
   clientes: Cliente[];
   clientesSelecionados: string[];
@@ -30,7 +30,7 @@ interface ResumoGeracaoProps {
 }
 
 export function ResumoGeracao({
-  tipoImpressao,
+  tipoOrigem,
   banco,
   clientes,
   clientesSelecionados,
@@ -63,12 +63,12 @@ export function ResumoGeracao({
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-lg">
-                <FileText className="h-5 w-5 text-primary" />
+                <Database className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Tipo de Impressão</p>
+                <p className="text-sm text-muted-foreground">Tipo de Origem</p>
                 <p className="font-semibold">
-                  {tipoImpressao ? TIPOS_IMPRESSAO[tipoImpressao].label : '-'}
+                  {tipoOrigem ? TIPOS_ORIGEM[tipoOrigem].label : '-'}
                 </p>
               </div>
             </div>
@@ -195,9 +195,7 @@ export function ResumoGeracao({
                     Arquivo Único
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {tipoImpressao === 'API_CDS'
-                      ? 'Gera um único PDF com todos os boletos em sequência'
-                      : 'Gera um único arquivo de remessa com todos os boletos'}
+                    Gera um único PDF com todos os boletos em sequência
                   </p>
                 </div>
               </div>
