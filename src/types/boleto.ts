@@ -1,20 +1,24 @@
-// Tipos de impressão de boleto
-export type TipoImpressao = 'CNAB_240' | 'CNAB_400' | 'API_CDS';
+// Tipos de origem dos dados (formato de leitura)
+export type TipoOrigem = 'CNAB_240' | 'CNAB_400' | 'API_CDS';
 
-export const TIPOS_IMPRESSAO: Record<TipoImpressao, { label: string; descricao: string }> = {
+export const TIPOS_ORIGEM: Record<TipoOrigem, { label: string; descricao: string }> = {
   CNAB_240: {
     label: 'CNAB 240',
-    descricao: 'Arquivo de remessa no padrão CNAB 240 posições'
+    descricao: 'Leitura de arquivo no padrão CNAB 240 posições'
   },
   CNAB_400: {
     label: 'CNAB 400',
-    descricao: 'Arquivo de remessa no padrão CNAB 400 posições'
+    descricao: 'Leitura de arquivo no padrão CNAB 400 posições'
   },
   API_CDS: {
     label: 'Via API / Banco de Dados / CDS',
-    descricao: 'Integração direta com sistema bancário via API'
+    descricao: 'Leitura direta via integração com sistema (SAP, CDS, etc.)'
   }
 };
+
+// Alias para compatibilidade
+export type TipoImpressao = TipoOrigem;
+export const TIPOS_IMPRESSAO = TIPOS_ORIGEM;
 
 // Banco emissor
 export interface Banco {
