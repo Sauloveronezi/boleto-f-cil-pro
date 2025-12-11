@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle } from 'lucide-react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -296,6 +296,67 @@ export default function ImportarLayout() {
     setNomePadrao('');
     setPadraoGerado(null);
     setEtapa('upload');
+    setResultadoTeste(null);
+  };
+
+  const [resultadoTeste, setResultadoTeste] = useState<{ campo: string; valor: string }[] | null>(null);
+
+  const handleTestarPadrao = () => {
+    if (!padraoGerado || !conteudoRemessa) {
+      toast({
+        title: 'Erro',
+        description: 'Arquivo de remessa ou padrão não disponível.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const linhas = conteudoRemessa.split('\n').filter(l => l.trim());
+    const linhaDetalhe = linhas.find(l => {
+      const tipo = l.charAt(0);
+      return tipo === '1' || tipo === '3';
+    }) || linhas[1] || linhas[0];
+
+    const resultados: { campo: string; valor: string }[] = [];
+
+    for (const campo of padraoGerado.campos) {
+      let valor = linhaDetalhe.substring(campo.posicao_inicio - 1, campo.posicao_fim).trim();
+      
+      // Aplicar formato
+      if (campo.formato === 'valor_centavos' && valor) {
+        const num = parseInt(valor) / 100;
+        valor = `R$ ${num.toFixed(2).replace('.', ',')}`;
+      } else if ((campo.formato === 'data_ddmmaa' || campo.formato === 'data_ddmmaaaa') && valor.length >= 6) {
+        const dia = valor.substring(0, 2);
+        const mes = valor.substring(2, 4);
+        const ano = valor.substring(4);
+        valor = `${dia}/${mes}/${ano.length === 2 ? '20' + ano : ano}`;
+      }
+
+      resultados.push({
+        campo: campo.nome || CAMPOS_DESTINO_LABELS[campo.campo_destino] || campo.campo_destino,
+        valor: valor || '(vazio)'
+      });
+    }
+
+    setResultadoTeste(resultados);
+    toast({
+      title: 'Teste concluído',
+      description: `${resultados.length} campos extraídos do arquivo.`,
+    });
+  };
+
+  const CAMPOS_DESTINO_LABELS: Record<string, string> = {
+    'cnpj': 'CNPJ/CPF',
+    'razao_social': 'Razão Social',
+    'valor': 'Valor',
+    'vencimento': 'Vencimento',
+    'nosso_numero': 'Nosso Número',
+    'endereco': 'Endereço',
+    'numero_nota': 'Número Nota',
+    'cidade': 'Cidade',
+    'estado': 'Estado',
+    'cep': 'CEP',
   };
 
   return (
@@ -621,14 +682,45 @@ export default function ImportarLayout() {
                 </CardContent>
               </Card>
 
+              {/* Resultado do Teste */}
+              {resultadoTeste && (
+                <Card className="border-primary/30 bg-primary/5">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <PlayCircle className="h-5 w-5 text-primary" />
+                      Resultado do Teste
+                    </CardTitle>
+                    <CardDescription>
+                      Valores extraídos do arquivo usando o padrão gerado
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {resultadoTeste.map((r, i) => (
+                        <div key={i} className="flex justify-between p-2 bg-background rounded border">
+                          <span className="text-sm font-medium">{r.campo}:</span>
+                          <span className="text-sm font-mono">{r.valor}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="flex justify-between">
                 <Button variant="outline" onClick={handleReset}>
                   Analisar outro arquivo
                 </Button>
-                <Button onClick={handleSalvar} className="gap-2">
-                  <Save className="h-4 w-4" />
-                  Salvar Padrão CNAB
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={handleTestarPadrao} className="gap-2">
+                    <PlayCircle className="h-4 w-4" />
+                    Testar Padrão
+                  </Button>
+                  <Button onClick={handleSalvar} className="gap-2">
+                    <Save className="h-4 w-4" />
+                    Salvar Padrão CNAB
+                  </Button>
+                </div>
               </div>
             </div>
           )}
