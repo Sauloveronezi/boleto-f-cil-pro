@@ -10,8 +10,9 @@ import { ResumoGeracao } from '@/components/boleto/ResumoGeracao';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TipoOrigem } from '@/types/boleto';
+import { TipoOrigem, Cliente, NotaFiscal } from '@/types/boleto';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
+import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import {
   bancosMock,
   clientesMock,
@@ -34,6 +35,8 @@ export default function GerarBoletos() {
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
+  const [arquivoCNAB, setArquivoCNAB] = useState<File | null>(null);
+  const [dadosCNAB, setDadosCNAB] = useState<DadosCNAB | null>(null);
   const [clientesSelecionados, setClientesSelecionados] = useState<string[]>([]);
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
@@ -41,6 +44,33 @@ export default function GerarBoletos() {
 
   const banco = bancosMock.find((b) => b.id === bancoSelecionado) || null;
   const configuracao = configuracoesBancoMock.find((c) => c.banco_id === bancoSelecionado);
+
+  // Dados a usar (CNAB importado ou mock)
+  const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
+  const clientes: Cliente[] = isCNAB && dadosCNAB ? dadosCNAB.clientes : clientesMock;
+  const notas: NotaFiscal[] = isCNAB && dadosCNAB ? dadosCNAB.notas : notasFiscaisMock;
+
+  // Processar arquivo CNAB quando selecionado
+  useEffect(() => {
+    if (arquivoCNAB && tipoOrigem && isCNAB) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const conteudo = e.target?.result as string;
+        const dados = parseCNAB(conteudo, tipoOrigem);
+        setDadosCNAB(dados);
+        
+        // Resetar seleções
+        setClientesSelecionados([]);
+        setNotasSelecionadas([]);
+        
+        toast({
+          title: 'Arquivo processado!',
+          description: `${dados.clientes.length} cliente(s) e ${dados.notas.length} nota(s) importados do arquivo CNAB.`,
+        });
+      };
+      reader.readAsText(arquivoCNAB);
+    }
+  }, [arquivoCNAB, tipoOrigem, isCNAB, toast]);
 
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
@@ -54,9 +84,20 @@ export default function GerarBoletos() {
     }
   }, [bancoSelecionado]);
 
+  // Limpar dados CNAB ao trocar tipo de origem
+  useEffect(() => {
+    if (!isCNAB) {
+      setDadosCNAB(null);
+      setArquivoCNAB(null);
+    }
+  }, [tipoOrigem, isCNAB]);
+
   const canProceed = () => {
     switch (currentStep) {
       case 1:
+        if (isCNAB) {
+          return tipoOrigem && bancoSelecionado && arquivoCNAB;
+        }
         return tipoOrigem && bancoSelecionado;
       case 2:
         return clientesSelecionados.length > 0;
@@ -85,12 +126,12 @@ export default function GerarBoletos() {
     if (!banco || !tipoOrigem) return;
 
     // Filtrar notas selecionadas
-    const notasParaGerar = notasFiscaisMock.filter((n) => notasSelecionadas.includes(n.id));
+    const notasParaGerar = notas.filter((n) => notasSelecionadas.includes(n.id));
 
-    // Gerar o PDF
+    // Gerar o PDF com o modelo do banco
     gerarPDFBoletos(
       notasParaGerar,
-      clientesMock,
+      clientes,
       banco,
       configuracao,
       tipoOrigem,
@@ -111,14 +152,16 @@ export default function GerarBoletos() {
             bancos={bancosMock}
             bancoSelecionado={bancoSelecionado}
             tipoImpressao={tipoOrigem}
+            arquivoCNAB={arquivoCNAB}
             onBancoChange={setBancoSelecionado}
             onTipoImpressaoChange={setTipoOrigem}
+            onArquivoChange={setArquivoCNAB}
           />
         );
       case 2:
         return (
           <ClienteFilter
-            clientes={clientesMock}
+            clientes={clientes}
             clientesSelecionados={clientesSelecionados}
             onClientesChange={setClientesSelecionados}
           />
@@ -126,8 +169,8 @@ export default function GerarBoletos() {
       case 3:
         return (
           <NotaFiscalFilter
-            notas={notasFiscaisMock}
-            clientes={clientesMock}
+            notas={notas}
+            clientes={clientes}
             clientesSelecionados={clientesSelecionados}
             notasSelecionadas={notasSelecionadas}
             onNotasChange={setNotasSelecionadas}
@@ -138,9 +181,9 @@ export default function GerarBoletos() {
           <ResumoGeracao
             tipoOrigem={tipoOrigem}
             banco={banco}
-            clientes={clientesMock}
+            clientes={clientes}
             clientesSelecionados={clientesSelecionados}
-            notas={notasFiscaisMock}
+            notas={notas}
             notasSelecionadas={notasSelecionadas}
             modelos={modelosBoletoMock}
             modeloSelecionado={modeloSelecionado}
@@ -162,7 +205,7 @@ export default function GerarBoletos() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Gerar Boletos</h1>
           <p className="text-muted-foreground">
-            Siga as etapas para selecionar banco, clientes, notas e gerar os boletos
+            Siga as etapas para selecionar origem dos dados, banco, clientes, notas e gerar os boletos em PDF
           </p>
         </div>
 
