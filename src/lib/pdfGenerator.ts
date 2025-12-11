@@ -1,5 +1,7 @@
 import jsPDF from 'jspdf';
 import { NotaFiscal, Cliente, Banco, ConfiguracaoBanco, TipoImpressao, TIPOS_IMPRESSAO } from '@/types/boleto';
+import { gerarCodigoBarras as calcularCodigoBarras, gerarBarrasVisuais, DadosCodigoBarras } from './barcodeCalculator';
+import { carregarDadosEmpresa, DadosEmpresa } from '@/types/empresa';
 
 interface DadosBoleto {
   nota: NotaFiscal;
@@ -7,30 +9,8 @@ interface DadosBoleto {
   banco: Banco;
   configuracao?: ConfiguracaoBanco;
   tipoOrigem: TipoImpressao;
-}
-
-// Gera código de barras fictício para demonstração
-function gerarCodigoBarras(banco: Banco, nota: NotaFiscal): string {
-  const codigoBanco = banco.codigo_banco.padStart(3, '0');
-  const valor = Math.floor(nota.valor_titulo * 100).toString().padStart(10, '0');
-  const data = nota.data_vencimento.replace(/-/g, '');
-  return `${codigoBanco}9${valor}${data}00000000000`;
-}
-
-// Gera linha digitável fictícia para demonstração
-function gerarLinhaDigitavel(codigoBarras: string): string {
-  const parte1 = codigoBarras.substring(0, 5) + '.' + codigoBarras.substring(5, 10);
-  const parte2 = codigoBarras.substring(10, 15) + '.' + codigoBarras.substring(15, 21);
-  const parte3 = codigoBarras.substring(21, 26) + '.' + codigoBarras.substring(26, 32);
-  const parte4 = codigoBarras.substring(32, 33);
-  const parte5 = codigoBarras.substring(33);
-  return `${parte1} ${parte2} ${parte3} ${parte4} ${parte5}`;
-}
-
-// Gera nosso número fictício
-function gerarNossoNumero(banco: Banco, nota: NotaFiscal): string {
-  const baseNum = parseInt(nota.id) * 1000 + parseInt(banco.id);
-  return baseNum.toString().padStart(11, '0');
+  dadosCodigoBarras: DadosCodigoBarras;
+  empresa: DadosEmpresa;
 }
 
 // Formata valor em moeda brasileira
@@ -52,14 +32,13 @@ function desenharBoleto(
   dados: DadosBoleto,
   startY: number
 ): number {
-  const { nota, cliente, banco, configuracao, tipoOrigem } = dados;
+  const { nota, cliente, banco, configuracao, tipoOrigem, dadosCodigoBarras, empresa } = dados;
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
   const contentWidth = pageWidth - (margin * 2);
   
-  const codigoBarras = gerarCodigoBarras(banco, nota);
-  const linhaDigitavel = gerarLinhaDigitavel(codigoBarras);
-  const nossoNumero = gerarNossoNumero(banco, nota);
+  // Usa os dados calculados do código de barras
+  const { codigoBarras, linhaDigitavel, nossoNumero } = dadosCodigoBarras;
   
   let y = startY;
 
@@ -117,7 +96,7 @@ function desenharBoleto(
   
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text('EMPRESA DEMONSTRAÇÃO LTDA', margin + 2, y + 10);
+  doc.text(empresa.razaoSocial, margin + 2, y + 10);
   doc.text(configuracao ? `${configuracao.agencia} / ${configuracao.codigo_cedente}` : '0000 / 000000', margin + col1Width + 2, y + 10);
   
   y += 12;
@@ -225,19 +204,30 @@ function desenharBoleto(
   
   y += 18;
 
-  // Código de barras (simulado com retângulos)
+  // Código de barras (calculado corretamente usando ITF - Interleaved 2 of 5)
   doc.setFillColor(0, 0, 0);
-  const barWidth = 0.8;
+  const barras = gerarBarrasVisuais(codigoBarras);
+  let barX = margin;
   const barHeight = 25;
-  for (let i = 0; i < 44; i++) {
-    const barX = margin + (i * (barWidth + 0.5));
-    const isBar = Math.random() > 0.3;
-    if (isBar) {
+  
+  for (const largura of barras) {
+    if (largura > 0) {
+      // Barra preta
+      const barWidth = largura * 0.5;
       doc.rect(barX, y + 2, barWidth, barHeight, 'F');
+      barX += barWidth;
+    } else {
+      // Espaço branco
+      barX += Math.abs(largura) * 0.5;
     }
   }
   
-  y += 30;
+  // Adiciona números do código abaixo das barras
+  doc.setFontSize(8);
+  doc.setFont('courier', 'normal');
+  doc.text(codigoBarras, margin, y + barHeight + 6);
+  
+  y += barHeight + 10;
 
   // Linha de corte
   doc.setDrawColor(150, 150, 150);
@@ -266,7 +256,10 @@ export function gerarPDFBoletos(
 
   let currentY = 15;
   const pageHeight = doc.internal.pageSize.getHeight();
-  const boletoHeight = 160; // Altura aproximada de um boleto
+  const boletoHeight = 170; // Altura aproximada de um boleto (aumentada para código de barras)
+  
+  // Carrega dados da empresa
+  const empresa = carregarDadosEmpresa();
 
   notas.forEach((nota, index) => {
     const cliente = clientes.find(c => c.id === nota.codigo_cliente);
@@ -277,13 +270,18 @@ export function gerarPDFBoletos(
       doc.addPage();
       currentY = 15;
     }
+    
+    // Calcula código de barras real
+    const dadosCodigoBarras = calcularCodigoBarras(banco, nota, configuracao);
 
     const dados: DadosBoleto = {
       nota,
       cliente,
       banco,
       configuracao,
-      tipoOrigem
+      tipoOrigem,
+      dadosCodigoBarras,
+      empresa
     };
 
     currentY = desenharBoleto(doc, dados, currentY);
