@@ -42,6 +42,7 @@ export interface ConfiguracaoBanco {
   agencia: string;
   conta: string;
   codigo_cedente: string;
+  convenio?: string; // Código do convênio (usado pelo BB e outros)
 }
 
 // Cliente

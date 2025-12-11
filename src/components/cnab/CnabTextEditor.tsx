@@ -470,29 +470,64 @@ export function CnabTextEditor({ conteudo, campos, tipoCNAB, onCamposChange, onE
         </div>
       </div>
 
-      {/* Legenda de Cores */}
+      {/* Legenda de Cores e Mapeamento para Boleto */}
       <Card>
         <CardHeader className="py-2">
-          <CardTitle className="text-xs">Legenda de Campos</CardTitle>
+          <CardTitle className="text-xs flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Mapeamento CNAB → Boleto
+          </CardTitle>
         </CardHeader>
         <CardContent className="py-2">
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {campos.map((campo) => (
               <div 
                 key={campo.id} 
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs cursor-pointer ${
-                  campoSelecionado === campo.id ? 'ring-2 ring-primary' : ''
+                className={`flex items-center gap-2 p-2 rounded border text-xs cursor-pointer hover:bg-muted/50 transition-colors ${
+                  campoSelecionado === campo.id ? 'ring-2 ring-primary bg-primary/5' : ''
                 }`}
                 onClick={() => setCampoSelecionado(campo.id)}
               >
-                <div className={`w-3 h-3 rounded ${campo.cor}`} />
-                <span>{campo.nome}</span>
-                <Badge variant="outline" className="text-[10px] ml-1">
-                  {campo.posicaoInicio}-{campo.posicaoFim}
-                </Badge>
+                <div className={`w-4 h-4 rounded flex-shrink-0 ${campo.cor}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-medium truncate">{campo.nome}</span>
+                    <Badge variant="outline" className="text-[10px] flex-shrink-0">
+                      {campo.posicaoInicio}-{campo.posicaoFim}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <span>CNAB Linha: {campo.tipoLinha}</span>
+                    <span>→</span>
+                    <span className="text-primary font-medium">
+                      {campo.destino === 'cnpj' && 'CNPJ do Pagador'}
+                      {campo.destino === 'razao_social' && 'Nome do Pagador'}
+                      {campo.destino === 'valor' && 'Valor do Título'}
+                      {campo.destino === 'vencimento' && 'Data Vencimento'}
+                      {campo.destino === 'nosso_numero' && 'Nosso Número'}
+                      {campo.destino === 'endereco' && 'Endereço'}
+                      {campo.destino === 'numero_nota' && 'Nº Documento'}
+                      {campo.destino === 'cidade' && 'Cidade'}
+                      {campo.destino === 'estado' && 'UF'}
+                      {campo.destino === 'cep' && 'CEP'}
+                      {campo.destino === 'custom' && 'Campo Customizado'}
+                    </span>
+                  </div>
+                  {campo.valor && (
+                    <div className="text-[10px] mt-1 p-1 bg-muted rounded font-mono truncate" title={campo.valor}>
+                      {campo.valor}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
+          
+          {campos.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Nenhum campo mapeado. Faça upload de um arquivo CNAB para detectar os campos automaticamente.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
