@@ -80,15 +80,41 @@ export interface NotaFiscal {
   cliente?: Cliente;
 }
 
+// Template PDF importado
+export interface TemplatePDF {
+  id: string;
+  nome: string;
+  arquivo_base64?: string; // PDF original em base64
+  preview_url?: string;
+  layout_detectado: {
+    largura_pagina: number;
+    altura_pagina: number;
+    areas_texto: AreaTextoPDF[];
+  };
+  criado_em: string;
+}
+
+export interface AreaTextoPDF {
+  id: string;
+  x: number;
+  y: number;
+  largura: number;
+  altura: number;
+  texto_original?: string;
+  campo_mapeado?: string; // variável que será inserida
+}
+
 // Modelo de layout de boleto
 export interface ModeloBoleto {
   id: string;
   nome_modelo: string;
   banco_id: string;
+  bancos_compativeis?: string[]; // IDs dos bancos que podem usar este modelo
   tipo_layout: TipoImpressao;
   padrao: boolean;
   campos_mapeados: CampoMapeado[];
   texto_instrucoes: string;
+  template_pdf_id?: string; // Referência ao template PDF importado
   criado_em: string;
   atualizado_em: string;
 }
