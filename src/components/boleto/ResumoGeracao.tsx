@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { FileText, Download, Building2, Users, Receipt, Palette, Database } from 'lucide-react';
 import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ interface ResumoGeracaoProps {
   onGerar: () => void;
 }
 
-export function ResumoGeracao({
+export const ResumoGeracao = forwardRef<HTMLDivElement, ResumoGeracaoProps>(function ResumoGeracao({
   tipoOrigem,
   banco,
   clientes,
@@ -42,7 +43,7 @@ export function ResumoGeracao({
   tipoSaida,
   onTipoSaidaChange,
   onGerar,
-}: ResumoGeracaoProps) {
+}, ref) {
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -53,7 +54,9 @@ export function ResumoGeracao({
   const notasSelecionadasData = notas.filter((n) => notasSelecionadas.includes(n.id));
   const valorTotal = notasSelecionadasData.reduce((acc, n) => acc + n.valor_titulo, 0);
 
-  const modelosDisponiveis = modelos.filter((m) => m.banco_id === banco?.id);
+  // Modelos do banco OU modelos genéricos (caso não haja específico para o banco)
+  const modelosDoBanco = modelos.filter((m) => m.banco_id === banco?.id);
+  const modelosDisponiveis = modelosDoBanco.length > 0 ? modelosDoBanco : modelos;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -240,4 +243,4 @@ export function ResumoGeracao({
       </div>
     </div>
   );
-}
+});
