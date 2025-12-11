@@ -160,7 +160,24 @@ export default function ConfiguracaoCNAB() {
   };
 
   const handleExcluir = (id: string) => {
-    setConfiguracoes(configuracoes.filter(c => c.id !== id));
+    // Verificar se é um padrão mock (não pode excluir)
+    const isMock = configuracoesMock.find(m => m.id === id);
+    if (isMock) {
+      toast({
+        title: 'Não permitido',
+        description: 'Padrões de demonstração não podem ser excluídos.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    const novasConfigs = configuracoes.filter(c => c.id !== id);
+    setConfiguracoes(novasConfigs);
+    
+    // Atualizar localStorage (excluindo mocks)
+    const salvos = novasConfigs.filter(c => !configuracoesMock.find(m => m.id === c.id));
+    localStorage.setItem('padroesCNAB', JSON.stringify(salvos));
+    
     if (configSelecionada?.id === id) {
       setConfigSelecionada(null);
       setNovaConfig(false);
