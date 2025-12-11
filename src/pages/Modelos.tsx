@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +43,7 @@ import { modelosBoletoMock, bancosMock } from '@/data/mockData';
 import { ModeloBoleto, TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
+import { listarTemplates } from '@/lib/pdfTemplateGenerator';
 
 const VARIAVEIS_DISPONIVEIS = [
   { variavel: '{{cliente_razao_social}}', descricao: 'Razão social do cliente' },
@@ -58,7 +59,38 @@ const VARIAVEIS_DISPONIVEIS = [
 
 export default function Modelos() {
   const { toast } = useToast();
-  const [modelos, setModelos] = useState<ModeloBoleto[]>(modelosBoletoMock);
+  const [modelos, setModelos] = useState<ModeloBoleto[]>([]);
+
+  // Carregar modelos do localStorage na inicialização
+  useEffect(() => {
+    const templatesImportados = listarTemplates();
+    
+    // Converter templates para ModeloBoleto
+    const modelosImportados: ModeloBoleto[] = templatesImportados.map((template) => ({
+      id: template.id,
+      nome_modelo: template.nome,
+      banco_id: template.bancos_compativeis[0] || '',
+      bancos_compativeis: template.bancos_compativeis,
+      tipo_layout: 'CNAB_400' as TipoImpressao,
+      padrao: false,
+      campos_mapeados: template.campos.map((campo) => ({
+        id: campo.tipo,
+        nome: campo.label,
+        variavel: `{{${campo.tipo}}}`,
+        posicao_x: campo.x,
+        posicao_y: campo.y,
+        largura: campo.largura,
+        altura: campo.altura,
+      })),
+      texto_instrucoes: '',
+      criado_em: template.criado_em,
+      atualizado_em: template.atualizado_em,
+      template_pdf_id: template.id,
+    }));
+
+    // Combinar com modelos mock
+    setModelos([...modelosBoletoMock, ...modelosImportados]);
+  }, []);
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
