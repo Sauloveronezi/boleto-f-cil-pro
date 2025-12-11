@@ -169,16 +169,16 @@ export function ClienteFilter({
               <div>
                 <Label className="text-sm text-muted-foreground">Zona Logística</Label>
                 <Select
-                  value={filtros.lzone?.[0] || ''}
+                  value={filtros.lzone?.[0] || '__all__'}
                   onValueChange={(value) =>
-                    setFiltros({ ...filtros, lzone: value ? [value] : [] })
+                    setFiltros({ ...filtros, lzone: value === '__all__' ? [] : [value] })
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todas as zonas" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todas as zonas</SelectItem>
+                    <SelectItem value="__all__">Todas as zonas</SelectItem>
                     {lzones.map((lzone) => (
                       <SelectItem key={lzone} value={lzone}>
                         {lzone}
@@ -192,16 +192,16 @@ export function ClienteFilter({
               <div>
                 <Label className="text-sm text-muted-foreground">Estado</Label>
                 <Select
-                  value={filtros.estado?.[0] || ''}
+                  value={filtros.estado?.[0] || '__all__'}
                   onValueChange={(value) =>
-                    setFiltros({ ...filtros, estado: value ? [value] : [] })
+                    setFiltros({ ...filtros, estado: value === '__all__' ? [] : [value] })
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todos os estados" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os estados</SelectItem>
+                    <SelectItem value="__all__">Todos os estados</SelectItem>
                     {estados.map((estado) => (
                       <SelectItem key={estado} value={estado}>
                         {estado}
@@ -215,16 +215,16 @@ export function ClienteFilter({
               <div>
                 <Label className="text-sm text-muted-foreground">Cidade</Label>
                 <Select
-                  value={filtros.cidade?.[0] || ''}
+                  value={filtros.cidade?.[0] || '__all__'}
                   onValueChange={(value) =>
-                    setFiltros({ ...filtros, cidade: value ? [value] : [] })
+                    setFiltros({ ...filtros, cidade: value === '__all__' ? [] : [value] })
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todas as cidades" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todas as cidades</SelectItem>
+                    <SelectItem value="__all__">Todas as cidades</SelectItem>
                     {cidades.map((cidade) => (
                       <SelectItem key={cidade} value={cidade}>
                         {cidade}
@@ -238,16 +238,16 @@ export function ClienteFilter({
               <div>
                 <Label className="text-sm text-muted-foreground">Parceiro de Negócio</Label>
                 <Select
-                  value={filtros.parceiro_negocio?.[0] || ''}
+                  value={filtros.parceiro_negocio?.[0] || '__all__'}
                   onValueChange={(value) =>
-                    setFiltros({ ...filtros, parceiro_negocio: value ? [value] : [] })
+                    setFiltros({ ...filtros, parceiro_negocio: value === '__all__' ? [] : [value] })
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todos os parceiros" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os parceiros</SelectItem>
+                    <SelectItem value="__all__">Todos os parceiros</SelectItem>
                     {parceiros.map((parceiro) => (
                       <SelectItem key={parceiro} value={parceiro}>
                         {parceiro}
@@ -261,16 +261,16 @@ export function ClienteFilter({
               <div>
                 <Label className="text-sm text-muted-foreground">Agente de Frete</Label>
                 <Select
-                  value={filtros.agente_frete?.[0] || ''}
+                  value={filtros.agente_frete?.[0] || '__all__'}
                   onValueChange={(value) =>
-                    setFiltros({ ...filtros, agente_frete: value ? [value] : [] })
+                    setFiltros({ ...filtros, agente_frete: value === '__all__' ? [] : [value] })
                   }
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Todos os agentes" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos os agentes</SelectItem>
+                    <SelectItem value="__all__">Todos os agentes</SelectItem>
                     {agentes.map((agente) => (
                       <SelectItem key={agente} value={agente}>
                         {agente}
