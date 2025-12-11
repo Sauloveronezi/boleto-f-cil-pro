@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2 } from 'lucide-react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -40,8 +40,9 @@ import {
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { modelosBoletoMock, bancosMock } from '@/data/mockData';
-import { ModeloBoleto, TIPOS_IMPRESSAO, TipoImpressao } from '@/types/boleto';
+import { ModeloBoleto, TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
+import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
 
 const VARIAVEIS_DISPONIVEIS = [
   { variavel: '{{cliente_razao_social}}', descricao: 'Razão social do cliente' },
@@ -57,9 +58,11 @@ const VARIAVEIS_DISPONIVEIS = [
 
 export default function Modelos() {
   const { toast } = useToast();
+  const [modelos, setModelos] = useState<ModeloBoleto[]>(modelosBoletoMock);
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
+  const [importarPDFOpen, setImportarPDFOpen] = useState(false);
 
   const getBancoNome = (bancoId: string) => {
     const banco = bancosMock.find((b) => b.id === bancoId);
@@ -76,6 +79,15 @@ export default function Modelos() {
   };
 
   const handleDuplicar = (modelo: ModeloBoleto) => {
+    const novoModelo: ModeloBoleto = {
+      ...modelo,
+      id: `modelo_${Date.now()}`,
+      nome_modelo: `${modelo.nome_modelo} (Cópia)`,
+      padrao: false,
+      criado_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    };
+    setModelos(prev => [...prev, novoModelo]);
     toast({
       title: 'Modelo duplicado',
       description: `Uma cópia de "${modelo.nome_modelo}" foi criada.`,
@@ -83,35 +95,97 @@ export default function Modelos() {
   };
 
   const handleDeletar = () => {
-    toast({
-      title: 'Modelo excluído',
-      description: 'O modelo de layout foi excluído com sucesso.',
-    });
+    if (modeloDeletando) {
+      setModelos(prev => prev.filter(m => m.id !== modeloDeletando.id));
+      toast({
+        title: 'Modelo excluído',
+        description: 'O modelo de layout foi excluído com sucesso.',
+      });
+    }
     setModeloDeletando(null);
+  };
+
+  const handleImportarPDF = (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => {
+    // Criar um novo modelo baseado no template PDF importado
+    const novoModelo: ModeloBoleto = {
+      id: `modelo_${Date.now()}`,
+      nome_modelo: nomeModelo,
+      banco_id: bancosCompativeis[0], // Banco principal
+      bancos_compativeis: bancosCompativeis,
+      tipo_layout: 'CNAB_400', // Padrão
+      padrao: false,
+      campos_mapeados: template.layout_detectado.areas_texto.map(area => ({
+        id: area.id,
+        nome: area.texto_original || '',
+        variavel: area.campo_mapeado || '',
+        posicao_x: area.x,
+        posicao_y: area.y,
+        largura: area.largura,
+        altura: area.altura,
+      })),
+      texto_instrucoes: '',
+      template_pdf_id: template.id,
+      criado_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    };
+
+    setModelos(prev => [...prev, novoModelo]);
+    
+    // Salvar template no localStorage
+    const templates = JSON.parse(localStorage.getItem('templates_pdf') || '[]');
+    templates.push(template);
+    localStorage.setItem('templates_pdf', JSON.stringify(templates));
+
+    toast({
+      title: 'Modelo importado com sucesso',
+      description: `O modelo "${nomeModelo}" foi criado a partir do PDF e está disponível para ${bancosCompativeis.length} banco(s).`,
+    });
   };
 
   return (
     <MainLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Modelos de Layout</h1>
             <p className="text-muted-foreground">
               Configure os modelos de layout para impressão de boletos
             </p>
           </div>
-          <Button onClick={() => setCriarNovo(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Modelo
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportarPDFOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importar PDF Modelo
+            </Button>
+            <Button onClick={() => setCriarNovo(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Modelo
+            </Button>
+          </div>
         </div>
 
-        {/* Dica sobre variáveis */}
+        {/* Dica sobre importação de PDF */}
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">
-              <HelpCircle className="h-5 w-5 text-primary mt-0.5" />
+              <Upload className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <p className="font-medium text-sm">Importe um PDF de boleto existente</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Faça upload de um boleto PDF para copiar o layout exato. 
+                  O mesmo modelo pode ser compartilhado entre vários bancos - apenas os dados impressos mudam.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Dica sobre variáveis */}
+        <Card className="bg-muted/30 border-muted">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
                 <p className="font-medium text-sm">Dica: Use variáveis nos textos</p>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -126,31 +200,60 @@ export default function Modelos() {
 
         {/* Grid de Modelos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {modelosBoletoMock.map((modelo) => (
+          {modelos.map((modelo) => (
             <Card key={modelo.id} className="hover:shadow-card-hover transition-shadow">
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-primary/10 rounded-lg">
-                      <Palette className="h-5 w-5 text-primary" />
+                      {modelo.template_pdf_id ? (
+                        <FileText className="h-5 w-5 text-primary" />
+                      ) : (
+                        <Palette className="h-5 w-5 text-primary" />
+                      )}
                     </div>
                     <div>
                       <CardTitle className="text-base">{modelo.nome_modelo}</CardTitle>
-                      {modelo.padrao && (
-                        <Badge variant="secondary" className="mt-1">
-                          Padrão
-                        </Badge>
-                      )}
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {modelo.padrao && (
+                          <Badge variant="secondary">Padrão</Badge>
+                        )}
+                        {modelo.template_pdf_id && (
+                          <Badge variant="outline" className="text-xs">
+                            <FileText className="h-3 w-3 mr-1" />
+                            PDF
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span>{getBancoNome(modelo.banco_id)}</span>
-                  </div>
+                  {modelo.bancos_compativeis && modelo.bancos_compativeis.length > 1 ? (
+                    <div className="flex items-start gap-2">
+                      <Share2 className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div>
+                        <span className="text-muted-foreground">Compartilhado:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {modelo.bancos_compativeis.map(bancoId => {
+                            const banco = bancosMock.find(b => b.id === bancoId);
+                            return banco ? (
+                              <Badge key={bancoId} variant="outline" className="text-xs">
+                                {banco.codigo_banco}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span>{getBancoNome(modelo.banco_id)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span>{TIPOS_IMPRESSAO[modelo.tipo_layout].label}</span>
@@ -373,6 +476,13 @@ export default function Modelos() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Modal de Importar PDF */}
+        <ImportarPDFModal
+          open={importarPDFOpen}
+          onOpenChange={setImportarPDFOpen}
+          onImportar={handleImportarPDF}
+        />
       </div>
     </MainLayout>
   );
