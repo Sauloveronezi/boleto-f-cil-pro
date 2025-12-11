@@ -16,8 +16,8 @@ import {
 import { HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-// Chave para armazenar padrões CNAB no localStorage
-const CNAB_PATTERNS_STORAGE_KEY = 'cnab-patterns';
+// Chave para armazenar padrões CNAB no localStorage (mesma usada em ConfiguracaoCNAB.tsx)
+const CNAB_PATTERNS_STORAGE_KEY = 'padroesCNAB';
 
 // Função para carregar padrões do localStorage
 const carregarPadroesLocalStorage = (): ConfiguracaoCNAB[] => {
