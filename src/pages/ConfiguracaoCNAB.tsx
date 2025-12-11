@@ -56,7 +56,14 @@ const configuracoesMock: ConfiguracaoCNAB[] = [
 
 export default function ConfiguracaoCNAB() {
   const { toast } = useToast();
-  const [configuracoes, setConfiguracoes] = useState<ConfiguracaoCNAB[]>(configuracoesMock);
+  
+  // Carregar padrões salvos do localStorage + mock
+  const carregarPadroes = (): ConfiguracaoCNAB[] => {
+    const salvos = JSON.parse(localStorage.getItem('padroesCNAB') || '[]');
+    return [...configuracoesMock, ...salvos];
+  };
+  
+  const [configuracoes, setConfiguracoes] = useState<ConfiguracaoCNAB[]>(carregarPadroes);
   const [configSelecionada, setConfigSelecionada] = useState<ConfiguracaoCNAB | null>(null);
   const [novaConfig, setNovaConfig] = useState(false);
   
@@ -130,9 +137,17 @@ export default function ConfiguracaoCNAB() {
     };
 
     if (configSelecionada) {
-      setConfiguracoes(configuracoes.map(c => c.id === config.id ? config : c));
+      const novasConfigs = configuracoes.map(c => c.id === config.id ? config : c);
+      setConfiguracoes(novasConfigs);
+      // Atualizar localStorage (excluindo mocks)
+      const salvos = novasConfigs.filter(c => !configuracoesMock.find(m => m.id === c.id));
+      localStorage.setItem('padroesCNAB', JSON.stringify(salvos));
     } else {
-      setConfiguracoes([...configuracoes, config]);
+      const novasConfigs = [...configuracoes, config];
+      setConfiguracoes(novasConfigs);
+      // Salvar no localStorage (excluindo mocks)
+      const salvos = novasConfigs.filter(c => !configuracoesMock.find(m => m.id === c.id));
+      localStorage.setItem('padroesCNAB', JSON.stringify(salvos));
     }
 
     toast({
