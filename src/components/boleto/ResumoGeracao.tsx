@@ -1,4 +1,3 @@
-import { forwardRef } from 'react';
 import { FileText, Download, Building2, Users, Receipt, Palette, Database } from 'lucide-react';
 import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ interface ResumoGeracaoProps {
   onGerar: () => void;
 }
 
-export const ResumoGeracao = forwardRef<HTMLDivElement, ResumoGeracaoProps>(function ResumoGeracao({
+export function ResumoGeracao({
   tipoOrigem,
   banco,
   clientes,
@@ -43,7 +42,7 @@ export const ResumoGeracao = forwardRef<HTMLDivElement, ResumoGeracaoProps>(func
   tipoSaida,
   onTipoSaidaChange,
   onGerar,
-}, ref) {
+}: ResumoGeracaoProps) {
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -243,4 +242,4 @@ export const ResumoGeracao = forwardRef<HTMLDivElement, ResumoGeracaoProps>(func
       </div>
     </div>
   );
-});
+}
