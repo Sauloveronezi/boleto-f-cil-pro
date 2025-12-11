@@ -54,7 +54,10 @@ export function ResumoGeracao({
   const valorTotal = notasSelecionadasData.reduce((acc, n) => acc + n.valor_titulo, 0);
 
   // Modelos do banco OU modelos genéricos (caso não haja específico para o banco)
-  const modelosDoBanco = modelos.filter((m) => m.banco_id === banco?.id);
+  // Inclui modelos que têm o banco em bancos_compativeis
+  const modelosDoBanco = modelos.filter(
+    (m) => m.banco_id === banco?.id || m.bancos_compativeis?.includes(banco?.id || '')
+  );
   const modelosDisponiveis = modelosDoBanco.length > 0 ? modelosDoBanco : modelos;
 
   return (
