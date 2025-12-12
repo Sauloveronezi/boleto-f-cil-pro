@@ -138,8 +138,15 @@ export default function GerarBoletos() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
+        // Para CNAB, exige arquivo E padrão selecionado
+        // Para API_CDS, apenas tipo e banco
         if (isCNAB) {
-          return tipoOrigem && bancoSelecionado && arquivoCNAB && padraoCNAB;
+          // Se tem arquivo CNAB, precisa de padrão selecionado
+          if (arquivoCNAB) {
+            return tipoOrigem && bancoSelecionado && padraoCNAB;
+          }
+          // Se não tem arquivo ainda, não pode avançar
+          return false;
         }
         return tipoOrigem && bancoSelecionado;
       case 2:
