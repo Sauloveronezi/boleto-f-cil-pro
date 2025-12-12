@@ -106,9 +106,10 @@ export function BancoSelector({
     setPadroesSalvos(padroesUnicos);
   }, []);
 
-  // Filtrar padrões disponíveis para o banco e tipo selecionados
+  // Filtrar padrões disponíveis para o tipo selecionado
+  // Inclui padrões do banco selecionado OU padrões sem banco_id definido (importados)
   const padroesDisponiveis = padroesSalvos.filter(
-    p => p.banco_id === bancoSelecionado && p.tipo_cnab === tipoImpressao
+    p => p.tipo_cnab === tipoImpressao && (p.banco_id === bancoSelecionado || !p.banco_id || p.banco_id === '')
   );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
