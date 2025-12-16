@@ -30,22 +30,17 @@ import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB } from '@/types/boleto';
 import { BoletoPreview } from '@/components/boleto/BoletoPreview';
 import { CnabTextEditor, CampoMapeado, TipoLinha } from '@/components/cnab/CnabTextEditor';
 
-type CampoDestino = 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep';
-
-const mapDestino = (destino: string): CampoDestino => {
-  const mapping: Record<string, CampoDestino> = {
+// Mapeia destinos específicos para campos do boleto, mantém outros inalterados
+const mapDestino = (destino: string): string => {
+  const mapping: Record<string, string> = {
     'cnpj_sacado': 'cnpj',
     'nome_sacado': 'razao_social',
-    'valor': 'valor',
     'data_vencimento': 'vencimento',
-    'nosso_numero': 'nosso_numero',
     'endereco_sacado': 'endereco',
     'numero_documento': 'numero_nota',
-    'cidade': 'cidade',
-    'estado': 'estado',
     'cep_sacado': 'cep',
   };
-  return mapping[destino] || 'razao_social';
+  return mapping[destino] || destino; // Mantém o destino original se não estiver no mapping
 };
 
 interface CampoDetectado {
@@ -451,8 +446,10 @@ export default function ImportarLayout() {
         campo_destino: mapDestino(c.destino),
         posicao_inicio: c.posicaoInicio,
         posicao_fim: c.posicaoFim,
-        tipo_registro: '1',
-        formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto'
+        tipo_registro: c.tipoLinha === 'header' ? '0' : c.tipoLinha === 'trailer' ? '9' : '1',
+        formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
+        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
+        cor: c.cor
       }));
 
       const now = new Date().toISOString();
@@ -478,9 +475,16 @@ export default function ImportarLayout() {
   };
 
   const handleSalvar = () => {
-    if (!padraoGerado) return;
+    if (!padraoGerado) {
+      toast({
+        title: 'Erro',
+        description: 'Nenhum padrão foi gerado para salvar.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
-    if (!nomePadrao) {
+    if (!nomePadrao.trim()) {
       toast({
         title: 'Nome obrigatório',
         description: 'Por favor, informe um nome para o padrão.',
@@ -489,20 +493,51 @@ export default function ImportarLayout() {
       return;
     }
 
-    // Atualizar nome
-    const padraoFinal = { ...padraoGerado, nome: nomePadrao };
+    try {
+      // Reconstruir campos com todos os dados necessários, incluindo tipo_linha e cor
+      const camposCompletos: CampoCNAB[] = camposDetectados.map((c, index) => ({
+        id: `campo_${index + 1}`,
+        nome: c.nome,
+        campo_destino: mapDestino(c.destino),
+        posicao_inicio: c.posicaoInicio,
+        posicao_fim: c.posicaoFim,
+        tipo_registro: c.tipoLinha === 'header' ? '0' : c.tipoLinha === 'trailer' ? '9' : '1',
+        formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
+        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
+        cor: c.cor
+      }));
 
-    // Salvar no localStorage
-    const padroesExistentes = JSON.parse(localStorage.getItem('padroesCNAB') || '[]');
-    padroesExistentes.push(padraoFinal);
-    localStorage.setItem('padroesCNAB', JSON.stringify(padroesExistentes));
+      const now = new Date().toISOString();
+      const padraoFinal: ConfiguracaoCNAB = {
+        id: `config_${Date.now()}`,
+        banco_id: bancoSelecionado,
+        tipo_cnab: tipoCNAB,
+        nome: nomePadrao.trim(),
+        descricao: padraoGerado.descricao || `Padrão ${tipoCNAB} importado`,
+        campos: camposCompletos,
+        criado_em: now,
+        atualizado_em: now
+      };
 
-    toast({
-      title: 'Padrão salvo com sucesso!',
-      description: `O padrão "${nomePadrao}" está disponível para uso.`,
-    });
+      // Salvar no localStorage
+      const padroesExistentes = JSON.parse(localStorage.getItem('padroesCNAB') || '[]') as ConfiguracaoCNAB[];
+      padroesExistentes.push(padraoFinal);
+      localStorage.setItem('padroesCNAB', JSON.stringify(padroesExistentes));
 
-    navigate('/configuracao-cnab');
+      toast({
+        title: 'Padrão salvo com sucesso!',
+        description: `O padrão "${nomePadrao}" está disponível para uso.`,
+      });
+
+      navigate('/configuracao-cnab');
+    } catch (error) {
+      console.error('Erro ao salvar padrão CNAB:', error);
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Ocorreu um erro ao salvar o padrão. Verifique os dados e tente novamente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleReset = () => {
