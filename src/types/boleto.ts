@@ -192,7 +192,7 @@ export type TipoLinhaCNAB = 'header' | 'detalhe' | 'trailer' | 'header_lote' | '
 export interface CampoCNAB {
   id: string;
   nome: string;
-  campo_destino: 'cnpj' | 'razao_social' | 'valor' | 'vencimento' | 'nosso_numero' | 'endereco' | 'numero_nota' | 'cidade' | 'estado' | 'cep' | 'custom';
+  campo_destino: string; // Aceita qualquer campo CNAB: cnpj, razao_social, valor, vencimento, nosso_numero, endereco, numero_nota, cidade, estado, cep, tipo_registro, codigo_banco, agencia, conta, carteira, etc.
   posicao_inicio: number;
   posicao_fim: number;
   tipo_registro?: string; // Ex: '1', '3', 'P', etc.
