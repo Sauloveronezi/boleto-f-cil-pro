@@ -173,32 +173,86 @@ export interface ConfiguracaoSistema {
   api_token?: string;
 }
 
-// Configuração de layout CNAB por banco
+// Tipo de registro no arquivo CNAB (multi-linha)
+export type TipoRegistroCNAB = 
+  | 'header_arquivo' 
+  | 'header_lote' 
+  | 'detalhe_segmento_p' 
+  | 'detalhe_segmento_q' 
+  | 'detalhe_segmento_r' 
+  | 'detalhe_segmento_a'
+  | 'detalhe_segmento_b'
+  | 'detalhe'  // CNAB 400 - registro tipo 1
+  | 'trailer_lote' 
+  | 'trailer_arquivo';
+
+// Identificador da linha no arquivo
+export interface IdentificadorLinha {
+  posicao: number; // Posição do identificador (1 para CNAB 400, 8 para CNAB 240)
+  valor: string;   // Valor esperado ("0", "1", "3", "5", "9" ou "P", "Q", "R")
+  segmento?: string; // Para CNAB 240, posição 14
+}
+
+// Linha de configuração CNAB (agrupa campos do mesmo tipo de registro)
+export interface LinhaCNAB {
+  id: string;
+  tipo: TipoRegistroCNAB;
+  identificador: IdentificadorLinha;
+  descricao: string;
+  tamanhoLinha: 240 | 400;
+  campos: CampoCNABCompleto[];
+  ordemExibicao: number;
+  corTipo: string;
+}
+
+// Campo CNAB com todas as propriedades (estrutura completa)
+export interface CampoCNABCompleto {
+  id: string;
+  nome: string;
+  descricao?: string;
+  posicaoInicio: number;
+  posicaoFim: number;
+  tamanho: number;
+  tipo: 'numerico' | 'alfanumerico' | 'alfa';
+  formato?: 'texto' | 'numero' | 'data_ddmmaa' | 'data_ddmmaaaa' | 'valor_centavos';
+  picture?: string;
+  conteudoPadrao?: string;
+  obrigatorio: boolean;
+  utilizadoNoBoleto: boolean;
+  campoDestino?: string;
+  cor: string;
+  valorExemplo?: string;
+}
+
+// Tipo de linha no arquivo CNAB (compatibilidade legada)
+export type TipoLinhaCNAB = 'header' | 'detalhe' | 'trailer' | 'header_lote' | 'trailer_lote';
+
+// Campo CNAB (estrutura simplificada para compatibilidade)
+export interface CampoCNAB {
+  id: string;
+  nome: string;
+  campo_destino: string;
+  posicao_inicio: number;
+  posicao_fim: number;
+  tipo_registro?: string;
+  formato?: 'texto' | 'numero' | 'data_ddmmaa' | 'data_ddmmaaaa' | 'valor_centavos';
+  tipo_linha?: TipoLinhaCNAB;
+  cor?: string;
+}
+
+// Configuração de layout CNAB por banco (estrutura atualizada com suporte a múltiplas linhas)
 export interface ConfiguracaoCNAB {
   id: string;
   banco_id: string;
   tipo_cnab: 'CNAB_240' | 'CNAB_400';
   nome: string;
   descricao?: string;
-  // Posições dos campos no arquivo (início-fim, 1-indexed)
+  // Nova estrutura: linhas organizadas por tipo de registro
+  linhas?: LinhaCNAB[];
+  // Estrutura legada: campos simples (mantido para compatibilidade)
   campos: CampoCNAB[];
   criado_em: string;
   atualizado_em: string;
-}
-
-// Tipo de linha no arquivo CNAB
-export type TipoLinhaCNAB = 'header' | 'detalhe' | 'trailer' | 'header_lote' | 'trailer_lote';
-
-export interface CampoCNAB {
-  id: string;
-  nome: string;
-  campo_destino: string; // Aceita qualquer campo CNAB: cnpj, razao_social, valor, vencimento, nosso_numero, endereco, numero_nota, cidade, estado, cep, tipo_registro, codigo_banco, agencia, conta, carteira, etc.
-  posicao_inicio: number;
-  posicao_fim: number;
-  tipo_registro?: string; // Ex: '1', '3', 'P', etc.
-  formato?: 'texto' | 'numero' | 'data_ddmmaa' | 'data_ddmmaaaa' | 'valor_centavos';
-  tipo_linha?: TipoLinhaCNAB; // Em qual tipo de linha este campo aparece
-  cor?: string; // Cor para destaque visual
 }
 
 // Resumo de geração de boletos
