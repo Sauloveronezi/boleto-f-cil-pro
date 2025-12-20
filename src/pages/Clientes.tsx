@@ -18,14 +18,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { clientesMock } from '@/data/mockData';
 import { Cliente } from '@/types/boleto';
 
 export default function Clientes() {
   const [busca, setBusca] = useState('');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
 
-  const clientesFiltrados = clientesMock.filter((cliente) => {
+  // Sem mocks - lista vazia por enquanto
+  const clientes: Cliente[] = [];
+
+  const clientesFiltrados = clientes.filter((cliente) => {
     const termoBusca = busca.toLowerCase();
     return (
       cliente.razao_social.toLowerCase().includes(termoBusca) ||
@@ -47,7 +49,7 @@ export default function Clientes() {
             </p>
           </div>
           <Badge variant="outline" className="text-sm">
-            {clientesMock.length} cliente(s) cadastrado(s)
+            {clientes.length} cliente(s) cadastrado(s)
           </Badge>
         </div>
 

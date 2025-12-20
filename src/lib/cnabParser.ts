@@ -69,10 +69,8 @@ function verificarTipoRegistro(linha: string, tipoRegistro: string | undefined, 
     // No CNAB 400, o tipo de registro está na posição 1 (índice 0)
     return linha.charAt(0) === tipoRegistro;
   } else {
-    // No CNAB 240, pode estar em diferentes posições dependendo do segmento
-    // Posição 8 (índice 7) para tipo de registro geral
-    // Posição 14 (índice 13) para código do segmento
-    return linha.charAt(7) === '3' && linha.charAt(13) === tipoRegistro;
+    // No CNAB 240, o tipo de registro está na posição 8 (índice 7)
+    return linha.charAt(7) === tipoRegistro;
   }
 }
 
@@ -81,10 +79,14 @@ function encontrarLinhasDetalhe(linhas: string[], tipoCNAB: 'CNAB_240' | 'CNAB_4
   return linhas.filter(linha => {
     if (tipoCNAB === 'CNAB_400') {
       // CNAB 400: tipo de registro '1' = detalhe
-      return linha.length >= 400 && linha.charAt(0) === '1';
+      return linha.length >= 10 && linha.charAt(0) === '1';
     } else {
       // CNAB 240: tipo de registro '3' = detalhe
-      return linha.length >= 240 && linha.charAt(7) === '3';
+      // Também aceitar '5' como detalhe conforme solicitado (trailer de lote usado como dados)
+      // E verificar se linha tem tamanho mínimo
+      if (linha.length < 10) return false;
+      const tipo = linha.charAt(7);
+      return tipo === '3' || tipo === '5';
     }
   });
 }
@@ -181,52 +183,46 @@ function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): Dado
     }
   });
 
-  // Se não conseguiu parsear, gerar dados de exemplo
-  if (notas.length === 0) {
-    console.warn('CNAB Parser: Nenhuma nota extraída, gerando dados de exemplo');
-    return gerarDadosExemplo(Math.min(linhas.length, 5));
+  // Se não conseguiu parsear, mas temos linhas, gerar dados genéricos (Fallback)
+  if (notas.length === 0 && linhasDetalhe.length > 0) {
+    console.warn('CNAB Parser: Nenhuma nota extraída, gerando dados brutos');
+    
+    const clienteFallback: Cliente = {
+      id: gerarId(),
+      business_partner: 'BP-FALLBACK',
+      razao_social: 'Cliente Não Identificado (Dados Brutos)',
+      cnpj: '00000000000000',
+      lzone: 'N/A',
+      estado: 'UF',
+      cidade: 'Cidade',
+      parceiro_negocio: 'CNAB Bruto',
+      agente_frete: 'N/A',
+      endereco: 'Endereço não extraído',
+      cep: '00000-000'
+    };
+    clientes.push(clienteFallback);
+
+    linhasDetalhe.forEach((linha, index) => {
+        const nota: NotaFiscal = {
+            id: gerarId(),
+            numero_nota: `RAW-${index + 1}`,
+            serie: '1',
+            data_emissao: new Date().toISOString().split('T')[0],
+            data_vencimento: new Date().toISOString().split('T')[0],
+            valor_titulo: 0, // Usuário terá que conferir
+            moeda: 'BRL',
+            codigo_cliente: clienteFallback.id,
+            status: 'aberta',
+            referencia_interna: linha // Guardar linha inteira aqui para referência?
+        };
+        notas.push(nota);
+    });
   }
 
-  return { clientes, notas };
-}
-
-// Gerar dados de exemplo quando parser falha
-function gerarDadosExemplo(numLinhas: number): DadosCNAB {
-  const clientes: Cliente[] = [];
-  const notas: NotaFiscal[] = [];
-  
-  const numRegistros = Math.min(Math.max(numLinhas, 3), 10);
-  
-  for (let i = 0; i < numRegistros; i++) {
-    const clienteId = gerarId();
-    const cliente: Cliente = {
-      id: clienteId,
-      business_partner: `BP${(i + 1).toString().padStart(3, '0')}`,
-      razao_social: `Cliente Importado ${i + 1}`,
-      cnpj: `${(10 + i).toString().padStart(2, '0')}.${(100 + i).toString().padStart(3, '0')}.${(200 + i).toString().padStart(3, '0')}/0001-${(10 + i).toString().padStart(2, '0')}`,
-      lzone: 'Importado',
-      estado: 'SP',
-      cidade: 'São Paulo',
-      parceiro_negocio: 'CNAB Import',
-      agente_frete: 'N/A',
-      endereco: 'Endereço importado do arquivo CNAB',
-      cep: '01310-100',
-    };
-    clientes.push(cliente);
-
-    const nota: NotaFiscal = {
-      id: gerarId(),
-      numero_nota: `NF${(1000 + i).toString()}`,
-      serie: '1',
-      data_emissao: new Date().toISOString().split('T')[0],
-      data_vencimento: new Date(Date.now() + (30 + i * 5) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      valor_titulo: Math.round((Math.random() * 15000 + 500) * 100) / 100,
-      moeda: 'BRL',
-      codigo_cliente: clienteId,
-      status: 'aberta',
-      referencia_interna: `CNAB-IMP-${i + 1}`,
-    };
-    notas.push(nota);
+  // Se não conseguiu parsear, retornar vazio
+  if (notas.length === 0) {
+    console.warn('CNAB Parser: Nenhuma nota extraída do arquivo');
+    return { clientes: [], notas: [] };
   }
 
   return { clientes, notas };
@@ -239,7 +235,6 @@ export function parseCNAB(conteudo: string, tipo: TipoOrigem, config?: Configura
     return parseCNABConfiguravel(conteudo, config);
   }
   
-  // Fallback para dados de exemplo se não houver configuração
-  const linhas = conteudo.split('\n').filter(l => l.trim().length > 0);
-  return gerarDadosExemplo(Math.min(linhas.length, 5));
+  console.warn('CNAB Parser: Nenhuma configuração fornecida');
+  return { clientes: [], notas: [] };
 }

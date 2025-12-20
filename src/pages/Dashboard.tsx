@@ -13,12 +13,17 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { clientesMock, notasFiscaisMock, bancosMock } from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
+import { Cliente, NotaFiscal } from '@/types/boleto';
 
 export default function Dashboard() {
-  const notasAbertas = notasFiscaisMock.filter(n => n.status === 'aberta').length;
-  const notasVencidas = notasFiscaisMock.filter(n => n.status === 'vencida').length;
-  const valorTotal = notasFiscaisMock
+  // Dados vazios para evitar mocks
+  const notasFiscais: NotaFiscal[] = [];
+  const clientes: Cliente[] = [];
+
+  const notasAbertas = notasFiscais.filter(n => n.status === 'aberta').length;
+  const notasVencidas = notasFiscais.filter(n => n.status === 'vencida').length;
+  const valorTotal = notasFiscais
     .filter(n => n.status === 'aberta' || n.status === 'vencida')
     .reduce((acc, n) => acc + n.valor_titulo, 0);
 
@@ -56,7 +61,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Clientes Ativos</p>
-                  <p className="text-3xl font-bold mt-2">{clientesMock.length}</p>
+                  <p className="text-3xl font-bold mt-2">{clientes.length}</p>
                 </div>
                 <div className="p-3 bg-primary/10 rounded-xl">
                   <Users className="h-6 w-6 text-primary" />
@@ -110,7 +115,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Bancos Ativos</p>
-                  <p className="text-3xl font-bold mt-2">{bancosMock.filter(b => b.ativo).length}</p>
+                  <p className="text-3xl font-bold mt-2">{BANCOS_SUPORTADOS.filter(b => b.ativo).length}</p>
                 </div>
                 <div className="p-3 bg-success/10 rounded-xl">
                   <Building2 className="h-6 w-6 text-success" />
@@ -224,55 +229,63 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Nota</th>
-                    <th>Cliente</th>
-                    <th>Vencimento</th>
-                    <th>Valor</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {notasFiscaisMock.slice(0, 5).map((nota) => {
-                    const cliente = clientesMock.find((c) => c.id === nota.codigo_cliente);
-                    return (
-                      <tr key={nota.id}>
-                        <td className="font-medium">
-                          {nota.numero_nota}-{nota.serie}
-                        </td>
-                        <td className="max-w-[200px] truncate">
-                          {cliente?.razao_social}
-                        </td>
-                        <td>{new Date(nota.data_vencimento).toLocaleDateString('pt-BR')}</td>
-                        <td className="font-semibold">{formatarMoeda(nota.valor_titulo)}</td>
-                        <td>
-                          <Badge
-                            variant={
-                              nota.status === 'aberta'
-                                ? 'default'
+            {notasFiscais.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Nenhuma nota fiscal encontrada.</p>
+                <p className="text-xs">Importe um arquivo CNAB para visualizar.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nota</th>
+                      <th>Cliente</th>
+                      <th>Vencimento</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {notasFiscais.slice(0, 5).map((nota) => {
+                      const cliente = clientes.find((c) => c.id === nota.codigo_cliente);
+                      return (
+                        <tr key={nota.id}>
+                          <td className="font-medium">
+                            {nota.numero_nota}-{nota.serie}
+                          </td>
+                          <td className="max-w-[200px] truncate">
+                            {cliente?.razao_social}
+                          </td>
+                          <td>{new Date(nota.data_vencimento).toLocaleDateString('pt-BR')}</td>
+                          <td className="font-semibold">{formatarMoeda(nota.valor_titulo)}</td>
+                          <td>
+                            <Badge
+                              variant={
+                                nota.status === 'aberta'
+                                  ? 'default'
+                                  : nota.status === 'vencida'
+                                  ? 'destructive'
+                                  : 'secondary'
+                              }
+                            >
+                              {nota.status === 'aberta'
+                                ? 'Em aberto'
                                 : nota.status === 'vencida'
-                                ? 'destructive'
-                                : 'secondary'
-                            }
-                          >
-                            {nota.status === 'aberta'
-                              ? 'Em aberto'
-                              : nota.status === 'vencida'
-                              ? 'Vencida'
-                              : nota.status === 'liquidada'
-                              ? 'Liquidada'
-                              : 'Cancelada'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                ? 'Vencida'
+                                : nota.status === 'liquidada'
+                                ? 'Liquidada'
+                                : 'Cancelada'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

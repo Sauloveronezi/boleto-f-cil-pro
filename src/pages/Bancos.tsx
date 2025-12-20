@@ -21,7 +21,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
-import { bancosMock, configuracoesBancoMock } from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { Banco, ConfiguracaoBanco, TIPOS_IMPRESSAO } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 
@@ -31,7 +31,8 @@ export default function Bancos() {
   const [configEditando, setConfigEditando] = useState<ConfiguracaoBanco | null>(null);
 
   const getConfiguracao = (bancoId: string) => {
-    return configuracoesBancoMock.find((c) => c.banco_id === bancoId);
+    // Sem mocks, retorna undefined por enquanto
+    return undefined;
   };
 
   const handleSalvar = () => {
@@ -62,7 +63,7 @@ export default function Bancos() {
 
         {/* Grid de Bancos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bancosMock.map((banco) => {
+          {BANCOS_SUPORTADOS.map((banco) => {
             const config = getConfiguracao(banco.id);
             return (
               <Card key={banco.id} className="hover:shadow-card-hover transition-shadow">

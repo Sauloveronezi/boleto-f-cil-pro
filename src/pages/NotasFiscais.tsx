@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Calendar } from 'lucide-react';
+import { Search, Filter, MapPin, Phone, Mail, Building } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,8 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { notasFiscaisMock, clientesMock } from '@/data/mockData';
-import { StatusNota } from '@/types/boleto';
+import { StatusNota, NotaFiscal, Cliente } from '@/types/boleto';
 
 const STATUS_LABELS: Record<StatusNota, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   aberta: { label: 'Em aberto', variant: 'default' },
@@ -33,6 +32,10 @@ const STATUS_LABELS: Record<StatusNota, { label: string; variant: 'default' | 's
 export default function NotasFiscais() {
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<string>('todos');
+
+  // Sem mocks
+  const notasFiscais: NotaFiscal[] = [];
+  const clientes: Cliente[] = [];
 
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -46,11 +49,11 @@ export default function NotasFiscais() {
   };
 
   const getClienteNome = (codigoCliente: string) => {
-    const cliente = clientesMock.find((c) => c.id === codigoCliente);
+    const cliente = clientes.find((c) => c.id === codigoCliente);
     return cliente?.razao_social || 'Cliente não encontrado';
   };
 
-  const notasFiltradas = notasFiscaisMock.filter((nota) => {
+  const notasFiltradas = notasFiscais.filter((nota) => {
     const termoBusca = busca.toLowerCase();
     const clienteNome = getClienteNome(nota.codigo_cliente).toLowerCase();
     
@@ -160,7 +163,7 @@ export default function NotasFiscais() {
                 {notasFiltradas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Nenhuma nota fiscal encontrada.
+                      Nenhum registro encontrado.
                     </TableCell>
                   </TableRow>
                 )}

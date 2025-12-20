@@ -39,7 +39,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
-import { modelosBoletoMock, bancosMock } from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
+import { DEFAULT_MODELOS } from '@/data/templates';
 import { ModeloBoleto, TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
@@ -88,8 +89,8 @@ export default function Modelos() {
       template_pdf_id: template.id,
     }));
 
-    // Combinar com modelos mock
-    setModelos([...modelosBoletoMock, ...modelosImportados]);
+    // Combinar com modelos padrão (substituindo mock)
+    setModelos([...DEFAULT_MODELOS, ...modelosImportados]);
   }, []);
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
@@ -97,7 +98,7 @@ export default function Modelos() {
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
 
   const getBancoNome = (bancoId: string) => {
-    const banco = bancosMock.find((b) => b.id === bancoId);
+    const banco = BANCOS_SUPORTADOS.find((b) => b.id === bancoId);
     return banco?.nome_banco || 'Banco não encontrado';
   };
 
@@ -270,7 +271,7 @@ export default function Modelos() {
                         <span className="text-muted-foreground">Compartilhado:</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {modelo.bancos_compativeis.map(bancoId => {
-                            const banco = bancosMock.find(b => b.id === bancoId);
+                            const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoId);
                             return banco ? (
                               <Badge key={bancoId} variant="outline" className="text-xs">
                                 {banco.codigo_banco}
@@ -381,7 +382,7 @@ export default function Modelos() {
                       <SelectValue placeholder="Selecione o banco" />
                     </SelectTrigger>
                     <SelectContent>
-                      {bancosMock.map((banco) => (
+                      {BANCOS_SUPORTADOS.map((banco) => (
                         <SelectItem key={banco.id} value={banco.id}>
                           {banco.nome_banco}
                         </SelectItem>

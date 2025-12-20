@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { bancosMock } from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { TemplatePDF } from '@/types/boleto';
 import { 
   TemplateBoletoCompleto, 
@@ -278,7 +278,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                       Apenas os dados específicos mudam (agência, conta, código).
                     </p>
                     <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
-                      {bancosMock.filter(b => b.ativo).map((banco) => (
+                      {BANCOS_SUPORTADOS.filter(b => b.ativo).map((banco) => (
                         <div 
                           key={banco.id} 
                           className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded cursor-pointer"
@@ -295,7 +295,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                     {bancosCompativeis.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {bancosCompativeis.map(id => {
-                          const banco = bancosMock.find(b => b.id === id);
+                          const banco = BANCOS_SUPORTADOS.find(b => b.id === id);
                           return banco ? (
                             <Badge key={id} variant="secondary" className="text-xs">
                               {banco.codigo_banco}

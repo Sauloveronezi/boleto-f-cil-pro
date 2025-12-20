@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,12 +23,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
-import { bancosMock } from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB } from '@/types/boleto';
+import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB, TipoRegistroCNAB } from '@/types/boleto';
 import { BoletoPreview } from '@/components/boleto/BoletoPreview';
 import { CnabTextEditor, CampoMapeado, TipoLinha } from '@/components/cnab/CnabTextEditor';
+import { parseCnabPdf, CampoDetectado } from '@/lib/pdfLayoutParser';
+import { gerarLinhasCNAB240, gerarCamposHeaderArquivo240, gerarCamposDetalheP240, gerarCamposDetalheQ240, gerarCamposDetalheR240, gerarCamposTrailerLote240, gerarCamposTrailerArquivo240 } from '@/types/cnab';
 
 // Mapeia destinos específicos para campos do boleto, mantém outros inalterados
 const mapDestino = (destino: string): string => {
@@ -43,20 +45,6 @@ const mapDestino = (destino: string): string => {
   return mapping[destino] || destino; // Mantém o destino original se não estiver no mapping
 };
 
-interface CampoDetectado {
-  id: string;
-  nome: string;
-  posicaoInicio: number;
-  posicaoFim: number;
-  tamanho: number;
-  tipo: 'numerico' | 'alfanumerico' | 'data' | 'valor';
-  destino: string;
-  valor: string;
-  confianca: number;
-  tipoLinha: TipoLinha;
-  cor: string;
-}
-
 const CORES_CAMPOS = [
   'bg-blue-200 dark:bg-blue-900',
   'bg-green-200 dark:bg-green-900',
@@ -67,6 +55,48 @@ const CORES_CAMPOS = [
   'bg-cyan-200 dark:bg-cyan-900',
   'bg-red-200 dark:bg-red-900',
 ];
+
+// Helper para converter TipoRegistroCNAB para TipoLinhaCNAB (compatibilidade)
+function mapTipoRegistroParaTipoLinha(tipo: TipoRegistroCNAB): TipoLinhaCNAB {
+  switch (tipo) {
+    case 'header_arquivo':
+      return 'header';
+    case 'header_lote':
+      return 'header_lote';
+    case 'trailer_lote':
+      return 'trailer_lote';
+    case 'trailer_arquivo':
+      return 'trailer';
+    default:
+      return 'detalhe';
+  }
+}
+
+// Helper para mapear TipoLinha para código de registro (0, 1, 3, etc)
+function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 'CNAB_400'): string {
+  if (tipoCNAB === 'CNAB_240') {
+    switch (tipo) {
+      case 'header_arquivo': return '0';
+      case 'header_lote': return '1';
+      case 'detalhe_segmento_p':
+      case 'detalhe_segmento_q':
+      case 'detalhe_segmento_r':
+      case 'detalhe':
+        return '3';
+      case 'trailer_lote': return '5';
+      case 'trailer_arquivo': return '9';
+      default: return '3';
+    }
+  } else {
+    // CNAB 400
+    switch (tipo) {
+      case 'header_arquivo': return '0';
+      case 'detalhe': return '1';
+      case 'trailer_arquivo': return '9';
+      default: return '1';
+    }
+  }
+}
 
 export default function ImportarLayout() {
   const { toast } = useToast();
@@ -377,6 +407,33 @@ export default function ImportarLayout() {
     }));
   };
 
+  // Helper to convert LinhaCNAB[] to CampoDetectado[]
+  const gerarCamposPadraoCNAB240 = (): CampoDetectado[] => {
+    const linhas = gerarLinhasCNAB240();
+    const campos: CampoDetectado[] = [];
+    let idCounter = 0;
+
+    linhas.forEach(linha => {
+      linha.campos.forEach(campo => {
+        idCounter++;
+        campos.push({
+          id: String(idCounter),
+          nome: campo.nome,
+          posicaoInicio: campo.posicao_inicio,
+          posicaoFim: campo.posicao_fim,
+          tamanho: campo.posicao_fim - campo.posicao_inicio + 1,
+          tipo: campo.formato?.includes('valor') ? 'valor' : campo.formato?.includes('data') ? 'data' : 'alfanumerico',
+          destino: campo.campo_destino || '',
+          valor: '(padrão)',
+          confianca: 100,
+          tipoLinha: linha.tipo as TipoLinha,
+          cor: linha.corTipo || CORES_CAMPOS[idCounter % CORES_CAMPOS.length]
+        });
+      });
+    });
+    return campos;
+  };
+
   const handleGerarPadrao = async () => {
     // Validar arquivos conforme modo de importação
     if (modoImportacao === 'remessa' && !arquivoRemessa) {
@@ -410,45 +467,68 @@ export default function ImportarLayout() {
     setProcessando(true);
     setProgresso(0);
 
-    // Simular processamento
     const intervalId = setInterval(() => {
       setProgresso((prev) => {
-        if (prev >= 100) {
-          clearInterval(intervalId);
-          return 100;
-        }
+        if (prev >= 90) return 90;
         return prev + 10;
       });
     }, 200);
 
-    setTimeout(() => {
+    try {
+      let campos: CampoDetectado[] = [];
+      
+      if (modoImportacao === 'remessa' && conteudoRemessa) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        campos = analisarArquivoRemessa(conteudoRemessa);
+      } else if (modoImportacao === 'pdf_layout') {
+        if (arquivoLayoutPDF) {
+           try {
+             // Tentar processar PDF real
+             const camposPDF = await parseCnabPdf(arquivoLayoutPDF);
+             
+             if (camposPDF.length > 0) {
+               campos = camposPDF;
+               toast({
+                 title: 'PDF Processado',
+                 description: `${campos.length} campos identificados do layout PDF.`,
+               });
+             } else {
+               throw new Error('Nenhum campo identificado');
+             }
+           } catch (error) {
+             console.warn('Falha ao processar PDF, usando fallback:', error);
+             toast({
+               title: 'Aviso',
+               description: 'Não foi possível extrair campos do PDF automaticamente. Usando modelo padrão.',
+               variant: 'destructive'
+             });
+             
+             if (tipoCNAB === 'CNAB_240') {
+               campos = gerarCamposPadraoCNAB240();
+             } else {
+               campos = gerarCamposPadraoCNAB400();
+             }
+           }
+        }
+      }
+      
       clearInterval(intervalId);
       setProgresso(100);
       setProcessando(false);
       
-      let campos: CampoDetectado[] = [];
-      
-      if (modoImportacao === 'remessa' && conteudoRemessa) {
-        // Analisar arquivo de remessa
-        campos = analisarArquivoRemessa(conteudoRemessa);
-      } else if (modoImportacao === 'pdf_layout') {
-        // Para PDF de layout do banco, gerar campos padrão CNAB 400
-        campos = gerarCamposPadraoCNAB400();
-      }
-      
       setCamposDetectados(campos);
 
       // Gerar configuração CNAB
-      const banco = bancosMock.find(b => b.id === bancoSelecionado);
+      const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoSelecionado);
       const configCampos: CampoCNAB[] = campos.map((c, index) => ({
         id: `campo_${index + 1}`,
         nome: c.nome,
         campo_destino: mapDestino(c.destino),
         posicao_inicio: c.posicaoInicio,
         posicao_fim: c.posicaoFim,
-        tipo_registro: c.tipoLinha === 'header' ? '0' : c.tipoLinha === 'trailer' ? '9' : '1',
+        tipo_registro: mapTipoLinhaParaCodigoRegistro(c.tipoLinha as TipoLinha, tipoCNAB),
         formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
-        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
+        tipo_linha: mapTipoRegistroParaTipoLinha(c.tipoLinha as TipoRegistroCNAB),
         cor: c.cor
       }));
 
@@ -467,11 +547,24 @@ export default function ImportarLayout() {
       setPadraoGerado(novaConfig);
       setEtapa('resultado');
       
+      if (campos.length > 0) {
+        toast({
+          title: 'Análise concluída!',
+          description: `${campos.length} campos identificados no arquivo.`,
+        });
+      }
+      
+    } catch (error) {
+      clearInterval(intervalId);
+      setProcessando(false);
+      setEtapa('upload');
+      console.error(error);
       toast({
-        title: 'Análise concluída!',
-        description: `${campos.length} campos identificados no arquivo.`,
+        title: 'Erro no processamento',
+        description: 'Ocorreu um erro ao processar o arquivo.',
+        variant: 'destructive'
       });
-    }, 2500);
+    }
   };
 
   const handleSalvar = () => {
@@ -501,9 +594,9 @@ export default function ImportarLayout() {
         campo_destino: mapDestino(c.destino),
         posicao_inicio: c.posicaoInicio,
         posicao_fim: c.posicaoFim,
-        tipo_registro: c.tipoLinha === 'header' ? '0' : c.tipoLinha === 'trailer' ? '9' : '1',
+        tipo_registro: mapTipoLinhaParaCodigoRegistro(c.tipoLinha as TipoLinha, tipoCNAB),
         formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
-        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
+        tipo_linha: mapTipoRegistroParaTipoLinha(c.tipoLinha as TipoRegistroCNAB),
         cor: c.cor
       }));
 
@@ -553,7 +646,150 @@ export default function ImportarLayout() {
     setCamposExtraidos({});
   };
 
+  const [segmentoAtual, setSegmentoAtual] = useState<string>('header_arquivo');
+  const [campoFocado, setCampoFocado] = useState<string | null>(null);
   const [resultadoTeste, setResultadoTeste] = useState<{ campo: string; valor: string }[] | null>(null);
+
+  // Agrupar campos por segmento
+  const camposPorSegmento = useMemo(() => {
+    const grupos: Record<string, CampoDetectado[]> = {
+      'header_arquivo': [],
+      'header_lote': [],
+      'detalhe': [], 
+      'detalhe_segmento_p': [],
+      'detalhe_segmento_q': [],
+      'detalhe_segmento_r': [],
+      'trailer_lote': [],
+      'trailer_arquivo': []
+    };
+
+    camposDetectados.forEach(campo => {
+      const tipo = campo.tipoLinha || 'detalhe';
+      if (!grupos[tipo]) grupos[tipo] = [];
+      grupos[tipo].push(campo);
+    });
+
+    return grupos;
+  }, [camposDetectados]);
+
+  // Gerar linha de visualização para o segmento atual
+  const linhaVisualizacao = useMemo(() => {
+    const tamanho = tipoCNAB === 'CNAB_240' ? 240 : 400;
+
+    // Tentar pegar linha real do arquivo se existir
+    if (conteudoRemessa) {
+        const linhas = conteudoRemessa.split('\n');
+        let linhaReal = '';
+        
+        // Lógica de busca de linha por tipo
+        if (segmentoAtual === 'header_arquivo') {
+            linhaReal = linhas.find(l => {
+              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '0';
+              return l.length >= 1 && l[0] === '0';
+            }) || '';
+        } else if (segmentoAtual === 'header_lote') {
+            linhaReal = linhas.find(l => {
+              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '1';
+              return false; // CNAB 400 não tem header de lote
+            }) || '';
+        } else if (segmentoAtual.startsWith('detalhe')) {
+            if (tipoCNAB === 'CNAB_240') {
+               if (segmentoAtual.includes('segmento')) {
+                   const segLetra = segmentoAtual.split('_').pop()?.toUpperCase();
+                   linhaReal = linhas.find(l => l.length >= 14 && l[7] === '3' && l[13] === segLetra) || '';
+               } else {
+                   // Generic detail or fallback
+                   linhaReal = linhas.find(l => l.length >= 8 && l[7] === '3') || '';
+               }
+            } else {
+               linhaReal = linhas.find(l => l.length >= 1 && l[0] === '1') || '';
+            }
+        } else if (segmentoAtual === 'trailer_lote') {
+            linhaReal = linhas.find(l => {
+              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '5';
+              return false;
+            }) || '';
+        } else if (segmentoAtual === 'trailer_arquivo') {
+            linhaReal = linhas.find(l => {
+               if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '9';
+               return l.length >= 1 && l[0] === '9';
+            }) || '';
+        }
+
+        if (linhaReal) {
+            return linhaReal.padEnd(tamanho, ' ').substring(0, tamanho).split('');
+        } else {
+           // Retornar array vazio ou marcador para indicar "não encontrado"
+           return null;
+        }
+    }
+
+    let linha = Array(tamanho).fill(' ');
+    const camposDoSegmento = camposPorSegmento[segmentoAtual] || [];
+    
+    camposDoSegmento.forEach(campo => {
+      const inicio = campo.posicaoInicio - 1;
+      const valor = campo.valor === '(do PDF)' ? (campo.tipo === 'numerico' ? '9'.repeat(campo.tamanho) : 'X'.repeat(campo.tamanho)) : campo.valor;
+      for (let i = 0; i < campo.tamanho; i++) {
+        if (inicio + i < tamanho) {
+          linha[inicio + i] = valor[i] || (campo.tipo === 'numerico' ? '0' : ' ');
+        }
+      }
+    });
+
+    return linha;
+  }, [camposPorSegmento, segmentoAtual, tipoCNAB, conteudoRemessa]);
+
+  // Handle text selection in visualizer to focus field
+  const handleVisualizerSelection = () => {
+     const selection = window.getSelection();
+     if (!selection || selection.rangeCount === 0) return;
+     
+     const range = selection.getRangeAt(0);
+     const container = document.getElementById('visualizer-content');
+     
+     if (container && container.contains(range.commonAncestorContainer)) {
+        // This is a rough estimation. Since we use individual spans, selection might be tricky.
+        // Better approach: use the spans themselves.
+        // Actually, checking if the anchor node is one of our spans.
+        
+        let startNode = range.startContainer;
+        if (startNode.nodeType === 3) startNode = startNode.parentNode as Node;
+        
+        let endNode = range.endContainer;
+        if (endNode.nodeType === 3) endNode = endNode.parentNode as Node;
+        
+        if (startNode instanceof HTMLElement && startNode.hasAttribute('data-pos')) {
+           const pos = parseInt(startNode.getAttribute('data-pos') || '0');
+           
+           // Find field at this position
+           const campo = (camposPorSegmento[segmentoAtual] || []).find(c => pos >= c.posicaoInicio && pos <= c.posicaoFim);
+           
+           if (campo) {
+              setCampoFocado(campo.id);
+              // Scroll to field in editor
+              const fieldElement = document.getElementById(`field-row-${campo.id}`);
+              if (fieldElement) {
+                 fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+           }
+        }
+     }
+  };
+
+  // Atualizar campo ao editar
+  const handleUpdateCampo = (id: string, updates: Partial<CampoDetectado>) => {
+    setCamposDetectados(prev => prev.map(c => {
+      if (c.id === id) {
+        const novo = { ...c, ...updates };
+        if (updates.posicaoInicio || updates.posicaoFim) {
+          novo.tamanho = novo.posicaoFim - novo.posicaoInicio + 1;
+        }
+        return novo;
+      }
+      return c;
+    }));
+  };
 
   const handleTestarPadrao = () => {
     if (!padraoGerado || !conteudoRemessa) {
@@ -900,7 +1136,7 @@ export default function ImportarLayout() {
                           <SelectValue placeholder="Selecione o banco" />
                         </SelectTrigger>
                         <SelectContent>
-                          {bancosMock.map((banco) => (
+                          {BANCOS_SUPORTADOS.map((banco) => (
                             <SelectItem key={banco.id} value={banco.id}>
                               {banco.codigo_banco} - {banco.nome_banco}
                             </SelectItem>
@@ -999,278 +1235,244 @@ export default function ImportarLayout() {
 
           {/* Etapa: Resultado */}
           {etapa === 'resultado' && (
-            <div className="space-y-6">
-              {/* Botões de modo de visualização */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={mostrarEditorVisual ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setMostrarEditorVisual(true)}
-                    className="gap-2"
-                  >
-                    <Palette className="h-4 w-4" />
-                    Editor Visual (Texto Colorido)
-                  </Button>
-                  <Button
-                    variant={!mostrarEditorVisual ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setMostrarEditorVisual(false)}
-                    className="gap-2"
-                  >
-                    <Eye className="h-4 w-4" />
-                    Lista de Campos
-                  </Button>
-                </div>
-                {errosLeitura.length > 0 && (
-                  <Badge variant="destructive" className="gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {errosLeitura.length} erro(s) de leitura
-                  </Badge>
-                )}
-              </div>
-
-              {/* Editor Visual com Texto Colorido */}
-              {mostrarEditorVisual && conteudoRemessa && (
-                <CnabTextEditor
-                  conteudo={conteudoRemessa}
-                  campos={camposDetectados.map(c => ({
-                    id: c.id,
-                    nome: c.nome,
-                    posicaoInicio: c.posicaoInicio,
-                    posicaoFim: c.posicaoFim,
-                    tamanho: c.tamanho,
-                    tipo: c.tipo,
-                    destino: c.destino,
-                    valor: c.valor,
-                    tipoLinha: c.tipoLinha,
-                    cor: c.cor,
-                  }))}
-                  tipoCNAB={tipoCNAB}
-                  onCamposChange={(novosCampos) => {
-                    setCamposDetectados(novosCampos.map((c, i) => ({
-                      ...c,
-                      confianca: camposDetectados[i]?.confianca || 90,
-                    })));
-                    // Atualizar padrão gerado também
-                    if (padraoGerado) {
-                      const configCampos: CampoCNAB[] = novosCampos.map((c, index) => ({
-                        id: `campo_${index + 1}`,
-                        nome: c.nome,
-                        campo_destino: mapDestino(c.destino),
-                        posicao_inicio: c.posicaoInicio,
-                        posicao_fim: c.posicaoFim,
-                        tipo_registro: '1',
-                        formato: c.tipo === 'valor' ? 'valor_centavos' : c.tipo === 'data' ? 'data_ddmmaa' : 'texto',
-                        tipo_linha: c.tipoLinha as TipoLinhaCNAB,
-                        cor: c.cor
-                      }));
-                      setPadraoGerado({ ...padraoGerado, campos: configCampos });
-                    }
-                  }}
-                  onErrosDetectados={setErrosLeitura}
-                />
-              )}
-
-              {/* Lista tradicional de campos */}
-              {!mostrarEditorVisual && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
-                      Campos Detectados
-                    </CardTitle>
-                    <CardDescription>
-                      {camposDetectados.length} campos identificados no arquivo
-                    </CardDescription>
+            <div className="flex flex-col h-[calc(100vh-180px)]">
+              
+              {/* Topo: Editor de Campos (Scrollável) */}
+              <div className="flex-1 overflow-hidden min-h-0 mb-4">
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="pb-3 flex-none">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">Editor de Campos</CardTitle>
+                      {/* Tabs de Segmento */}
+                      <Tabs value={segmentoAtual} onValueChange={setSegmentoAtual} className="w-auto">
+                        <TabsList className="grid grid-cols-4 w-full h-auto flex-wrap justify-start gap-1 bg-transparent">
+                          {Object.entries(camposPorSegmento).map(([key, campos]) => {
+                            if (campos.length === 0 && !['header_arquivo', 'detalhe', 'trailer_arquivo'].includes(key)) return null;
+                            return (
+                              <TabsTrigger 
+                                key={key} 
+                                value={key}
+                                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border text-xs px-2 py-1 h-8"
+                              >
+                                {key.replace(/_/g, ' ').toUpperCase()} ({campos.length})
+                              </TabsTrigger>
+                            );
+                          })}
+                        </TabsList>
+                      </Tabs>
+                    </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                      {camposDetectados.map((campo) => (
-                        <div
-                          key={campo.id}
-                          className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 rounded ${campo.cor}`} />
-                            <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center text-xs font-mono">
-                              {campo.id}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{campo.nome}</p>
-                              <p className="text-xs text-muted-foreground">
-                                Posição: {campo.posicaoInicio}-{campo.posicaoFim} ({campo.tamanho} chars) | Linha: {campo.tipoLinha}
-                              </p>
-                            </div>
+                  
+                  <CardContent className="flex-1 overflow-y-auto pr-2">
+                     <div className="space-y-2">
+                       <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground mb-2 px-2 sticky top-0 bg-background z-10 py-2 border-b">
+                         <div className="col-span-1">ID</div>
+                         <div className="col-span-4">Nome do Campo</div>
+                         <div className="col-span-2">Início</div>
+                         <div className="col-span-2">Fim</div>
+                         <div className="col-span-1">Tam.</div>
+                         <div className="col-span-2">Tipo</div>
+                       </div>
+                      
+                      {(camposPorSegmento[segmentoAtual] || []).map((campo) => (
+                        <div 
+                            key={campo.id}
+                            id={`field-row-${campo.id}`}
+                            className={`
+                              grid grid-cols-12 gap-2 items-center p-2 rounded-md border text-sm transition-colors
+                              ${campoFocado === campo.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50'}
+                            `}
+                            onMouseEnter={() => setCampoFocado(campo.id)}
+                            onMouseLeave={() => setCampoFocado(null)}
+                          >
+                          <div className="col-span-1 font-mono text-xs text-muted-foreground">#{campo.id}</div>
+                          
+                          <div className="col-span-4">
+                            <Input 
+                              value={campo.nome} 
+                              onChange={(e) => handleUpdateCampo(campo.id, { nome: e.target.value })}
+                              className="h-7 text-xs"
+                            />
                           </div>
-                          <div className="text-right flex items-center gap-3">
-                            <div>
-                              <Badge variant="outline" className="mb-1">{campo.tipo}</Badge>
-                              <p className="text-xs font-mono bg-background px-2 py-1 rounded">
-                                {campo.valor.substring(0, 15)}{campo.valor.length > 15 ? '...' : ''}
-                              </p>
-                            </div>
-                            <Badge className={campo.confianca >= 90 ? 'bg-primary' : 'bg-muted'}>
-                              {campo.confianca}%
-                            </Badge>
+                          
+                          <div className="col-span-2">
+                            <Input 
+                              type="number"
+                              value={campo.posicaoInicio} 
+                              onChange={(e) => handleUpdateCampo(campo.id, { posicaoInicio: parseInt(e.target.value) })}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          
+                          <div className="col-span-2">
+                            <Input 
+                              type="number"
+                              value={campo.posicaoFim} 
+                              onChange={(e) => handleUpdateCampo(campo.id, { posicaoFim: parseInt(e.target.value) })}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          
+                          <div className="col-span-1 text-center font-mono text-xs">
+                            {campo.tamanho}
+                          </div>
+                          
+                          <div className="col-span-2">
+                             <Select 
+                               value={campo.tipo} 
+                               onValueChange={(v) => handleUpdateCampo(campo.id, { tipo: v as any })}
+                             >
+                               <SelectTrigger className="h-7 text-xs">
+                                 <SelectValue />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 <SelectItem value="alfanumerico">Texto</SelectItem>
+                                 <SelectItem value="numerico">Numérico</SelectItem>
+                                 <SelectItem value="data">Data</SelectItem>
+                                 <SelectItem value="valor">Valor</SelectItem>
+                               </SelectContent>
+                             </Select>
                           </div>
                         </div>
                       ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Salvar Padrão CNAB</CardTitle>
-                  <CardDescription>
-                    Dê um nome ao padrão para salvar na lista de configurações
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Nome do Padrão</Label>
-                    <Input
-                      value={nomePadrao}
-                      onChange={(e) => setNomePadrao(e.target.value)}
-                      placeholder="Ex: Padrão Bradesco CNAB 400"
-                      className="mt-1"
-                    />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <FileText className="h-4 w-4" />
-                      {arquivoRemessa?.name}
-                    </span>
-                    <span>•</span>
-                    <span>{tipoCNAB}</span>
-                    <span>•</span>
-                    <span>{camposDetectados.length} campos</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Resultado do Teste */}
-              {resultadoTeste && (
-                <Card className="border-primary/30 bg-primary/5">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <PlayCircle className="h-5 w-5 text-primary" />
-                      Resultado do Teste
-                    </CardTitle>
-                    <CardDescription>
-                      Valores extraídos do arquivo usando o padrão gerado
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm">Campos Extraídos</h4>
-                        <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
-                          {resultadoTeste.map((r, i) => (
-                            <div key={i} className="flex justify-between p-2 bg-background rounded border">
-                              <span className="text-sm font-medium">{r.campo}:</span>
-                              <span className="text-sm font-mono">{r.valor}</span>
-                            </div>
-                          ))}
+                      
+                      {(camposPorSegmento[segmentoAtual] || []).length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p>Nenhum campo neste segmento.</p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => {
+                              const novoId = String(camposDetectados.length + 1);
+                              setCamposDetectados([...camposDetectados, {
+                                id: novoId,
+                                nome: 'Novo Campo',
+                                posicaoInicio: 1,
+                                posicaoFim: 10,
+                                tamanho: 10,
+                                tipo: 'alfanumerico',
+                                destino: '',
+                                valor: '',
+                                confianca: 100,
+                                tipoLinha: segmentoAtual as any,
+                                cor: CORES_CAMPOS[camposDetectados.length % CORES_CAMPOS.length]
+                              }]);
+                            }}
+                          >
+                            Adicionar Campo
+                          </Button>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          Preview do Boleto
-                        </h4>
-                        <div className="transform scale-75 origin-top-left">
-                          <BoletoPreview
-                            nota={null}
-                            cliente={null}
-                            banco={bancosMock.find(b => b.id === bancoSelecionado) || null}
-                            campos={camposExtraidos}
-                          />
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
-              )}
+              </div>
 
-              {/* Preview do Boleto (quando há campos extraídos) */}
-              {Object.keys(camposExtraidos).length > 0 && !resultadoTeste && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Eye className="h-5 w-5 text-primary" />
-                      Preview do Boleto
+              {/* Rodapé: Visualizador de Linha (Fixo) */}
+              <div className="flex-none space-y-4">
+                <Card className="border-primary/20 shadow-lg overflow-hidden border-2">
+                  <CardHeader className="bg-muted/50 py-2 border-b px-4 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-primary" />
+                      Visualização da Linha ({segmentoAtual})
                     </CardTitle>
-                    <CardDescription>
-                      Visualização do boleto com os dados extraídos do arquivo
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="max-w-2xl mx-auto">
-                      <BoletoPreview
-                        nota={null}
-                        cliente={null}
-                        banco={bancosMock.find(b => b.id === bancoSelecionado) || null}
-                        campos={camposExtraidos}
-                      />
+                    
+                    <div className="flex items-center gap-2">
+                       <label htmlFor="upload-remessa-teste" className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
+                          <Upload className="h-3 w-3" />
+                          {conteudoRemessa ? 'Trocar arquivo de teste' : 'Carregar arquivo de teste'}
+                       </label>
+                       <input 
+                          id="upload-remessa-teste"
+                          type="file" 
+                          accept=".txt,.rem,.ret" 
+                          className="hidden"
+                          onChange={handleArquivoRemessa}
+                       />
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Upload de arquivo para testar */}
-              {padraoGerado && !conteudoRemessa && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Carregar Arquivo para Teste</CardTitle>
-                    <CardDescription>
-                      Carregue um arquivo de remessa para testar o padrão importado
-                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div
-                      onDrop={handleDropRemessa}
-                      onDragOver={handleDragOver}
-                      className="border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer border-border hover:border-primary/50 hover:bg-muted/50"
+                  <CardContent className="p-0">
+                    <div 
+                      id="visualizer-content"
+                      className="p-4 bg-[#1e1e1e] text-white font-mono text-xs overflow-x-auto whitespace-nowrap leading-relaxed scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent select-text cursor-text"
+                      onMouseUp={handleVisualizerSelection}
                     >
-                      <input
-                        type="file"
-                        accept=".txt,.rem,.ret"
-                        onChange={handleArquivoRemessa}
-                        className="hidden"
-                        id="file-remessa-test"
-                      />
-                      <label htmlFor="file-remessa-test" className="cursor-pointer">
-                        <div className="space-y-2">
-                          <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                          <p className="text-sm">Arraste ou clique para carregar arquivo de remessa</p>
-                        </div>
-                      </label>
+                       {!linhaVisualizacao ? (
+                         <div className="flex items-center justify-center h-16 text-muted-foreground/50">
+                            <span className="flex items-center gap-2">
+                               <AlertCircle className="h-4 w-4" />
+                               Registro não encontrado no documento
+                            </span>
+                         </div>
+                       ) : (
+                         <div className="flex min-w-max">
+                         {linhaVisualizacao.map((char, i) => {
+                           const pos = i + 1;
+                           // Verificar se esta posição pertence ao campo focado
+                           const campoAtivo = (camposPorSegmento[segmentoAtual] || []).find(c => c.id === campoFocado);
+                           const isHighlighted = campoAtivo && pos >= campoAtivo.posicaoInicio && pos <= campoAtivo.posicaoFim;
+                           
+                           // Verificar se pertence a algum outro campo (para colorir)
+                           const campoDono = (camposPorSegmento[segmentoAtual] || []).find(c => pos >= c.posicaoInicio && pos <= c.posicaoFim);
+                           
+                           return (
+                             <span 
+                               key={i}
+                               data-pos={pos}
+                               className={`
+                                 inline-block w-[9px] text-center transition-all duration-75 relative
+                                 ${isHighlighted ? 'bg-yellow-400 text-black font-bold z-10' : ''}
+                                 ${!isHighlighted && campoDono ? 'bg-white/10 text-white/90' : 'text-white/30'}
+                                 ${pos % 10 === 0 && !isHighlighted ? 'border-r border-white/20' : ''}
+                               `}
+                               title={`Pos: ${pos} | ${campoDono?.nome || 'Vazio'}`}
+                             >
+                               {char}
+                               {/* Marcador de início/fim de campo */}
+                               {isHighlighted && pos === campoAtivo?.posicaoInicio && (
+                                  <span className="absolute -top-3 left-0 text-[8px] text-yellow-400 bg-black/80 px-1 rounded select-none">{pos}</span>
+                               )}
+                               {isHighlighted && pos === campoAtivo?.posicaoFim && (
+                                  <span className="absolute -bottom-3 right-0 text-[8px] text-yellow-400 bg-black/80 px-1 rounded select-none">{pos}</span>
+                               )}
+                             </span>
+                           );
+                         })}
+                         </div>
+                       )}
+                    </div>
+                    <div className="bg-muted/50 p-2 text-[10px] text-muted-foreground flex justify-between items-center px-4">
+                      <div className="flex gap-4">
+                          <span>Posições: {tipoCNAB === 'CNAB_240' ? '240' : '400'}</span>
+                          {campoFocado && (
+                            <span className="font-bold text-primary animate-pulse">
+                                Editando: {(camposPorSegmento[segmentoAtual] || []).find(c => c.id === campoFocado)?.nome}
+                            </span>
+                          )}
+                      </div>
+                      <span className="text-xs">
+                        Selecione um trecho do texto para localizar o campo correspondente
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
-              )}
 
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={handleReset}>
-                  Analisar outro arquivo
-                </Button>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={handleExportarJSON} className="gap-2">
-                    <Download className="h-4 w-4" />
-                    Exportar JSON
+                {/* Botões de Ação */}
+                <div className="flex justify-between pt-2">
+                  <Button variant="outline" onClick={handleReset}>
+                    Cancelar / Voltar
                   </Button>
-                  <Button variant="secondary" onClick={handleTestarPadrao} disabled={!conteudoRemessa} className="gap-2">
-                    <PlayCircle className="h-4 w-4" />
-                    Testar Padrão
-                  </Button>
-                  <Button onClick={handleSalvar} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    Salvar Padrão CNAB
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleExportarJSON} className="gap-2">
+                      <Download className="h-4 w-4" />
+                      Exportar JSON
+                    </Button>
+                    <Button onClick={handleSalvar} className="gap-2 min-w-[150px]">
+                      <Save className="h-4 w-4" />
+                      Salvar Padrão
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

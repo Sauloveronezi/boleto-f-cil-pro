@@ -14,13 +14,8 @@ import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from 
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import { listarTemplates } from '@/lib/pdfTemplateGenerator';
-import {
-  bancosMock,
-  clientesMock,
-  notasFiscaisMock,
-  modelosBoletoMock,
-  configuracoesBancoMock,
-} from '@/data/mockData';
+import { BANCOS_SUPORTADOS } from '@/data/bancos';
+import { DEFAULT_MODELOS } from '@/data/templates';
 
 const WIZARD_STEPS: WizardStep[] = [
   { id: 1, title: 'Origem e Banco', description: 'Selecione a origem dos dados e o banco' },
@@ -43,10 +38,19 @@ export default function GerarBoletos() {
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
-  const [modelos, setModelos] = useState<ModeloBoleto[]>(modelosBoletoMock);
+  const [modelos, setModelos] = useState<ModeloBoleto[]>(DEFAULT_MODELOS);
 
-  const banco = bancosMock.find((b) => b.id === bancoSelecionado) || null;
-  const configuracao = configuracoesBancoMock.find((c) => c.banco_id === bancoSelecionado);
+  const banco = BANCOS_SUPORTADOS.find((b) => b.id === bancoSelecionado) || {
+    id: 'unknown',
+    nome_banco: 'Banco Desconhecido',
+    codigo_banco: '000',
+    tipo_layout_padrao: 'CNAB_400',
+    ativo: false
+  } as any; // Cast seguro para evitar crash se banco for null
+
+  // Configuração bancária específica (agência, conta, juros) deve vir de um store real.
+  // Por enquanto, passamos undefined para usar os valores padrão do gerador ou inseridos manualmente no template.
+  const configuracao = undefined;
 
   // Carregar modelos salvos do localStorage (templates importados)
   useEffect(() => {
@@ -58,7 +62,7 @@ export default function GerarBoletos() {
       nome_modelo: template.nome,
       banco_id: template.bancos_compativeis[0] || '',
       bancos_compativeis: template.bancos_compativeis,
-      tipo_layout: 'CNAB_400',
+      tipo_layout: 'CNAB_400', // Default, ajustado conforme necessidade
       padrao: false,
       campos_mapeados: template.campos.map((campo) => ({
         id: campo.tipo,
@@ -75,14 +79,14 @@ export default function GerarBoletos() {
       template_pdf_id: template.id,
     }));
 
-    // Combinar com modelos mock
-    setModelos([...modelosBoletoMock, ...modelosImportados]);
+    // Combinar com modelos padrão
+    setModelos([...DEFAULT_MODELOS, ...modelosImportados]);
   }, []);
 
-  // Dados a usar (CNAB importado ou mock)
+  // Dados a usar (apenas CNAB importado, sem mocks)
   const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
-  const clientes: Cliente[] = isCNAB && dadosCNAB ? dadosCNAB.clientes : clientesMock;
-  const notas: NotaFiscal[] = isCNAB && dadosCNAB ? dadosCNAB.notas : notasFiscaisMock;
+  const clientes: Cliente[] = isCNAB ? (dadosCNAB?.clientes || []) : [];
+  const notas: NotaFiscal[] = isCNAB ? (dadosCNAB?.notas || []) : [];
 
   // Processar arquivo CNAB quando selecionado
   useEffect(() => {
@@ -97,10 +101,29 @@ export default function GerarBoletos() {
         setClientesSelecionados([]);
         setNotasSelecionadas([]);
         
-        toast({
-          title: 'Arquivo processado!',
-          description: `${dados.clientes.length} cliente(s) e ${dados.notas.length} nota(s) importados do arquivo CNAB.`,
-        });
+        if (dados.notas.length === 0) {
+          toast({
+            title: 'Atenção',
+            description: 'Nenhum boleto encontrado no arquivo utilizando o padrão selecionado. Verifique se o padrão corresponde ao arquivo.',
+            variant: 'destructive',
+          });
+        } else {
+          // Verifica se houve fallback (notas com numero_nota começando com RAW-)
+          const temFallback = dados.notas.some(n => n.numero_nota.startsWith('RAW-'));
+          
+          if (temFallback) {
+             toast({
+              title: 'Arquivo processado com ressalvas',
+              description: `${dados.notas.length} registro(s) bruto(s) importados. Os dados podem estar incompletos.`,
+              variant: 'warning',
+            });
+          } else {
+            toast({
+              title: 'Arquivo processado!',
+              description: `${dados.clientes.length} cliente(s) e ${dados.notas.length} nota(s) importados do arquivo CNAB.`,
+            });
+          }
+        }
       };
       reader.readAsText(arquivoCNAB);
     }
@@ -199,7 +222,7 @@ export default function GerarBoletos() {
       case 1:
         return (
           <BancoSelector
-            bancos={bancosMock}
+            bancos={BANCOS_SUPORTADOS}
             bancoSelecionado={bancoSelecionado}
             tipoImpressao={tipoOrigem}
             arquivoCNAB={arquivoCNAB}

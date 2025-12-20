@@ -1,73 +1,68 @@
-# Welcome to your Lovable project
+# Boleto Fácil Pro
 
-## Project info
+Sistema profissional para gestão e emissão de boletos, com suporte a múltiplos bancos, layouts personalizados e integração CNAB.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Funcionalidades
 
-## How can I edit this code?
+### Principal
+- **Dashboard**: Visão geral das operações.
+- **Gerar Boletos**: Interface para geração e emissão de boletos.
 
-There are several ways of editing your application.
+### Cadastros
+- **Clientes**: Gestão de base de clientes.
+- **Notas Fiscais**: Controle de notas fiscais.
+- **Bancos**: Configuração de instituições financeiras.
 
-**Use Lovable**
+### Configurações
+- **Modelos de Layout**: Personalização visual dos boletos.
+- **Padrões CNAB**: Configuração de arquivos de remessa e retorno.
+- **Importar Layout (IA)**: Ferramenta inteligente para importação de layouts.
+- **Configurações Gerais**: Ajustes do sistema.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 🛠️ Tecnologias Utilizadas
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React, Vite, TypeScript
+- **UI/UX**: Tailwind CSS, Shadcn UI, Lucide Icons
+- **Backend/Database**: Supabase
+- **PDF**: jsPDF
 
-**Use your preferred IDE**
+## 💻 Como Rodar o Projeto
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Pré-requisitos
+- Node.js instalado (versão 18 ou superior recomendada)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Instalação
 
-Follow these steps:
+1. Clone o repositório (se ainda não o fez):
+```bash
+git clone <URL_DO_REPOSITORIO>
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+2. Entre na pasta do projeto:
+```bash
+cd boleto-f-cil-pro
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+3. Instale as dependências:
+```bash
+npm install
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Executando Localmente
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Para iniciar o servidor de desenvolvimento:
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+O projeto estará acessível em `http://localhost:8080` (ou outra porta indicada no terminal).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 📄 Estrutura do Projeto
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- `/src`: Código fonte da aplicação
+  - `/components`: Componentes React reutilizáveis
+  - `/pages`: Páginas da aplicação
+  - `/lib`: Funções utilitárias e lógica de negócios
+  - `/hooks`: Hooks customizados
+  - `/types`: Definições de tipos TypeScript

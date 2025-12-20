@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AlertTriangle, Edit2, Check, X, Eye, FileText, Palette } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { TipoRegistroCNAB } from '@/types/boleto';
+import { identificarTipoLinha } from '@/types/cnab';
 
-export type TipoLinha = 'header' | 'detalhe' | 'trailer' | 'header_lote' | 'trailer_lote';
+export type TipoLinha = TipoRegistroCNAB;
 
 export interface CampoMapeado {
   id: string;
@@ -57,32 +59,18 @@ const CORES_CAMPOS = [
 ];
 
 const TIPOS_LINHA_LABELS: Record<TipoLinha, string> = {
-  header: 'Header do Arquivo',
-  detalhe: 'Detalhe (Título)',
-  trailer: 'Trailer do Arquivo',
+  header_arquivo: 'Header do Arquivo',
   header_lote: 'Header de Lote',
+  detalhe: 'Detalhe (Título)',
+  detalhe_segmento_p: 'Detalhe Segmento P',
+  detalhe_segmento_q: 'Detalhe Segmento Q',
+  detalhe_segmento_r: 'Detalhe Segmento R',
+  detalhe_segmento_a: 'Detalhe Segmento A',
+  detalhe_segmento_b: 'Detalhe Segmento B',
   trailer_lote: 'Trailer de Lote',
+  trailer_arquivo: 'Trailer do Arquivo',
 };
 
-const detectarTipoLinha = (linha: string, tipoCNAB: 'CNAB_240' | 'CNAB_400'): TipoLinha => {
-  const tipoReg = linha.charAt(0);
-  
-  if (tipoCNAB === 'CNAB_400') {
-    if (tipoReg === '0') return 'header';
-    if (tipoReg === '1') return 'detalhe';
-    if (tipoReg === '9') return 'trailer';
-    return 'detalhe';
-  } else {
-    // CNAB 240
-    const segmento = linha.charAt(7);
-    if (tipoReg === '0') return 'header';
-    if (tipoReg === '1') return 'header_lote';
-    if (tipoReg === '3' && (segmento === 'P' || segmento === 'Q' || segmento === 'R')) return 'detalhe';
-    if (tipoReg === '5') return 'trailer_lote';
-    if (tipoReg === '9') return 'trailer';
-    return 'detalhe';
-  }
-};
 
 export function CnabTextEditor({ conteudo, campos, tipoCNAB, onCamposChange, onErrosDetectados }: CnabTextEditorProps) {
   const [linhasSelecionadas, setLinhasSelecionadas] = useState<number[]>([]);
@@ -352,7 +340,11 @@ export function CnabTextEditor({ conteudo, campos, tipoCNAB, onCamposChange, onE
             <CardContent className="p-0">
               <ScrollArea className="h-[400px]">
                 <div className="p-2 space-y-4">
-                  {(['header', 'detalhe', 'trailer'] as TipoLinha[]).map((tipoLinha) => {
+                  {(Object.keys(TIPOS_LINHA_LABELS) as TipoLinha[]).map((tipoLinha) => {
+                    // Filtrar apenas tipos relevantes para o CNAB selecionado
+                    if (tipoCNAB === 'CNAB_400' && (tipoLinha.includes('segmento') || tipoLinha.includes('lote'))) return null;
+                    if (tipoCNAB === 'CNAB_240' && tipoLinha === 'detalhe') return null;
+
                     const camposTipo = campos.filter(c => c.tipoLinha === tipoLinha);
                     if (camposTipo.length === 0 && tipoLinhaFiltro !== 'todos' && tipoLinhaFiltro !== tipoLinha) return null;
                     

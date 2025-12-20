@@ -79,7 +79,8 @@ export function identificarTipoLinha(linha: string, tipoCNAB: 'CNAB_240' | 'CNAB
             return 'detalhe';
         }
       case '5':
-        return 'trailer_lote';
+        // Conforme solicitado, tipo 5 tratado como detalhe neste contexto específico
+        return 'detalhe';
       case '9':
         return 'trailer_arquivo';
       default:
@@ -150,13 +151,23 @@ export function gerarLinhasCNAB240(): LinhaCNAB[] {
       corTipo: CORES_TIPO_LINHA.detalhe_segmento_q,
     },
     {
+      id: 'linha_detalhe_r_240',
+      tipo: 'detalhe_segmento_r',
+      identificador: { posicao: 8, valor: '3', segmento: 'R' },
+      descricao: 'Detalhe Segmento R - Dados de Descontos/Multas',
+      tamanhoLinha: 240,
+      campos: gerarCamposDetalheR240(),
+      ordemExibicao: 5,
+      corTipo: CORES_TIPO_LINHA.detalhe_segmento_r,
+    },
+    {
       id: 'linha_trailer_lote_240',
       tipo: 'trailer_lote',
       identificador: { posicao: 8, valor: '5' },
       descricao: 'Trailer de Lote',
       tamanhoLinha: 240,
       campos: gerarCamposTrailerLote240(),
-      ordemExibicao: 5,
+      ordemExibicao: 6,
       corTipo: CORES_TIPO_LINHA.trailer_lote,
     },
     {
@@ -166,7 +177,7 @@ export function gerarLinhasCNAB240(): LinhaCNAB[] {
       descricao: 'Trailer de Arquivo',
       tamanhoLinha: 240,
       campos: gerarCamposTrailerArquivo240(),
-      ordemExibicao: 6,
+      ordemExibicao: 7,
       corTipo: CORES_TIPO_LINHA.trailer_arquivo,
     },
   ];
@@ -209,7 +220,7 @@ export function gerarLinhasCNAB400(): LinhaCNAB[] {
 }
 
 // Campos Header Arquivo CNAB 240
-function gerarCamposHeaderArquivo240(): CampoCNABCompleto[] {
+export function gerarCamposHeaderArquivo240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Código do banco na compensação', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Lote de serviço', cor: CORES_CAMPOS[1] },
@@ -235,7 +246,7 @@ function gerarCamposHeaderArquivo240(): CampoCNABCompleto[] {
 }
 
 // Campos Header Lote CNAB 240
-function gerarCamposHeaderLote240(): CampoCNABCompleto[] {
+export function gerarCamposHeaderLote240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
@@ -248,7 +259,7 @@ function gerarCamposHeaderLote240(): CampoCNABCompleto[] {
 }
 
 // Campos Detalhe Segmento P CNAB 240
-function gerarCamposDetalheP240(): CampoCNABCompleto[] {
+export function gerarCamposDetalheP240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
@@ -280,7 +291,7 @@ function gerarCamposDetalheP240(): CampoCNABCompleto[] {
 }
 
 // Campos Detalhe Segmento Q CNAB 240
-function gerarCamposDetalheQ240(): CampoCNABCompleto[] {
+export function gerarCamposDetalheQ240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
@@ -301,8 +312,27 @@ function gerarCamposDetalheQ240(): CampoCNABCompleto[] {
   ];
 }
 
+// Campos Detalhe Segmento R CNAB 240
+export function gerarCamposDetalheR240(): CampoCNABCompleto[] {
+  return [
+    { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
+    { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 8, posicaoFim: 8, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 3', cor: CORES_CAMPOS[2] },
+    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 9, posicaoFim: 13, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do registro', cor: CORES_CAMPOS[3] },
+    { id: gerarIdCampo(), nome: 'Segmento', posicaoInicio: 14, posicaoFim: 14, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do segmento = R', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'CNAB', posicaoInicio: 15, posicaoFim: 15, tipo: 'alfanumerico', tamanho: 1, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Uso FEBRABAN', cor: CORES_CAMPOS[5] },
+    { id: gerarIdCampo(), nome: 'Código Movimento', posicaoInicio: 16, posicaoFim: 17, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do movimento', cor: CORES_CAMPOS[6] },
+    { id: gerarIdCampo(), nome: 'Código Desconto 2', posicaoInicio: 18, posicaoFim: 18, tipo: 'numerico', tamanho: 1, obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Código do desconto 2', cor: CORES_CAMPOS[7] },
+    { id: gerarIdCampo(), nome: 'Data Desconto 2', posicaoInicio: 19, posicaoFim: 26, tipo: 'numerico', tamanho: 8, formato: 'data_ddmmaaaa', obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Data do desconto 2', campoDestino: 'data_desconto_2', cor: CORES_CAMPOS[8] },
+    { id: gerarIdCampo(), nome: 'Valor Desconto 2', posicaoInicio: 27, posicaoFim: 41, tipo: 'numerico', tamanho: 15, formato: 'valor_centavos', obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Valor do desconto 2', campoDestino: 'valor_desconto_2', cor: CORES_CAMPOS[9] },
+    { id: gerarIdCampo(), nome: 'Código Multa', posicaoInicio: 66, posicaoFim: 66, tipo: 'numerico', tamanho: 1, obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Código da multa', cor: CORES_CAMPOS[10] },
+    { id: gerarIdCampo(), nome: 'Data Multa', posicaoInicio: 67, posicaoFim: 74, tipo: 'numerico', tamanho: 8, formato: 'data_ddmmaaaa', obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Data da multa', campoDestino: 'data_multa', cor: CORES_CAMPOS[11] },
+    { id: gerarIdCampo(), nome: 'Valor Multa', posicaoInicio: 75, posicaoFim: 89, tipo: 'numerico', tamanho: 15, formato: 'valor_centavos', obrigatorio: false, utilizadoNoBoleto: true, descricao: 'Valor da multa', campoDestino: 'valor_multa', cor: CORES_CAMPOS[12] },
+  ];
+}
+
 // Campos Trailer Lote CNAB 240
-function gerarCamposTrailerLote240(): CampoCNABCompleto[] {
+export function gerarCamposTrailerLote240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
@@ -313,7 +343,7 @@ function gerarCamposTrailerLote240(): CampoCNABCompleto[] {
 }
 
 // Campos Trailer Arquivo CNAB 240
-function gerarCamposTrailerArquivo240(): CampoCNABCompleto[] {
+export function gerarCamposTrailerArquivo240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Lote de serviço = 9999', cor: CORES_CAMPOS[1] },
@@ -380,7 +410,7 @@ function gerarCamposDetalhe400(): CampoCNABCompleto[] {
 }
 
 // Campos Trailer CNAB 400
-function gerarCamposTrailer400(): CampoCNABCompleto[] {
+export function gerarCamposTrailer400(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Identificação do Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 9', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Brancos', posicaoInicio: 2, posicaoFim: 394, tipo: 'alfanumerico', tamanho: 393, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Brancos', cor: CORES_CAMPOS[1] },

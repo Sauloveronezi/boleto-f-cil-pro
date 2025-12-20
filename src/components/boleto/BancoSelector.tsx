@@ -32,41 +32,6 @@ const carregarPadroesLocalStorage = (): ConfiguracaoCNAB[] => {
   return [];
 };
 
-// Dados mock de configurações CNAB (usados como fallback)
-const configuracoesCNABMock: ConfiguracaoCNAB[] = [
-  {
-    id: '1',
-    banco_id: '2',
-    tipo_cnab: 'CNAB_400',
-    nome: 'Bradesco Padrão 400',
-    descricao: 'Layout padrão do Bradesco para CNAB 400',
-    campos: [
-      { id: '1', nome: 'CNPJ Sacado', campo_destino: 'cnpj', posicao_inicio: 4, posicao_fim: 17, tipo_registro: '1', formato: 'texto' },
-      { id: '2', nome: 'Razão Social', campo_destino: 'razao_social', posicao_inicio: 235, posicao_fim: 274, tipo_registro: '1', formato: 'texto' },
-      { id: '3', nome: 'Valor', campo_destino: 'valor', posicao_inicio: 127, posicao_fim: 139, tipo_registro: '1', formato: 'valor_centavos' },
-      { id: '4', nome: 'Vencimento', campo_destino: 'vencimento', posicao_inicio: 121, posicao_fim: 126, tipo_registro: '1', formato: 'data_ddmmaa' },
-      { id: '5', nome: 'Nosso Número', campo_destino: 'nosso_numero', posicao_inicio: 63, posicao_fim: 73, tipo_registro: '1', formato: 'texto' },
-    ],
-    criado_em: '2024-01-15',
-    atualizado_em: '2024-12-10'
-  },
-  {
-    id: '2',
-    banco_id: '1',
-    tipo_cnab: 'CNAB_240',
-    nome: 'Banco do Brasil 240',
-    descricao: 'Layout padrão do BB para CNAB 240',
-    campos: [
-      { id: '1', nome: 'CNPJ Sacado', campo_destino: 'cnpj', posicao_inicio: 19, posicao_fim: 32, tipo_registro: 'P', formato: 'texto' },
-      { id: '2', nome: 'Valor', campo_destino: 'valor', posicao_inicio: 78, posicao_fim: 92, tipo_registro: 'P', formato: 'valor_centavos' },
-      { id: '3', nome: 'Vencimento', campo_destino: 'vencimento', posicao_inicio: 78, posicao_fim: 85, tipo_registro: 'P', formato: 'data_ddmmaaaa' },
-      { id: '4', nome: 'Nosso Número', campo_destino: 'nosso_numero', posicao_inicio: 38, posicao_fim: 57, tipo_registro: 'P', formato: 'texto' },
-    ],
-    criado_em: '2024-01-20',
-    atualizado_em: '2024-12-10'
-  }
-];
-
 interface BancoSelectorProps {
   bancos: Banco[];
   bancoSelecionado: string | null;
@@ -97,13 +62,7 @@ export function BancoSelector({
   
   useEffect(() => {
     const padroesLocalStorage = carregarPadroesLocalStorage();
-    // Combinar padrões do localStorage com os mock (localStorage tem prioridade)
-    const todosPadroes = [...padroesLocalStorage, ...configuracoesCNABMock];
-    // Remover duplicados por ID
-    const padroesUnicos = todosPadroes.filter((p, i, arr) => 
-      arr.findIndex(x => x.id === p.id) === i
-    );
-    setPadroesSalvos(padroesUnicos);
+    setPadroesSalvos(padroesLocalStorage);
   }, []);
 
   // Filtrar padrões disponíveis para o tipo selecionado
