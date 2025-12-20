@@ -279,23 +279,23 @@ function gerarCamposDetalheP240(): CampoCNABCompleto[] {
   ];
 }
 
-// Campos Detalhe Segmento Q CNAB 240 (Dados do Sacado/Pagador)
+// Campos Detalhe Segmento Q CNAB 240
 function gerarCamposDetalheQ240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
     { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 8, posicaoFim: 8, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 3', cor: CORES_CAMPOS[2] },
-    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 9, posicaoFim: 13, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial', cor: CORES_CAMPOS[3] },
+    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 9, posicaoFim: 13, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do registro', cor: CORES_CAMPOS[3] },
     { id: gerarIdCampo(), nome: 'Segmento', posicaoInicio: 14, posicaoFim: 14, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do segmento = Q', cor: CORES_CAMPOS[4] },
     { id: gerarIdCampo(), nome: 'CNAB', posicaoInicio: 15, posicaoFim: 15, tipo: 'alfanumerico', tamanho: 1, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Uso FEBRABAN', cor: CORES_CAMPOS[5] },
     { id: gerarIdCampo(), nome: 'Código Movimento', posicaoInicio: 16, posicaoFim: 17, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do movimento', cor: CORES_CAMPOS[6] },
     { id: gerarIdCampo(), nome: 'Tipo Inscrição Sacado', posicaoInicio: 18, posicaoFim: 18, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: '1=CPF 2=CNPJ', cor: CORES_CAMPOS[7] },
-    { id: gerarIdCampo(), nome: 'CPF/CNPJ Sacado', posicaoInicio: 19, posicaoFim: 33, tipo: 'numerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CPF/CNPJ do sacado', campoDestino: 'sacado_documento', cor: CORES_CAMPOS[8] },
-    { id: gerarIdCampo(), nome: 'Nome Sacado', posicaoInicio: 34, posicaoFim: 73, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome do sacado/pagador', campoDestino: 'sacado_nome', cor: CORES_CAMPOS[9] },
+    { id: gerarIdCampo(), nome: 'CNPJ/CPF Sacado', posicaoInicio: 19, posicaoFim: 33, tipo: 'numerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CNPJ ou CPF do sacado', campoDestino: 'sacado_cpf_cnpj', cor: CORES_CAMPOS[8] },
+    { id: gerarIdCampo(), nome: 'Nome Sacado', posicaoInicio: 34, posicaoFim: 73, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome do sacado', campoDestino: 'sacado_nome', cor: CORES_CAMPOS[9] },
     { id: gerarIdCampo(), nome: 'Endereço Sacado', posicaoInicio: 74, posicaoFim: 113, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Endereço do sacado', campoDestino: 'sacado_endereco', cor: CORES_CAMPOS[10] },
     { id: gerarIdCampo(), nome: 'Bairro Sacado', posicaoInicio: 114, posicaoFim: 128, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Bairro do sacado', campoDestino: 'sacado_bairro', cor: CORES_CAMPOS[11] },
     { id: gerarIdCampo(), nome: 'CEP Sacado', posicaoInicio: 129, posicaoFim: 133, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CEP do sacado', campoDestino: 'sacado_cep', cor: CORES_CAMPOS[12] },
-    { id: gerarIdCampo(), nome: 'Sufixo CEP', posicaoInicio: 134, posicaoFim: 136, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Sufixo do CEP', campoDestino: 'sacado_cep_sufixo', cor: CORES_CAMPOS[13] },
+    { id: gerarIdCampo(), nome: 'Sufixo CEP', posicaoInicio: 134, posicaoFim: 136, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Sufixo do CEP', cor: CORES_CAMPOS[13] },
     { id: gerarIdCampo(), nome: 'Cidade Sacado', posicaoInicio: 137, posicaoFim: 151, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Cidade do sacado', campoDestino: 'sacado_cidade', cor: CORES_CAMPOS[14] },
     { id: gerarIdCampo(), nome: 'UF Sacado', posicaoInicio: 152, posicaoFim: 153, tipo: 'alfanumerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'UF do sacado', campoDestino: 'sacado_uf', cor: CORES_CAMPOS[15] },
   ];
@@ -308,7 +308,7 @@ function gerarCamposTrailerLote240(): CampoCNABCompleto[] {
     { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número do lote', cor: CORES_CAMPOS[1] },
     { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 8, posicaoFim: 8, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 5', cor: CORES_CAMPOS[2] },
     { id: gerarIdCampo(), nome: 'CNAB', posicaoInicio: 9, posicaoFim: 17, tipo: 'alfanumerico', tamanho: 9, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Uso FEBRABAN', cor: CORES_CAMPOS[3] },
-    { id: gerarIdCampo(), nome: 'Qtd Registros Lote', posicaoInicio: 18, posicaoFim: 23, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de registros no lote', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'Qtd. Registros Lote', posicaoInicio: 18, posicaoFim: 23, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de registros no lote', cor: CORES_CAMPOS[4] },
   ];
 }
 
@@ -316,60 +316,74 @@ function gerarCamposTrailerLote240(): CampoCNABCompleto[] {
 function gerarCamposTrailerArquivo240(): CampoCNABCompleto[] {
   return [
     { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 1, posicaoFim: 3, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do banco', cor: CORES_CAMPOS[0] },
-    { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Lote = 9999', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Lote de Serviço', posicaoInicio: 4, posicaoFim: 7, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Lote de serviço = 9999', cor: CORES_CAMPOS[1] },
     { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 8, posicaoFim: 8, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 9', cor: CORES_CAMPOS[2] },
     { id: gerarIdCampo(), nome: 'CNAB', posicaoInicio: 9, posicaoFim: 17, tipo: 'alfanumerico', tamanho: 9, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Uso FEBRABAN', cor: CORES_CAMPOS[3] },
-    { id: gerarIdCampo(), nome: 'Qtd Lotes', posicaoInicio: 18, posicaoFim: 23, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de lotes', cor: CORES_CAMPOS[4] },
-    { id: gerarIdCampo(), nome: 'Qtd Registros', posicaoInicio: 24, posicaoFim: 29, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de registros', cor: CORES_CAMPOS[5] },
+    { id: gerarIdCampo(), nome: 'Qtd. Lotes Arquivo', posicaoInicio: 18, posicaoFim: 23, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de lotes no arquivo', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'Qtd. Registros Arquivo', posicaoInicio: 24, posicaoFim: 29, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Quantidade de registros no arquivo', cor: CORES_CAMPOS[5] },
   ];
 }
 
 // Campos Header CNAB 400
 function gerarCamposHeader400(): CampoCNABCompleto[] {
   return [
-    { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 0', cor: CORES_CAMPOS[0] },
-    { id: gerarIdCampo(), nome: 'Operação', posicaoInicio: 2, posicaoFim: 2, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de operação', cor: CORES_CAMPOS[1] },
-    { id: gerarIdCampo(), nome: 'Literal Remessa', posicaoInicio: 3, posicaoFim: 9, tipo: 'alfanumerico', tamanho: 7, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Identificação literal', cor: CORES_CAMPOS[2] },
-    { id: gerarIdCampo(), nome: 'Código Serviço', posicaoInicio: 10, posicaoFim: 11, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do serviço', cor: CORES_CAMPOS[3] },
-    { id: gerarIdCampo(), nome: 'Literal Serviço', posicaoInicio: 12, posicaoFim: 26, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Literal do serviço', cor: CORES_CAMPOS[4] },
-    { id: gerarIdCampo(), nome: 'Agência', posicaoInicio: 27, posicaoFim: 30, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Código da agência', campoDestino: 'agencia', cor: CORES_CAMPOS[5] },
-    { id: gerarIdCampo(), nome: 'Zeros', posicaoInicio: 31, posicaoFim: 32, tipo: 'numerico', tamanho: 2, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Zeros', cor: CORES_CAMPOS[6] },
-    { id: gerarIdCampo(), nome: 'Conta Corrente', posicaoInicio: 33, posicaoFim: 37, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Número da conta', campoDestino: 'conta', cor: CORES_CAMPOS[7] },
-    { id: gerarIdCampo(), nome: 'DV Conta', posicaoInicio: 38, posicaoFim: 38, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'DV da conta', campoDestino: 'conta_dv', cor: CORES_CAMPOS[8] },
-    { id: gerarIdCampo(), nome: 'Brancos', posicaoInicio: 39, posicaoFim: 46, tipo: 'alfanumerico', tamanho: 8, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Brancos', cor: CORES_CAMPOS[9] },
-    { id: gerarIdCampo(), nome: 'Nome Empresa', posicaoInicio: 47, posicaoFim: 76, tipo: 'alfanumerico', tamanho: 30, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome da empresa', campoDestino: 'cedente', cor: CORES_CAMPOS[10] },
-    { id: gerarIdCampo(), nome: 'Código Banco', posicaoInicio: 77, posicaoFim: 79, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Código do banco', cor: CORES_CAMPOS[11] },
-    { id: gerarIdCampo(), nome: 'Nome Banco', posicaoInicio: 80, posicaoFim: 94, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Nome do banco', cor: CORES_CAMPOS[12] },
-    { id: gerarIdCampo(), nome: 'Data Gravação', posicaoInicio: 95, posicaoFim: 100, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Data de gravação DDMMAA', cor: CORES_CAMPOS[13] },
+    { id: gerarIdCampo(), nome: 'Identificação do Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 0', cor: CORES_CAMPOS[0] },
+    { id: gerarIdCampo(), nome: 'Identificação do Arquivo Remessa', posicaoInicio: 2, posicaoFim: 2, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: '1 = Remessa', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Literal Remessa', posicaoInicio: 3, posicaoFim: 9, tipo: 'alfanumerico', tamanho: 7, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'REMESSA', cor: CORES_CAMPOS[2] },
+    { id: gerarIdCampo(), nome: 'Código de Serviço', posicaoInicio: 10, posicaoFim: 11, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código do serviço', cor: CORES_CAMPOS[3] },
+    { id: gerarIdCampo(), nome: 'Literal Serviço', posicaoInicio: 12, posicaoFim: 26, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'COBRANCA', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'Código da Empresa', posicaoInicio: 27, posicaoFim: 46, tipo: 'numerico', tamanho: 20, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Código da empresa no banco', cor: CORES_CAMPOS[5] },
+    { id: gerarIdCampo(), nome: 'Nome da Empresa', posicaoInicio: 47, posicaoFim: 76, tipo: 'alfanumerico', tamanho: 30, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome da empresa', campoDestino: 'cedente', cor: CORES_CAMPOS[6] },
+    { id: gerarIdCampo(), nome: 'Código do Banco', posicaoInicio: 77, posicaoFim: 79, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Código do banco', cor: CORES_CAMPOS[7] },
+    { id: gerarIdCampo(), nome: 'Nome do Banco', posicaoInicio: 80, posicaoFim: 94, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome do banco', cor: CORES_CAMPOS[8] },
+    { id: gerarIdCampo(), nome: 'Data de Gravação', posicaoInicio: 95, posicaoFim: 100, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Data de gravação do arquivo', cor: CORES_CAMPOS[9] },
+    { id: gerarIdCampo(), nome: 'Brancos', posicaoInicio: 101, posicaoFim: 108, tipo: 'alfanumerico', tamanho: 8, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Brancos', cor: CORES_CAMPOS[10] },
+    { id: gerarIdCampo(), nome: 'Identificação do Sistema', posicaoInicio: 109, posicaoFim: 110, tipo: 'alfanumerico', tamanho: 2, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Identificação do sistema', cor: CORES_CAMPOS[11] },
+    { id: gerarIdCampo(), nome: 'Número Sequencial do Arquivo', posicaoInicio: 111, posicaoFim: 117, tipo: 'numerico', tamanho: 7, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do arquivo', cor: CORES_CAMPOS[12] },
   ];
 }
 
 // Campos Detalhe CNAB 400
 function gerarCamposDetalhe400(): CampoCNABCompleto[] {
   return [
-    { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 1', cor: CORES_CAMPOS[0] },
-    { id: gerarIdCampo(), nome: 'Agência', posicaoInicio: 18, posicaoFim: 21, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Agência mantenedora', campoDestino: 'agencia', cor: CORES_CAMPOS[1] },
-    { id: gerarIdCampo(), nome: 'Conta', posicaoInicio: 22, posicaoFim: 29, tipo: 'numerico', tamanho: 8, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Conta corrente', campoDestino: 'conta', cor: CORES_CAMPOS[2] },
-    { id: gerarIdCampo(), nome: 'DV Conta', posicaoInicio: 30, posicaoFim: 30, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'DV da conta', campoDestino: 'conta_dv', cor: CORES_CAMPOS[3] },
-    { id: gerarIdCampo(), nome: 'Nosso Número', posicaoInicio: 63, posicaoFim: 70, tipo: 'numerico', tamanho: 8, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nosso número', campoDestino: 'nosso_numero', cor: CORES_CAMPOS[5] },
-    { id: gerarIdCampo(), nome: 'DV Nosso Número', posicaoInicio: 71, posicaoFim: 71, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'DV do nosso número', campoDestino: 'nosso_numero_dv', cor: CORES_CAMPOS[6] },
-    { id: gerarIdCampo(), nome: 'Carteira', posicaoInicio: 108, posicaoFim: 108, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Código da carteira', campoDestino: 'carteira', cor: CORES_CAMPOS[4] },
-    { id: gerarIdCampo(), nome: 'Número Documento', posicaoInicio: 117, posicaoFim: 126, tipo: 'alfanumerico', tamanho: 10, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Número do documento', campoDestino: 'numero_documento', cor: CORES_CAMPOS[7] },
-    { id: gerarIdCampo(), nome: 'Data Vencimento', posicaoInicio: 121, posicaoFim: 126, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Data de vencimento DDMMAA', campoDestino: 'data_vencimento', cor: CORES_CAMPOS[8] },
-    { id: gerarIdCampo(), nome: 'Valor Título', posicaoInicio: 127, posicaoFim: 139, tipo: 'numerico', tamanho: 13, formato: 'valor_centavos', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Valor do título', campoDestino: 'valor', cor: CORES_CAMPOS[9] },
-    { id: gerarIdCampo(), nome: 'Espécie', posicaoInicio: 149, posicaoFim: 150, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Espécie do título', campoDestino: 'especie', cor: CORES_CAMPOS[10] },
-    { id: gerarIdCampo(), nome: 'Aceite', posicaoInicio: 151, posicaoFim: 151, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Aceite', campoDestino: 'aceite', cor: CORES_CAMPOS[11] },
-    { id: gerarIdCampo(), nome: 'Data Emissão', posicaoInicio: 152, posicaoFim: 157, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Data de emissão DDMMAA', campoDestino: 'data_emissao', cor: CORES_CAMPOS[12] },
-    { id: gerarIdCampo(), nome: 'Nome Sacado', posicaoInicio: 235, posicaoFim: 274, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome do sacado', campoDestino: 'sacado_nome', cor: CORES_CAMPOS[13] },
-    { id: gerarIdCampo(), nome: 'Endereço Sacado', posicaoInicio: 275, posicaoFim: 314, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Endereço do sacado', campoDestino: 'sacado_endereco', cor: CORES_CAMPOS[14] },
-    { id: gerarIdCampo(), nome: 'CEP Sacado', posicaoInicio: 327, posicaoFim: 334, tipo: 'numerico', tamanho: 8, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CEP do sacado', campoDestino: 'sacado_cep', cor: CORES_CAMPOS[15] },
+    { id: gerarIdCampo(), nome: 'Identificação do Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 1', cor: CORES_CAMPOS[0] },
+    { id: gerarIdCampo(), nome: 'Tipo de Inscrição Empresa', posicaoInicio: 2, posicaoFim: 3, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: '01=CPF 02=CNPJ', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'CNPJ/CPF Empresa', posicaoInicio: 4, posicaoFim: 17, tipo: 'numerico', tamanho: 14, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CNPJ ou CPF da empresa', cor: CORES_CAMPOS[2] },
+    { id: gerarIdCampo(), nome: 'Agência', posicaoInicio: 18, posicaoFim: 21, tipo: 'numerico', tamanho: 4, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Agência', campoDestino: 'agencia', cor: CORES_CAMPOS[3] },
+    { id: gerarIdCampo(), nome: 'Zeros', posicaoInicio: 22, posicaoFim: 23, tipo: 'numerico', tamanho: 2, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Zeros', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'Conta Corrente', posicaoInicio: 24, posicaoFim: 28, tipo: 'numerico', tamanho: 5, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Conta corrente', campoDestino: 'conta', cor: CORES_CAMPOS[5] },
+    { id: gerarIdCampo(), nome: 'DV Conta', posicaoInicio: 29, posicaoFim: 29, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Dígito da conta', campoDestino: 'conta_dv', cor: CORES_CAMPOS[6] },
+    { id: gerarIdCampo(), nome: 'Carteira', posicaoInicio: 30, posicaoFim: 32, tipo: 'numerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Carteira', campoDestino: 'carteira', cor: CORES_CAMPOS[7] },
+    { id: gerarIdCampo(), nome: 'Uso do Banco', posicaoInicio: 33, posicaoFim: 37, tipo: 'alfanumerico', tamanho: 5, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Uso do banco', cor: CORES_CAMPOS[8] },
+    { id: gerarIdCampo(), nome: 'Nosso Número', posicaoInicio: 38, posicaoFim: 48, tipo: 'alfanumerico', tamanho: 11, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nosso número', campoDestino: 'nosso_numero', cor: CORES_CAMPOS[9] },
+    { id: gerarIdCampo(), nome: 'DAC Nosso Número', posicaoInicio: 49, posicaoFim: 49, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'DAC do nosso número', cor: CORES_CAMPOS[10] },
+    { id: gerarIdCampo(), nome: 'Brancos', posicaoInicio: 50, posicaoFim: 62, tipo: 'alfanumerico', tamanho: 13, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Brancos', cor: CORES_CAMPOS[11] },
+    { id: gerarIdCampo(), nome: 'Carteira Banco', posicaoInicio: 63, posicaoFim: 65, tipo: 'alfanumerico', tamanho: 3, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Carteira do banco', cor: CORES_CAMPOS[12] },
+    { id: gerarIdCampo(), nome: 'Número Documento', posicaoInicio: 111, posicaoFim: 120, tipo: 'alfanumerico', tamanho: 10, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Número do documento', campoDestino: 'numero_documento', cor: CORES_CAMPOS[13] },
+    { id: gerarIdCampo(), nome: 'Data Vencimento', posicaoInicio: 121, posicaoFim: 126, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Data de vencimento', campoDestino: 'data_vencimento', cor: CORES_CAMPOS[14] },
+    { id: gerarIdCampo(), nome: 'Valor do Título', posicaoInicio: 127, posicaoFim: 139, tipo: 'numerico', tamanho: 13, formato: 'valor_centavos', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Valor do título', campoDestino: 'valor', cor: CORES_CAMPOS[15] },
+    { id: gerarIdCampo(), nome: 'Banco Cobrador', posicaoInicio: 140, posicaoFim: 142, tipo: 'numerico', tamanho: 3, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Banco cobrador', cor: CORES_CAMPOS[0] },
+    { id: gerarIdCampo(), nome: 'Agência Cobradora', posicaoInicio: 143, posicaoFim: 147, tipo: 'numerico', tamanho: 5, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Agência cobradora', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Espécie', posicaoInicio: 148, posicaoFim: 149, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Espécie do título', campoDestino: 'especie', cor: CORES_CAMPOS[2] },
+    { id: gerarIdCampo(), nome: 'Aceite', posicaoInicio: 150, posicaoFim: 150, tipo: 'alfanumerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Aceite', campoDestino: 'aceite', cor: CORES_CAMPOS[3] },
+    { id: gerarIdCampo(), nome: 'Data Emissão', posicaoInicio: 151, posicaoFim: 156, tipo: 'numerico', tamanho: 6, formato: 'data_ddmmaa', obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Data de emissão', campoDestino: 'data_emissao', cor: CORES_CAMPOS[4] },
+    { id: gerarIdCampo(), nome: 'Tipo Inscrição Sacado', posicaoInicio: 219, posicaoFim: 220, tipo: 'numerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: false, descricao: '01=CPF 02=CNPJ', cor: CORES_CAMPOS[5] },
+    { id: gerarIdCampo(), nome: 'CNPJ/CPF Sacado', posicaoInicio: 221, posicaoFim: 234, tipo: 'numerico', tamanho: 14, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CNPJ ou CPF do sacado', campoDestino: 'sacado_cpf_cnpj', cor: CORES_CAMPOS[6] },
+    { id: gerarIdCampo(), nome: 'Nome Sacado', posicaoInicio: 235, posicaoFim: 274, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Nome do sacado', campoDestino: 'sacado_nome', cor: CORES_CAMPOS[7] },
+    { id: gerarIdCampo(), nome: 'Endereço Sacado', posicaoInicio: 275, posicaoFim: 314, tipo: 'alfanumerico', tamanho: 40, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Endereço do sacado', campoDestino: 'sacado_endereco', cor: CORES_CAMPOS[8] },
+    { id: gerarIdCampo(), nome: 'Bairro Sacado', posicaoInicio: 315, posicaoFim: 326, tipo: 'alfanumerico', tamanho: 12, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Bairro do sacado', campoDestino: 'sacado_bairro', cor: CORES_CAMPOS[9] },
+    { id: gerarIdCampo(), nome: 'CEP Sacado', posicaoInicio: 327, posicaoFim: 334, tipo: 'numerico', tamanho: 8, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'CEP do sacado', campoDestino: 'sacado_cep', cor: CORES_CAMPOS[10] },
+    { id: gerarIdCampo(), nome: 'Cidade Sacado', posicaoInicio: 335, posicaoFim: 349, tipo: 'alfanumerico', tamanho: 15, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'Cidade do sacado', campoDestino: 'sacado_cidade', cor: CORES_CAMPOS[11] },
+    { id: gerarIdCampo(), nome: 'UF Sacado', posicaoInicio: 350, posicaoFim: 351, tipo: 'alfanumerico', tamanho: 2, obrigatorio: true, utilizadoNoBoleto: true, descricao: 'UF do sacado', campoDestino: 'sacado_uf', cor: CORES_CAMPOS[12] },
+    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 395, posicaoFim: 400, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do registro', cor: CORES_CAMPOS[13] },
   ];
 }
 
 // Campos Trailer CNAB 400
 function gerarCamposTrailer400(): CampoCNABCompleto[] {
   return [
-    { id: gerarIdCampo(), nome: 'Tipo de Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 9', cor: CORES_CAMPOS[0] },
-    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 395, posicaoFim: 400, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do registro', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Identificação do Registro', posicaoInicio: 1, posicaoFim: 1, tipo: 'numerico', tamanho: 1, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Tipo de registro = 9', cor: CORES_CAMPOS[0] },
+    { id: gerarIdCampo(), nome: 'Brancos', posicaoInicio: 2, posicaoFim: 394, tipo: 'alfanumerico', tamanho: 393, obrigatorio: false, utilizadoNoBoleto: false, descricao: 'Brancos', cor: CORES_CAMPOS[1] },
+    { id: gerarIdCampo(), nome: 'Número Sequencial', posicaoInicio: 395, posicaoFim: 400, tipo: 'numerico', tamanho: 6, obrigatorio: true, utilizadoNoBoleto: false, descricao: 'Número sequencial do registro', cor: CORES_CAMPOS[2] },
   ];
 }
