@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// Atualização dos padrões CNAB e correções de tipos
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import type { ConfiguracaoCNAB, CampoCNAB, TipoRegistroCNAB, TipoLinhaCNAB } from '@/types/boleto';
