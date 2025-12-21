@@ -60,6 +60,34 @@ function buildAuthHeaders(auth: {
   return headers;
 }
 
+// Função para converter data OData para ISO
+function parseODataDate(value: any): string | null {
+  if (!value) return null;
+  
+  const strValue = String(value);
+  
+  // Formato OData: /Date(1765411200000)/ ou /Date(1765411200000+0000)/
+  const odataMatch = strValue.match(/\/Date\((-?\d+)([+-]\d{4})?\)\//);
+  if (odataMatch) {
+    const timestamp = parseInt(odataMatch[1], 10);
+    const date = new Date(timestamp);
+    return date.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
+  }
+  
+  // Formato ISO já válido
+  if (/^\d{4}-\d{2}-\d{2}/.test(strValue)) {
+    return strValue.split('T')[0];
+  }
+  
+  // Tenta parsear como data genérica
+  const parsed = new Date(strValue);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+  
+  return null;
+}
+
 // Função para obter valor em caminho JSON
 function getValueByPath(obj: any, path: string): any {
   if (!path) return obj;
@@ -318,14 +346,20 @@ serve(async (req) => {
           }
         }
 
+        // Converter datas do formato OData para ISO
+        const dataEmissaoConvertida = parseODataDate(dataEmissao);
+        const dataVencimentoConvertida = parseODataDate(dataVencimento);
+
+        console.log(`[sync-api-boletos] Datas convertidas: emissao=${dataEmissaoConvertida}, vencimento=${dataVencimentoConvertida}`);
+
         // Separar campos estruturados dos extras
         const dadosEstruturados = {
           integracao_id,
           numero_nota: numeroNota,
           cliente_id: clienteId,
           numero_cobranca: numeroCobranca,
-          data_emissao: dataEmissao,
-          data_vencimento: dataVencimento,
+          data_emissao: dataEmissaoConvertida,
+          data_vencimento: dataVencimentoConvertida,
           valor: valor,
           sincronizado_em: new Date().toISOString()
         };
