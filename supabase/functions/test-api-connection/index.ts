@@ -203,12 +203,28 @@ serve(async (req) => {
       sample_data = dados[0];
     }
 
-    // Salvar campos detectados na integração se houver integracao_id
-    if (integracao_id && campos_detectados.length > 0) {
-      await supabase
-        .from('vv_b_api_integracoes')
-        .update({ campos_api_detectados: campos_detectados })
-        .eq('id', integracao_id);
+    // Salvar campos detectados (e credenciais informadas) na integração se houver integracao_id
+    if (integracao_id) {
+      const updatePayload: any = {
+        campos_api_detectados: campos_detectados,
+      };
+
+      // Persistir credenciais APENAS se vieram no request (não sobrescrever com vazio)
+      if (endpoint) updatePayload.endpoint_base = endpoint;
+      if (json_path) updatePayload.json_path = json_path;
+      if (tipo_autenticacao) updatePayload.tipo_autenticacao = tipo_autenticacao;
+      if (auth_header_name) updatePayload.auth_header_name = auth_header_name;
+      if (auth_usuario) updatePayload.auth_usuario = auth_usuario;
+      if (auth_senha) updatePayload.auth_senha_encrypted = auth_senha;
+      if (auth_token) updatePayload.auth_token_encrypted = auth_token;
+      if (auth_api_key) updatePayload.auth_api_key_encrypted = auth_api_key;
+
+      if (campos_detectados.length > 0 || Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from('vv_b_api_integracoes')
+          .update(updatePayload)
+          .eq('id', integracao_id);
+      }
     }
 
     console.log(`[test-api-connection] Conexão bem-sucedida. ${campos_detectados.length} campos detectados.`);

@@ -9,39 +9,47 @@ const corsHeaders = {
 // Função para construir headers de autenticação
 function buildAuthHeaders(auth: {
   tipo: string;
-  usuario?: string;
-  senha?: string;
-  token?: string;
-  api_key?: string;
-  header_name?: string;
+  usuario?: string | null;
+  senha?: string | null;
+  token?: string | null;
+  api_key?: string | null;
+  header_name?: string | null;
 }): Record<string, string> {
   const headers: Record<string, string> = {};
-  
+
+  const headerName = auth.header_name || 'Authorization';
+
   switch (auth.tipo) {
-    case 'basic':
+    case 'basic': {
       if (auth.usuario && auth.senha) {
         const credentials = btoa(`${auth.usuario}:${auth.senha}`);
         headers['Authorization'] = `Basic ${credentials}`;
       }
       break;
+    }
+
     case 'bearer':
+    case 'oauth2': {
       if (auth.token) {
-        headers['Authorization'] = `Bearer ${auth.token}`;
+        headers[headerName] = `Bearer ${auth.token}`;
       }
       break;
-    case 'api_key':
+    }
+
+    case 'api_key': {
       if (auth.api_key) {
-        const headerName = auth.header_name || 'X-API-Key';
-        headers[headerName] = auth.api_key;
+        const apiKeyHeaderName = auth.header_name || 'X-API-Key';
+        headers[apiKeyHeaderName] = auth.api_key;
       }
       break;
-    case 'oauth2':
-      if (auth.token) {
-        headers['Authorization'] = `Bearer ${auth.token}`;
-      }
+    }
+
+    case 'custom':
+    case 'none':
+    default:
       break;
   }
-  
+
   return headers;
 }
 
@@ -95,25 +103,46 @@ serve(async (req) => {
 
     console.log(`[sync-api-boletos] Iniciando sincronização. Endpoint: ${integracao.endpoint_base}`);
 
-    // Construir headers de autenticação
+    // Construir headers de autenticação (e mesclar com headers personalizados)
+    const tipoAuth = integracao.tipo_autenticacao || 'none';
     const authHeaders = buildAuthHeaders({
-      tipo: integracao.tipo_autenticacao || 'none',
+      tipo: tipoAuth,
       usuario: integracao.auth_usuario,
-      senha: integracao.auth_senha_encrypted, // TODO: descriptografar
-      token: integracao.auth_token_encrypted, // TODO: descriptografar
-      api_key: integracao.auth_api_key_encrypted, // TODO: descriptografar
+      senha: integracao.auth_senha_encrypted, // atualmente armazenado em texto
+      token: integracao.auth_token_encrypted, // atualmente armazenado em texto
+      api_key: integracao.auth_api_key_encrypted, // atualmente armazenado em texto
       header_name: integracao.auth_header_name
     });
 
+    // Headers personalizados (tipo custom)
+    const customHeaders: Record<string, string> =
+      integracao.headers_autenticacao && typeof integracao.headers_autenticacao === 'object'
+        ? (integracao.headers_autenticacao as Record<string, string>)
+        : {};
+
+    // Validação mínima para evitar 401 por credencial ausente
+    if (tipoAuth === 'basic' && (!integracao.auth_usuario || !integracao.auth_senha_encrypted)) {
+      throw new Error('Credenciais Basic Auth não configuradas (usuário e senha).');
+    }
+    if ((tipoAuth === 'bearer' || tipoAuth === 'oauth2') && !integracao.auth_token_encrypted) {
+      throw new Error('Token Bearer/OAuth2 não configurado.');
+    }
+    if (tipoAuth === 'api_key' && !integracao.auth_api_key_encrypted) {
+      throw new Error('API Key não configurada.');
+    }
+
+    console.log(`[sync-api-boletos] Auth: ${tipoAuth}, custom_headers: ${Object.keys(customHeaders).length}, auth_headers: ${Object.keys(authHeaders).join(',')}`);
+
     // Chamar API real
     console.log(`[sync-api-boletos] Chamando API: ${integracao.endpoint_base}`);
-    
+
     const apiResponse = await fetch(integracao.endpoint_base, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...authHeaders
+        ...customHeaders,
+        ...authHeaders,
       }
     });
 
