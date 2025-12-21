@@ -184,17 +184,26 @@ serve(async (req) => {
       header_name: finalHeaderName
     });
 
-    // Adicionar parâmetro de limite se a API suportar
-    let urlWithLimit = finalEndpoint;
-    if (limit && !finalEndpoint.includes('$top=') && !finalEndpoint.includes('limit=')) {
-      const separator = finalEndpoint.includes('?') ? '&' : '?';
-      urlWithLimit = `${finalEndpoint}${separator}$top=${limit}`;
+    // Não adicionar filtros - usar endpoint limpo
+    // Apenas adicionar $top para limitar quantidade (sem $filter)
+    let urlToCall = finalEndpoint;
+    
+    // Remover parâmetros de filtro existentes se houver
+    const urlObj = new URL(finalEndpoint);
+    urlObj.searchParams.delete('$filter');
+    urlObj.searchParams.delete('filter');
+    
+    // Adicionar apenas limite de registros
+    if (limit && !urlObj.searchParams.has('$top') && !urlObj.searchParams.has('limit')) {
+      urlObj.searchParams.set('$top', String(limit));
     }
+    
+    urlToCall = urlObj.toString();
 
-    console.log(`[test-api-connection] Chamando API: ${urlWithLimit}`);
+    console.log(`[test-api-connection] Chamando API (sem filtros): ${urlToCall}`);
     console.log(`[test-api-connection] Tipo auth: ${finalTipoAuth}, tem token: ${!!finalAuthToken}, tem senha: ${!!finalAuthSenha}`);
 
-    const response = await fetch(urlWithLimit, {
+    const response = await fetch(urlToCall, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Save, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle, Play, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -70,6 +71,9 @@ export function MapeamentoCamposCard({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const [testando, setTestando] = useState(false);
+  const [previewData, setPreviewData] = useState<any[] | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [novoCampoApi, setNovoCampoApi] = useState('');
   
   const [novoCampo, setNovoCampo] = useState({
@@ -78,6 +82,38 @@ export function MapeamentoCamposCard({
     tipo_dado: 'string',
     obrigatorio: false,
   });
+
+  // Função para rodar teste e mostrar preview
+  const handleTestarMapeamento = async () => {
+    setTestando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('test-api-connection', {
+        body: {
+          integracao_id: integracaoId,
+          limit: 5 // Trazer 5 registros de amostra
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      setPreviewData(data.samples || []);
+      setShowPreview(true);
+      
+      toast({
+        title: 'Teste executado',
+        description: `${data.samples?.length || 0} registros retornados da API.`
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro no teste',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setTestando(false);
+    }
+  };
 
   const { data: mapeamentos, isLoading } = useQuery({
     queryKey: ['mapeamento-campos', integracaoId],
@@ -225,14 +261,74 @@ export function MapeamentoCamposCard({
             </CardDescription>
           </div>
           {onRefreshCampos && (
-            <Button variant="outline" size="sm" onClick={onRefreshCampos} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Atualizar Campos
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleTestarMapeamento} 
+                disabled={testando}
+                className="gap-2"
+              >
+                {testando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Testar API
+              </Button>
+              <Button variant="outline" size="sm" onClick={onRefreshCampos} className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Atualizar Campos
+              </Button>
+            </div>
           )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Preview dos dados da API */}
+        {showPreview && previewData && (
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-green-50 dark:bg-green-950 px-4 py-2 flex items-center justify-between border-b border-green-200 dark:border-green-800">
+              <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                Preview: {previewData.length} registros retornados da API (dados brutos)
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => setShowPreview(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="h-64">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">#</TableHead>
+                    {previewData.length > 0 && Object.keys(previewData[0]).slice(0, 8).map((key) => (
+                      <TableHead key={key} className="font-mono text-xs min-w-[120px]">
+                        {key}
+                      </TableHead>
+                    ))}
+                    {previewData.length > 0 && Object.keys(previewData[0]).length > 8 && (
+                      <TableHead className="text-muted-foreground">
+                        +{Object.keys(previewData[0]).length - 8} campos
+                      </TableHead>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {previewData.map((row, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-mono text-xs">{idx + 1}</TableCell>
+                      {Object.entries(row).slice(0, 8).map(([key, value]) => (
+                        <TableCell key={key} className="font-mono text-xs max-w-[200px] truncate" title={String(value)}>
+                          {value === null ? <span className="text-muted-foreground">null</span> : String(value).substring(0, 50)}
+                        </TableCell>
+                      ))}
+                      {Object.keys(row).length > 8 && (
+                        <TableCell className="text-muted-foreground text-xs">...</TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </div>
+        )}
+
         {/* Alerta de campos obrigatórios faltando */}
         {camposObrigatoriosFaltando.length > 0 && (
           <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-300 dark:border-amber-700 flex items-start gap-3">
