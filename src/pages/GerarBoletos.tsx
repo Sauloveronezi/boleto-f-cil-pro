@@ -16,19 +16,32 @@ import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import { listarTemplates } from '@/lib/pdfTemplateGenerator';
 import { useBancos } from '@/hooks/useBancos';
 import { DEFAULT_MODELOS } from '@/data/templates';
-
-const WIZARD_STEPS: WizardStep[] = [
-  { id: 1, title: 'Origem e Banco', description: 'Selecione a origem dos dados e o banco' },
-  { id: 2, title: 'Clientes', description: 'Filtre e selecione os clientes' },
-  { id: 3, title: 'Notas Fiscais', description: 'Selecione as notas para gerar boletos' },
-  { id: 4, title: 'Gerar', description: 'Configure e gere os boletos' },
-];
-
+const WIZARD_STEPS: WizardStep[] = [{
+  id: 1,
+  title: 'Origem e Banco',
+  description: 'Selecione a origem dos dados e o banco'
+}, {
+  id: 2,
+  title: 'Clientes',
+  description: 'Filtre e selecione os clientes'
+}, {
+  id: 3,
+  title: 'Notas Fiscais',
+  description: 'Selecione as notas para gerar boletos'
+}, {
+  id: 4,
+  title: 'Gerar',
+  description: 'Configure e gere os boletos'
+}];
 export default function GerarBoletos() {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const { data: bancos = [], isLoading: bancosLoading } = useBancos();
-
+  const {
+    toast
+  } = useToast();
+  const {
+    data: bancos = [],
+    isLoading: bancosLoading
+  } = useBancos();
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
@@ -40,8 +53,7 @@ export default function GerarBoletos() {
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
   const [modelos, setModelos] = useState<ModeloBoleto[]>(DEFAULT_MODELOS);
-
-  const banco = bancos.find((b) => b.id === bancoSelecionado) || {
+  const banco = bancos.find(b => b.id === bancoSelecionado) || {
     id: 'unknown',
     nome_banco: 'Banco Desconhecido',
     codigo_banco: '000',
@@ -56,28 +68,29 @@ export default function GerarBoletos() {
   // Carregar modelos salvos do localStorage (templates importados)
   useEffect(() => {
     const templatesImportados = listarTemplates();
-    
+
     // Converter templates para ModeloBoleto
-    const modelosImportados: ModeloBoleto[] = templatesImportados.map((template) => ({
+    const modelosImportados: ModeloBoleto[] = templatesImportados.map(template => ({
       id: template.id,
       nome_modelo: template.nome,
       banco_id: template.bancos_compativeis[0] || '',
       bancos_compativeis: template.bancos_compativeis,
-      tipo_layout: 'CNAB_400', // Default, ajustado conforme necessidade
+      tipo_layout: 'CNAB_400',
+      // Default, ajustado conforme necessidade
       padrao: false,
-      campos_mapeados: template.campos.map((campo) => ({
+      campos_mapeados: template.campos.map(campo => ({
         id: campo.tipo,
         nome: campo.label,
         variavel: `{{${campo.tipo}}}`,
         posicao_x: campo.x,
         posicao_y: campo.y,
         largura: campo.largura,
-        altura: campo.altura,
+        altura: campo.altura
       })),
       texto_instrucoes: '',
       criado_em: template.criado_em,
       atualizado_em: template.atualizado_em,
-      template_pdf_id: template.id,
+      template_pdf_id: template.id
     }));
 
     // Combinar com modelos padrão
@@ -86,41 +99,39 @@ export default function GerarBoletos() {
 
   // Dados a usar (apenas CNAB importado, sem mocks)
   const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
-  const clientes: Cliente[] = isCNAB ? (dadosCNAB?.clientes || []) : [];
-  const notas: NotaFiscal[] = isCNAB ? (dadosCNAB?.notas || []) : [];
+  const clientes: Cliente[] = isCNAB ? dadosCNAB?.clientes || [] : [];
+  const notas: NotaFiscal[] = isCNAB ? dadosCNAB?.notas || [] : [];
 
   // Processar arquivo CNAB quando selecionado
   useEffect(() => {
     if (arquivoCNAB && tipoOrigem && isCNAB && padraoCNAB) {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = e => {
         const conteudo = e.target?.result as string;
         const dados = parseCNAB(conteudo, tipoOrigem, padraoCNAB);
         setDadosCNAB(dados);
-        
+
         // Resetar seleções
         setClientesSelecionados([]);
         setNotasSelecionadas([]);
-        
         if (dados.notas.length === 0) {
           toast({
             title: 'Atenção',
             description: 'Nenhum boleto encontrado no arquivo utilizando o padrão selecionado. Verifique se o padrão corresponde ao arquivo.',
-            variant: 'destructive',
+            variant: 'destructive'
           });
         } else {
           // Verifica se houve fallback (notas com numero_nota começando com RAW-)
           const temFallback = dados.notas.some(n => n.numero_nota.startsWith('RAW-'));
-          
           if (temFallback) {
-             toast({
+            toast({
               title: 'Arquivo processado com ressalvas',
-              description: `${dados.notas.length} registro(s) bruto(s) importados. Os dados podem estar incompletos.`,
+              description: `${dados.notas.length} registro(s) bruto(s) importados. Os dados podem estar incompletos.`
             });
           } else {
             toast({
               title: 'Arquivo processado!',
-              description: `${dados.clientes.length} cliente(s) e ${dados.notas.length} nota(s) importados do arquivo CNAB.`,
+              description: `${dados.clientes.length} cliente(s) e ${dados.notas.length} nota(s) importados do arquivo CNAB.`
             });
           }
         }
@@ -132,16 +143,12 @@ export default function GerarBoletos() {
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
     if (bancoSelecionado) {
-      const modeloPadrao = modelos.find(
-        (m) => (m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)) && m.padrao
-      );
+      const modeloPadrao = modelos.find(m => (m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)) && m.padrao);
       if (modeloPadrao) {
         setModeloSelecionado(modeloPadrao.id);
       } else {
         // Se não houver modelo padrão, seleciona o primeiro disponível para o banco
-        const primeiroModelo = modelos.find(
-          (m) => m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)
-        );
+        const primeiroModelo = modelos.find(m => m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado));
         if (primeiroModelo) {
           setModeloSelecionado(primeiroModelo.id);
         }
@@ -157,7 +164,6 @@ export default function GerarBoletos() {
       setPadraoCNAB(null);
     }
   }, [tipoOrigem, isCNAB]);
-
   const canProceed = () => {
     switch (currentStep) {
       case 1:
@@ -182,110 +188,53 @@ export default function GerarBoletos() {
         return false;
     }
   };
-
   const handleNext = () => {
     if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     }
   };
-
   const handlePrevious = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
-
   const handleGerar = () => {
     if (!banco || !tipoOrigem) return;
 
     // Filtrar notas selecionadas
-    const notasParaGerar = notas.filter((n) => notasSelecionadas.includes(n.id));
+    const notasParaGerar = notas.filter(n => notasSelecionadas.includes(n.id));
 
     // Gerar o PDF com o modelo do banco
-    gerarPDFBoletos(
-      notasParaGerar,
-      clientes,
-      banco,
-      configuracao,
-      tipoOrigem,
-      tipoSaida
-    );
-
+    gerarPDFBoletos(notasParaGerar, clientes, banco, configuracao, tipoOrigem, tipoSaida);
     toast({
       title: 'Boletos gerados com sucesso!',
-      description: `${notasSelecionadas.length} boleto(s) foram gerados e o download foi iniciado.`,
+      description: `${notasSelecionadas.length} boleto(s) foram gerados e o download foi iniciado.`
     });
   };
-
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
         if (bancosLoading) {
-          return (
-            <div className="flex items-center justify-center py-12">
+          return <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          );
+            </div>;
         }
-        return (
-          <BancoSelector
-            bancos={bancos}
-            bancoSelecionado={bancoSelecionado}
-            tipoImpressao={tipoOrigem}
-            arquivoCNAB={arquivoCNAB}
-            padraoCNAB={padraoCNAB}
-            onBancoChange={setBancoSelecionado}
-            onTipoImpressaoChange={setTipoOrigem}
-            onArquivoChange={setArquivoCNAB}
-            onPadraoCNABChange={setPadraoCNAB}
-          />
-        );
+        return <BancoSelector bancos={bancos} bancoSelecionado={bancoSelecionado} tipoImpressao={tipoOrigem} arquivoCNAB={arquivoCNAB} padraoCNAB={padraoCNAB} onBancoChange={setBancoSelecionado} onTipoImpressaoChange={setTipoOrigem} onArquivoChange={setArquivoCNAB} onPadraoCNABChange={setPadraoCNAB} />;
       case 2:
-        return (
-          <ClienteFilter
-            clientes={clientes}
-            clientesSelecionados={clientesSelecionados}
-            onClientesChange={setClientesSelecionados}
-          />
-        );
+        return <ClienteFilter clientes={clientes} clientesSelecionados={clientesSelecionados} onClientesChange={setClientesSelecionados} />;
       case 3:
-        return (
-          <NotaFiscalFilter
-            notas={notas}
-            clientes={clientes}
-            clientesSelecionados={clientesSelecionados}
-            notasSelecionadas={notasSelecionadas}
-            onNotasChange={setNotasSelecionadas}
-          />
-        );
+        return <NotaFiscalFilter notas={notas} clientes={clientes} clientesSelecionados={clientesSelecionados} notasSelecionadas={notasSelecionadas} onNotasChange={setNotasSelecionadas} />;
       case 4:
-        return (
-          <ResumoGeracao
-            tipoOrigem={tipoOrigem}
-            banco={banco}
-            clientes={clientes}
-            clientesSelecionados={clientesSelecionados}
-            notas={notas}
-            notasSelecionadas={notasSelecionadas}
-            modelos={modelos}
-            modeloSelecionado={modeloSelecionado}
-            onModeloChange={setModeloSelecionado}
-            tipoSaida={tipoSaida}
-            onTipoSaidaChange={setTipoSaida}
-            onGerar={handleGerar}
-          />
-        );
+        return <ResumoGeracao tipoOrigem={tipoOrigem} banco={banco} clientes={clientes} clientesSelecionados={clientesSelecionados} notas={notas} notasSelecionadas={notasSelecionadas} modelos={modelos} modeloSelecionado={modeloSelecionado} onModeloChange={setModeloSelecionado} tipoSaida={tipoSaida} onTipoSaidaChange={setTipoSaida} onGerar={handleGerar} />;
       default:
         return null;
     }
   };
-
-  return (
-    <MainLayout>
+  return <MainLayout>
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Gerar Boletos</h1>
+          <h1 className="text-2xl font-bold text-foreground">Gerar Boletos_teste</h1>
           <p className="text-muted-foreground">
             Siga as etapas para selecionar origem dos dados, banco, clientes, notas e gerar os boletos em PDF
           </p>
@@ -303,12 +252,7 @@ export default function GerarBoletos() {
 
         {/* Navigation Buttons */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
-          <Button
-            variant="outline"
-            onClick={handlePrevious}
-            disabled={currentStep === 1}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Voltar
           </Button>
@@ -319,16 +263,12 @@ export default function GerarBoletos() {
             </span>
           </div>
 
-          {currentStep < 4 ? (
-            <Button onClick={handleNext} disabled={!canProceed()} className="gap-2">
+          {currentStep < 4 ? <Button onClick={handleNext} disabled={!canProceed()} className="gap-2">
               Avançar
               <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <div /> // Placeholder para manter o layout
-          )}
+            </Button> : <div /> // Placeholder para manter o layout
+        }
         </div>
       </div>
-    </MainLayout>
-  );
+    </MainLayout>;
 }
