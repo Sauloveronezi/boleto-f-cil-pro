@@ -274,16 +274,15 @@ serve(async (req) => {
           continue;
         }
 
-        // Buscar cliente pelo CNPJ
-        const clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente));
+        // Buscar cliente pelo CNPJ (se não existir, ainda assim salvamos com cliente_id = null)
+        const clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente)) ?? null;
         if (!clienteId) {
-          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente}`);
+          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente} (salvando com cliente_id = null)`);
           erros.push({
             tipo: 'cliente_nao_encontrado',
             cnpj: cnpjCliente,
-            numero_nota: numeroNota
+            numero_nota: numeroNota,
           });
-          continue;
         }
 
         // Separar campos estruturados dos extras
@@ -309,15 +308,23 @@ serve(async (req) => {
           }
         }
 
+        // Sempre persistir o CNPJ original nos extras para conciliação
+        dadosExtras.cliente_cnpj = cnpjCliente;
+
         // Upsert - inserir ou atualizar se já existe
-        const { data: existing, error: checkError } = await supabase
+        let existingQuery: any = supabase
           .from('vv_b_boletos_api')
           .select('id')
+          .eq('integracao_id', integracao_id)
           .eq('numero_nota', numeroNota)
-          .eq('cliente_id', clienteId)
           .eq('numero_cobranca', numeroCobranca)
-          .or('deleted.is.null,deleted.eq.""')
-          .maybeSingle();
+          .or('deleted.is.null,deleted.eq.""');
+
+        existingQuery = clienteId
+          ? existingQuery.eq('cliente_id', clienteId)
+          : existingQuery.is('cliente_id', null);
+
+        const { data: existing, error: checkError } = await existingQuery.maybeSingle();
 
         if (checkError) {
           console.error('[sync-api-boletos] Erro ao verificar existência:', checkError);
