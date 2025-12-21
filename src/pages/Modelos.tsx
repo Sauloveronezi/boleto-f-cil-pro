@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2 } from 'lucide-react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -94,6 +95,7 @@ export default function Modelos() {
   }, []);
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
+  const [modeloVisualizando, setModeloVisualizando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
 
@@ -298,6 +300,15 @@ export default function Modelos() {
                 </div>
 
                 <div className="flex gap-2 pt-2 border-t border-border">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setModeloVisualizando(modelo)}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Ver
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -516,6 +527,165 @@ export default function Modelos() {
           onOpenChange={setImportarPDFOpen}
           onImportar={handleImportarPDF}
         />
+
+        {/* Modal de Visualização do Modelo */}
+        <Dialog open={!!modeloVisualizando} onOpenChange={() => setModeloVisualizando(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Visualização: {modeloVisualizando?.nome_modelo}
+              </DialogTitle>
+              <DialogDescription>
+                Preview do layout do modelo de boleto
+              </DialogDescription>
+            </DialogHeader>
+
+            {modeloVisualizando && (
+              <ScrollArea className="h-[60vh]">
+                <div className="space-y-6 p-4">
+                  {/* Informações do modelo */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">Tipo de Layout</Label>
+                      <p className="font-medium">{TIPOS_IMPRESSAO[modeloVisualizando.tipo_layout]?.label || modeloVisualizando.tipo_layout}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Bancos Compatíveis</Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {modeloVisualizando.bancos_compativeis?.map(bancoId => {
+                          const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoId);
+                          return banco ? (
+                            <Badge key={bancoId} variant="outline">{banco.codigo_banco}</Badge>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Total de Campos</Label>
+                      <p className="font-medium">{modeloVisualizando.campos_mapeados?.length || 0} campos</p>
+                    </div>
+                  </div>
+
+                  {/* Preview visual do layout */}
+                  <div className="border rounded-lg p-4 bg-white dark:bg-zinc-900 min-h-[400px] relative">
+                    <div className="text-center text-sm text-muted-foreground mb-4">
+                      Layout do Boleto (representação simplificada)
+                    </div>
+                    
+                    {/* Simular layout do boleto */}
+                    <div className="space-y-2 font-mono text-xs">
+                      <div className="border-b-2 border-black dark:border-white pb-2 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-8 bg-muted flex items-center justify-center text-[10px]">LOGO</div>
+                          <div>
+                            <div className="font-bold">{'{{banco_nome}}'}</div>
+                            <div>{'{{banco_codigo}}'}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-sm">{'{{linha_digitavel}}'}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 py-2 border-b">
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Local de Pagamento</Label>
+                          <div>{'{{local_pagamento}}'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Vencimento</Label>
+                          <div>{'{{data_vencimento}}'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Agência/Código</Label>
+                          <div>{'{{agencia_codigo}}'}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 py-2 border-b">
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Beneficiário</Label>
+                          <div>{'{{beneficiario_nome}}'}</div>
+                          <div>{'{{beneficiario_cnpj}}'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Nosso Número</Label>
+                          <div>{'{{nosso_numero}}'}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 py-2 border-b">
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Nº Documento</Label>
+                          <div>{'{{numero_documento}}'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Valor Documento</Label>
+                          <div>{'{{valor_documento}}'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-muted-foreground">Valor Cobrado</Label>
+                          <div>{'{{valor_cobrado}}'}</div>
+                        </div>
+                      </div>
+
+                      <div className="py-2 border-b">
+                        <Label className="text-[10px] text-muted-foreground">Pagador</Label>
+                        <div>{'{{pagador_nome}}'}</div>
+                        <div>{'{{pagador_endereco}}'}</div>
+                        <div>{'{{pagador_cnpj}}'}</div>
+                      </div>
+
+                      <div className="py-4 flex justify-center">
+                        <div className="h-12 w-full max-w-[400px] bg-black dark:bg-white flex items-center justify-center">
+                          <span className="text-white dark:text-black text-[10px]">CÓDIGO DE BARRAS</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lista de campos mapeados */}
+                  {modeloVisualizando.campos_mapeados && modeloVisualizando.campos_mapeados.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium">Campos Mapeados</Label>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {modeloVisualizando.campos_mapeados.map((campo, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {campo.nome || campo.variavel}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Instruções */}
+                  {modeloVisualizando.texto_instrucoes && (
+                    <div>
+                      <Label className="text-sm font-medium">Texto de Instruções</Label>
+                      <div className="mt-1 p-3 bg-muted rounded text-sm">
+                        {modeloVisualizando.texto_instrucoes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setModeloVisualizando(null)}>
+                Fechar
+              </Button>
+              <Button onClick={() => {
+                setModeloVisualizando(null);
+                setModeloEditando(modeloVisualizando);
+              }}>
+                <Edit className="h-4 w-4 mr-2" />
+                Editar Modelo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

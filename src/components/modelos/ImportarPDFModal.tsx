@@ -358,7 +358,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 <Eye className="h-4 w-4" />
                 Pré-visualização do PDF Modelo
               </Label>
-              <div className="flex-1 border rounded-lg bg-muted/30 flex items-center justify-center overflow-hidden">
+            <div className="flex-1 border rounded-lg bg-muted/30 flex items-center justify-center overflow-hidden">
                 {processando ? (
                   <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -368,11 +368,27 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                     </p>
                   </div>
                 ) : previewUrl ? (
-                  <iframe
-                    src={previewUrl}
+                  <object
+                    data={previewUrl}
+                    type="application/pdf"
                     className="w-full h-full rounded"
                     title="Preview do PDF"
-                  />
+                  >
+                    <div className="text-center p-4">
+                      <FileText className="h-12 w-12 mx-auto mb-2 text-primary" />
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Visualização bloqueada pelo navegador
+                      </p>
+                      <a 
+                        href={previewUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary underline text-sm"
+                      >
+                        Clique aqui para abrir em nova aba
+                      </a>
+                    </div>
+                  </object>
                 ) : (
                   <div className="text-center text-muted-foreground p-8">
                     <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />

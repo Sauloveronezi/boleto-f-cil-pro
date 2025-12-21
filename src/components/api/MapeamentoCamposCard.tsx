@@ -95,10 +95,14 @@ export function MapeamentoCamposCard({
     enabled: !!integracaoId,
   });
 
-  // Campos da API que ainda não foram mapeados
-  const camposNaoMapeados = camposApiDetectados.filter(
-    campo => !mapeamentos?.some(m => m.campo_api === campo)
-  );
+  // Campos já mapeados (para marcar como usados, mas não remover)
+  const camposMapeados = new Set(mapeamentos?.map(m => m.campo_api) || []);
+  
+  // TODOS os campos da API devem aparecer, marcando os já usados
+  const camposDisponiveis = camposApiDetectados.map(campo => ({
+    campo,
+    jaMapeado: camposMapeados.has(campo)
+  }));
 
   // Atualizar seleção do campo quando mudar
   useEffect(() => {
@@ -224,26 +228,28 @@ export function MapeamentoCamposCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Campos detectados da API */}
+        {/* Campos detectados da API - mostra todos, marca os já mapeados */}
         {camposApiDetectados.length > 0 && (
           <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
             <Label className="text-sm font-medium text-blue-800 dark:text-blue-200">
-              Campos Disponíveis da API ({camposNaoMapeados.length} não mapeados)
+              Campos Disponíveis da API ({camposApiDetectados.length} campos, {camposDisponiveis.filter(c => c.jaMapeado).length} já mapeados)
             </Label>
-            <div className="flex flex-wrap gap-1 mt-2 max-h-24 overflow-y-auto">
-              {camposNaoMapeados.map((campo) => (
+            <div className="flex flex-wrap gap-1 mt-2 max-h-32 overflow-y-auto">
+              {camposDisponiveis.map(({ campo, jaMapeado }) => (
                 <Badge 
                   key={campo} 
-                  variant="outline" 
-                  className="text-xs font-mono cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900"
-                  onClick={() => setNovoCampo({ ...novoCampo, campo_api: campo })}
+                  variant={jaMapeado ? "secondary" : "outline"}
+                  className={`text-xs font-mono cursor-pointer ${
+                    jaMapeado 
+                      ? 'opacity-60 line-through' 
+                      : 'hover:bg-blue-100 dark:hover:bg-blue-900'
+                  }`}
+                  onClick={() => !jaMapeado && setNovoCampo({ ...novoCampo, campo_api: campo })}
+                  title={jaMapeado ? 'Campo já mapeado' : 'Clique para selecionar'}
                 >
-                  {campo}
+                  {jaMapeado && '✓ '}{campo}
                 </Badge>
               ))}
-              {camposNaoMapeados.length === 0 && (
-                <span className="text-xs text-muted-foreground">Todos os campos foram mapeados</span>
-              )}
             </div>
           </div>
         )}
@@ -263,11 +269,13 @@ export function MapeamentoCamposCard({
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {camposNaoMapeados.map((campo) => (
-                      <SelectItem key={campo} value={campo}>
-                        <span className="font-mono text-xs">{campo}</span>
-                      </SelectItem>
-                    ))}
+                    {camposDisponiveis
+                      .filter(c => !c.jaMapeado)
+                      .map(({ campo }) => (
+                        <SelectItem key={campo} value={campo}>
+                          <span className="font-mono text-xs">{campo}</span>
+                        </SelectItem>
+                      ))}
                     <SelectItem value="__custom__">
                       <span className="text-muted-foreground">+ Campo personalizado</span>
                     </SelectItem>
