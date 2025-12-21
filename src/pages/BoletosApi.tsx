@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -23,9 +24,12 @@ import {
 import { Calendar, Search, Filter, Printer, FileText, RefreshCw } from 'lucide-react';
 import { useBoletosApi, useSyncApi, useApiIntegracoes } from '@/hooks/useApiIntegracao';
 import { useClientes } from '@/hooks/useClientes';
+import { useBancos } from '@/hooks/useBancos';
+import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 
 const ESTADOS_BRASIL = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -45,9 +49,13 @@ export default function BoletosApi() {
     transportadora: ''
   });
   const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('');
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
+  const { data: bancos } = useBancos();
+  const { data: configuracoes } = useConfiguracoesBanco();
   const { data: boletos, isLoading, refetch } = useBoletosApi({
     dataEmissaoInicio: filtros.dataEmissaoInicio || undefined,
     dataEmissaoFim: filtros.dataEmissaoFim || undefined,
@@ -60,12 +68,36 @@ export default function BoletosApi() {
   const syncApi = useSyncApi();
 
   // Filtrar por transportadora do cliente (campo agente_frete)
-  const boletosFiltrados = boletos?.filter((b: any) => {
-    if (filtros.transportadora) {
-      return b.cliente?.agente_frete?.toLowerCase().includes(filtros.transportadora.toLowerCase());
+  const boletosFiltrados = useMemo(() => {
+    return boletos?.filter((b: any) => {
+      if (filtros.transportadora) {
+        return b.cliente?.agente_frete?.toLowerCase().includes(filtros.transportadora.toLowerCase());
+      }
+      return true;
+    }) || [];
+  }, [boletos, filtros.transportadora]);
+
+  // Controle de seleção
+  const todosIds = useMemo(() => boletosFiltrados.map((b: any) => b.id), [boletosFiltrados]);
+  const todosSelecionados = todosIds.length > 0 && todosIds.every((id: string) => selecionados.has(id));
+
+  const handleSelecionarTodos = (checked: boolean) => {
+    if (checked) {
+      setSelecionados(new Set(todosIds));
+    } else {
+      setSelecionados(new Set());
     }
-    return true;
-  }) || [];
+  };
+
+  const handleSelecionarItem = (id: string, checked: boolean) => {
+    const novoSet = new Set(selecionados);
+    if (checked) {
+      novoSet.add(id);
+    } else {
+      novoSet.delete(id);
+    }
+    setSelecionados(novoSet);
+  };
 
   const handleSincronizar = async () => {
     if (!integracaoSelecionada) {
@@ -105,11 +137,89 @@ export default function BoletosApi() {
       cidade: '',
       transportadora: ''
     });
+    setSelecionados(new Set());
   };
 
   const formatCurrency = (value: number | null) => {
     if (value === null) return '-';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
+  const handleImprimirSelecionados = () => {
+    if (selecionados.size === 0) {
+      toast({
+        title: 'Nenhum boleto selecionado',
+        description: 'Selecione ao menos um boleto para imprimir',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!bancoSelecionado) {
+      toast({
+        title: 'Selecione um banco',
+        description: 'Escolha o banco emissor para gerar os boletos',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const banco = bancos?.find(b => b.id === bancoSelecionado);
+    if (!banco) {
+      toast({
+        title: 'Banco não encontrado',
+        description: 'Selecione um banco válido',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const configuracao = configuracoes?.find(c => c.banco_id === bancoSelecionado);
+
+    // Converter boletos da API para formato de NotaFiscal
+    const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
+    
+    const notasParaImprimir = boletosSelecionados.map((boleto: any) => ({
+      id: boleto.id,
+      numero_nota: boleto.numero_nota,
+      serie: boleto.dados_extras?.serie || '1',
+      codigo_cliente: boleto.cliente_id || '',
+      data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
+      data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
+      valor_titulo: boleto.valor || 0,
+      moeda: 'BRL',
+      status: 'aberta' as const,
+      referencia_interna: boleto.numero_cobranca || ''
+    }));
+
+    const clientesParaImprimir = boletosSelecionados
+      .filter((b: any) => b.cliente)
+      .map((b: any) => b.cliente)
+      .filter((cliente: any, index: number, self: any[]) => 
+        index === self.findIndex((c) => c.id === cliente.id)
+      );
+
+    try {
+      gerarPDFBoletos(
+        notasParaImprimir,
+        clientesParaImprimir,
+        banco,
+        configuracao,
+        'API_CDS',
+        'arquivo_unico'
+      );
+
+      toast({
+        title: 'PDF gerado com sucesso',
+        description: `${selecionados.size} boleto(s) gerado(s)`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao gerar PDF',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
   };
 
   return (
@@ -152,9 +262,28 @@ export default function BoletosApi() {
               )}
               Sincronizar
             </Button>
-            <Button className="gap-2">
+            <Select 
+              value={bancoSelecionado} 
+              onValueChange={setBancoSelecionado}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Banco emissor" />
+              </SelectTrigger>
+              <SelectContent>
+                {bancos?.filter(b => b.ativo).map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.codigo_banco} - {b.nome_banco}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              className="gap-2"
+              onClick={handleImprimirSelecionados}
+              disabled={selecionados.size === 0}
+            >
               <Printer className="h-4 w-4" />
-              Imprimir Selecionados
+              Imprimir Selecionados ({selecionados.size})
             </Button>
           </div>
         </div>
@@ -301,7 +430,10 @@ export default function BoletosApi() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">
-                      <input type="checkbox" className="rounded" />
+                      <Checkbox
+                        checked={todosSelecionados}
+                        onCheckedChange={handleSelecionarTodos}
+                      />
                     </TableHead>
                     <TableHead>Nº Nota</TableHead>
                     <TableHead>Nº Cobrança</TableHead>
@@ -318,7 +450,10 @@ export default function BoletosApi() {
                   {boletosFiltrados.map((boleto: any) => (
                     <TableRow key={boleto.id}>
                       <TableCell>
-                        <input type="checkbox" className="rounded" />
+                        <Checkbox
+                          checked={selecionados.has(boleto.id)}
+                          onCheckedChange={(checked) => handleSelecionarItem(boleto.id, !!checked)}
+                        />
                       </TableCell>
                       <TableCell className="font-mono">{boleto.numero_nota}</TableCell>
                       <TableCell className="font-mono">{boleto.numero_cobranca}</TableCell>
