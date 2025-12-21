@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Settings, Percent, Calendar, FileText, Edit } from 'lucide-react';
+import { Building2, Settings, Percent, Calendar, FileText, Edit, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,18 +21,21 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
-import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { Banco, ConfiguracaoBanco, TIPOS_IMPRESSAO } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
+import { useBancos } from '@/hooks/useBancos';
+import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
 
 export default function Bancos() {
   const { toast } = useToast();
+  const { data: bancos = [], isLoading: bancosLoading } = useBancos();
+  const { data: configuracoes = [] } = useConfiguracoesBanco();
+  
   const [bancoEditando, setBancoEditando] = useState<Banco | null>(null);
   const [configEditando, setConfigEditando] = useState<ConfiguracaoBanco | null>(null);
 
   const getConfiguracao = (bancoId: string) => {
-    // Sem mocks, retorna undefined por enquanto
-    return undefined;
+    return configuracoes.find(c => c.banco_id === bancoId);
   };
 
   const handleSalvar = () => {
@@ -50,6 +53,16 @@ export default function Bancos() {
     setConfigEditando(config || null);
   };
 
+  if (bancosLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -63,7 +76,7 @@ export default function Bancos() {
 
         {/* Grid de Bancos */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {BANCOS_SUPORTADOS.map((banco) => {
+          {bancos.map((banco) => {
             const config = getConfiguracao(banco.id);
             return (
               <Card key={banco.id} className="hover:shadow-card-hover transition-shadow">
@@ -87,7 +100,7 @@ export default function Bancos() {
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">
-                      Layout: {TIPOS_IMPRESSAO[banco.tipo_layout_padrao].label}
+                      Layout: {banco.tipo_layout_padrao ? TIPOS_IMPRESSAO[banco.tipo_layout_padrao]?.label || banco.tipo_layout_padrao : '-'}
                     </span>
                   </div>
 
@@ -129,6 +142,12 @@ export default function Bancos() {
               </Card>
             );
           })}
+          
+          {bancos.length === 0 && (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              Nenhum banco cadastrado.
+            </div>
+          )}
         </div>
 
         {/* Modal de Edição */}
