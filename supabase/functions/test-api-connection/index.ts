@@ -38,6 +38,37 @@ function getValueByPath(obj: any, path: string): any {
   return current;
 }
 
+function extractArrayFromApiResponse(raw: any, jsonPath?: string | null): any[] {
+  let candidate = raw;
+
+  if (jsonPath) {
+    const viaPath = getValueByPath(raw, jsonPath);
+    if (viaPath !== undefined && viaPath !== null) {
+      candidate = viaPath;
+    }
+  }
+
+  const candidates = [
+    candidate,
+    candidate?.d?.results,
+    candidate?.d?.value,
+    candidate?.value,
+    candidate?.results,
+    raw?.d?.results,
+    raw?.d?.value,
+    raw?.value,
+    raw?.results,
+  ];
+
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+
+  if (candidate && typeof candidate === 'object') return [candidate];
+  if (raw && typeof raw === 'object') return [raw];
+  return [];
+}
+
 // Função para construir headers de autenticação
 function buildAuthHeaders(auth: {
   tipo: string;
@@ -179,28 +210,21 @@ serve(async (req) => {
 
     apiResponse = await response.json();
 
-    // Extrair dados usando json_path
-    let dados = apiResponse;
-    if (finalJsonPath) {
-      dados = getValueByPath(apiResponse, finalJsonPath);
+    // Extrair dados (sem filtros) e tentar detectar automaticamente formatos comuns (OData)
+    let dados = extractArrayFromApiResponse(apiResponse, finalJsonPath);
+
+    // Garantir que temos dados
+    if (!Array.isArray(dados) || dados.length === 0) {
+      throw new Error('Resposta da API não contém dados válidos (verifique o caminho JSON ou o formato OData)');
     }
 
-    // Garantir que temos um array
-    if (!Array.isArray(dados)) {
-      if (dados && typeof dados === 'object') {
-        dados = [dados];
-      } else {
-        throw new Error('Resposta da API não contém dados válidos no caminho especificado');
-      }
-    }
+    // Limitar quantidade de registros (amostra)
+    const samples = dados.slice(0, limit);
 
-    // Limitar quantidade de registros
-    dados = dados.slice(0, limit);
-
-    if (dados.length > 0) {
+    if (samples.length > 0) {
       // Extrair campos do primeiro registro
-      campos_detectados = extractFields(dados[0]);
-      sample_data = dados[0];
+      campos_detectados = extractFields(samples[0]);
+      sample_data = samples[0];
     }
 
     // Salvar campos detectados (e credenciais informadas) na integração se houver integracao_id
@@ -234,6 +258,8 @@ serve(async (req) => {
       message: 'Conexão bem-sucedida!',
       campos_detectados,
       sample_data,
+      samples,
+      samples_count: samples.length,
       total_registros: dados.length,
       raw_response_keys: Object.keys(apiResponse)
     }), {

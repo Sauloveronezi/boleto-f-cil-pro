@@ -44,6 +44,7 @@ export function ApiConfigCard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
+  const [syncingIntegracaoId, setSyncingIntegracaoId] = useState<string | null>(null);
 
   const { data: integracoes, isLoading, refetch } = useQuery({
     queryKey: ['api-integracoes'],
@@ -86,8 +87,38 @@ export function ApiConfigCard() {
   });
 
   const handleSyncronizar = async (integracaoId: string, modoDemo: boolean) => {
+    if (syncApi.isPending) return;
+
     try {
+      // Validar mapeamentos obrigatórios antes de sincronizar
+      const { data: mapeamentos, error: mapError } = await supabase
+        .from('vv_b_api_mapeamento_campos')
+        .select('campo_destino')
+        .eq('integracao_id', integracaoId)
+        .is('deleted', null);
+
+      if (mapError) throw mapError;
+
+      const destinos = new Set((mapeamentos || []).map((m: any) => m.campo_destino));
+      const obrigatorios = [
+        { key: 'numero_nota', label: 'Número da Nota' },
+        { key: 'numero_cobranca', label: 'Número Cobrança' },
+        { key: 'cliente_cnpj', label: 'CNPJ Cliente' },
+      ];
+
+      const faltando = obrigatorios.filter((c) => !destinos.has(c.key));
+      if (faltando.length > 0) {
+        toast({
+          title: 'Mapeamento incompleto',
+          description: `Faltando mapear: ${faltando.map((c) => c.label).join(', ')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setSyncingIntegracaoId(integracaoId);
       const result = await syncApi.mutateAsync({ integracao_id: integracaoId, modo_demo: modoDemo });
+
       if (result.success) {
         toast({
           title: 'Sincronização concluída',
@@ -98,6 +129,8 @@ export function ApiConfigCard() {
       }
     } catch (error: any) {
       toast({ title: 'Erro na sincronização', description: error.message, variant: 'destructive' });
+    } finally {
+      setSyncingIntegracaoId(null);
     }
   };
 
@@ -151,8 +184,17 @@ export function ApiConfigCard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleSyncronizar(integracao.id, integracao.modo_demo)} disabled={syncApi.isPending}>
-                        {syncApi.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSyncronizar(integracao.id, integracao.modo_demo)}
+                        disabled={syncApi.isPending}
+                      >
+                        {syncApi.isPending && syncingIntegracaoId === integracao.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
                         <span className="ml-2">Sincronizar</span>
                       </Button>
                       <IntegracaoForm integracao={integracao as any} onSave={refetch} />

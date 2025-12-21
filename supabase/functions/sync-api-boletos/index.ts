@@ -65,13 +65,46 @@ function getValueByPath(obj: any, path: string): any {
   if (!path) return obj;
   const parts = path.split('.');
   let current = obj;
-  
+
   for (const part of parts) {
     if (current === null || current === undefined) return undefined;
     current = current[part];
   }
-  
+
   return current;
+}
+
+function extractArrayFromApiResponse(raw: any, jsonPath?: string | null): any[] {
+  let candidate = raw;
+
+  if (jsonPath) {
+    const viaPath = getValueByPath(raw, jsonPath);
+    if (viaPath !== undefined && viaPath !== null) {
+      candidate = viaPath;
+    } else {
+      console.log(`[sync-api-boletos] json_path "${jsonPath}" não retornou dados; tentando detecção automática.`);
+    }
+  }
+
+  const candidates = [
+    candidate,
+    candidate?.d?.results,
+    candidate?.d?.value,
+    candidate?.value,
+    candidate?.results,
+    raw?.d?.results,
+    raw?.d?.value,
+    raw?.value,
+    raw?.results,
+  ];
+
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+
+  if (candidate && typeof candidate === 'object') return [candidate];
+  if (raw && typeof raw === 'object') return [raw];
+  return [];
 }
 
 serve(async (req) => {
@@ -158,21 +191,16 @@ serve(async (req) => {
       throw new Error(`Erro na API: ${apiResponse.status} ${apiResponse.statusText} - ${errorText.substring(0, 200)}`);
     }
 
-    let dadosApi = await apiResponse.json();
+    const rawApiResponse = await apiResponse.json();
 
-    // Extrair dados usando json_path se configurado
-    if (integracao.json_path) {
-      dadosApi = getValueByPath(dadosApi, integracao.json_path);
+    const dadosApi = extractArrayFromApiResponse(rawApiResponse, integracao.json_path);
+
+    // Garantir que temos dados
+    if (!Array.isArray(dadosApi) || dadosApi.length === 0) {
+      throw new Error('Resposta da API não contém lista de dados (verifique o caminho JSON ou o formato OData)');
     }
 
-    // Garantir que temos um array
-    if (!Array.isArray(dadosApi)) {
-      if (dadosApi && typeof dadosApi === 'object') {
-        dadosApi = [dadosApi];
-      } else {
-        throw new Error('Resposta da API não contém dados válidos');
-      }
-    }
+    console.log(`[sync-api-boletos] Registros recebidos da API: ${dadosApi.length}`);
 
     let erros: any[] = [];
 
@@ -186,7 +214,8 @@ serve(async (req) => {
       throw new Error(`Erro ao buscar clientes: ${clientesError.message}`);
     }
 
-    const cnpjToId = new Map(clientes?.map(c => [c.cnpj, c.id]) || []);
+    const normalizeCnpj = (v: any) => String(v ?? '').replace(/\D/g, '');
+    const cnpjToId = new Map(clientes?.map(c => [normalizeCnpj(c.cnpj), c.id]) || []);
 
     // Buscar mapeamentos de campos configurados
     const { data: mapeamentos } = await supabase
@@ -201,13 +230,13 @@ serve(async (req) => {
 
     for (const item of dadosApi) {
       try {
-        // Inicializar com valores undefined - serão preenchidos via mapeamento
-        let numeroNota: string | undefined = undefined;
-        let numeroCobranca: string | undefined = undefined;
-        let cnpjCliente: string | undefined = undefined;
-        let dataEmissao: string | undefined = undefined;
-        let dataVencimento: string | undefined = undefined;
-        let valor: number | undefined = undefined;
+        // Inicializar com heurísticas (funciona mesmo sem mapeamento, mas o recomendado é mapear)
+        let numeroNota: string | undefined = item?.numero_nota ?? item?.numeroNota ?? item?.PaymentDocument;
+        let numeroCobranca: string | undefined = item?.numero_cobranca ?? item?.numeroCobranca ?? item?.PaymentRunID;
+        let cnpjCliente: string | undefined = item?.cliente_cnpj ?? item?.cnpj_cliente ?? item?.TaxNumber1;
+        let dataEmissao: string | undefined = item?.data_emissao ?? item?.PostingDate;
+        let dataVencimento: string | undefined = item?.data_vencimento ?? item?.PaymentDueDate;
+        let valor: number | undefined = item?.valor ?? item?.PaymentAmountInPaytCurrency;
 
         // Aplicar mapeamentos personalizados
         if (mapeamentos && mapeamentos.length > 0) {
@@ -229,9 +258,19 @@ serve(async (req) => {
         // Log para debug
         console.log(`[sync-api-boletos] Item processado: nota=${numeroNota}, cobranca=${numeroCobranca}, cnpj=${cnpjCliente}`);
 
+        // Validar campos essenciais antes de gravar/consultar
+        if (!numeroNota || !numeroCobranca || !cnpjCliente) {
+          erros.push({
+            tipo: 'campos_obrigatorios_ausentes',
+            numero_nota: numeroNota,
+            numero_cobranca: numeroCobranca,
+            cnpj: cnpjCliente,
+          });
+          continue;
+        }
+
         // Buscar cliente pelo CNPJ
-        const clienteId = cnpjToId.get(cnpjCliente);
-        
+        const clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente));
         if (!clienteId) {
           console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente}`);
           erros.push({
@@ -255,7 +294,7 @@ serve(async (req) => {
         };
 
         // Campos extras (todos que não são estruturados)
-        const camposConhecidos = ['numero_nota', 'numero_cobranca', 'cnpj_cliente', 
+        const camposConhecidos = ['numero_nota', 'numero_cobranca', 'cliente_cnpj', 'cnpj_cliente',
           'data_emissao', 'data_vencimento', 'valor'];
         const dadosExtras: Record<string, any> = {};
         
