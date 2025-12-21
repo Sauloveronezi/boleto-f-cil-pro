@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Save, Trash2, ArrowRight, GripVertical } from 'lucide-react';
+import { Plus, Save, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,16 +40,18 @@ interface MapeamentoCampo {
 interface MapeamentoCamposCardProps {
   integracaoId: string;
   integracaoNome: string;
+  camposApiDetectados?: string[];
+  onRefreshCampos?: () => void;
 }
 
 const CAMPOS_DESTINO = [
-  { value: 'numero_nota', label: 'Número da Nota' },
-  { value: 'numero_cobranca', label: 'Número Cobrança' },
-  { value: 'cliente_cnpj', label: 'CNPJ Cliente' },
-  { value: 'valor', label: 'Valor' },
-  { value: 'data_emissao', label: 'Data Emissão' },
-  { value: 'data_vencimento', label: 'Data Vencimento' },
-  { value: 'dados_extras', label: 'Dados Extras (JSON)' },
+  { value: 'numero_nota', label: 'Número da Nota', tipo_sugerido: 'string' },
+  { value: 'numero_cobranca', label: 'Número Cobrança', tipo_sugerido: 'string' },
+  { value: 'cliente_cnpj', label: 'CNPJ Cliente', tipo_sugerido: 'string' },
+  { value: 'valor', label: 'Valor', tipo_sugerido: 'number' },
+  { value: 'data_emissao', label: 'Data Emissão', tipo_sugerido: 'date' },
+  { value: 'data_vencimento', label: 'Data Vencimento', tipo_sugerido: 'date' },
+  { value: 'dados_extras', label: 'Dados Extras (JSON)', tipo_sugerido: 'string' },
 ];
 
 const TIPOS_DADO = [
@@ -59,9 +61,16 @@ const TIPOS_DADO = [
   { value: 'boolean', label: 'Booleano' },
 ];
 
-export function MapeamentoCamposCard({ integracaoId, integracaoNome }: MapeamentoCamposCardProps) {
+export function MapeamentoCamposCard({ 
+  integracaoId, 
+  integracaoNome, 
+  camposApiDetectados = [],
+  onRefreshCampos
+}: MapeamentoCamposCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(false);
+  const [novoCampoApi, setNovoCampoApi] = useState('');
   
   const [novoCampo, setNovoCampo] = useState({
     campo_api: '',
@@ -86,22 +95,37 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
     enabled: !!integracaoId,
   });
 
+  // Campos da API que ainda não foram mapeados
+  const camposNaoMapeados = camposApiDetectados.filter(
+    campo => !mapeamentos?.some(m => m.campo_api === campo)
+  );
+
+  // Atualizar seleção do campo quando mudar
+  useEffect(() => {
+    if (novoCampo.campo_api && novoCampo.campo_api !== novoCampoApi) {
+      setNovoCampoApi(novoCampo.campo_api);
+    }
+  }, [novoCampo.campo_api]);
+
   const handleAddCampo = async () => {
-    if (!novoCampo.campo_api) {
+    const campoApi = novoCampo.campo_api || novoCampoApi;
+    
+    if (!campoApi) {
       toast({
         title: 'Erro',
-        description: 'Campo da API é obrigatório.',
+        description: 'Selecione ou digite um campo da API.',
         variant: 'destructive',
       });
       return;
     }
 
+    setLoading(true);
     try {
       const { error } = await supabase
         .from('vv_b_api_mapeamento_campos')
         .insert({
           integracao_id: integracaoId,
-          campo_api: novoCampo.campo_api,
+          campo_api: campoApi,
           campo_destino: novoCampo.campo_destino,
           tipo_dado: novoCampo.tipo_dado,
           obrigatorio: novoCampo.obrigatorio,
@@ -117,6 +141,7 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
         tipo_dado: 'string',
         obrigatorio: false,
       });
+      setNovoCampoApi('');
       queryClient.invalidateQueries({ queryKey: ['mapeamento-campos', integracaoId] });
     } catch (error: any) {
       toast({
@@ -124,6 +149,8 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
         description: error.message,
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -166,36 +193,111 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
     }
   };
 
+  const handleSelectCampoDestino = (campoDestino: string) => {
+    const destino = CAMPOS_DESTINO.find(c => c.value === campoDestino);
+    setNovoCampo({
+      ...novoCampo,
+      campo_destino: campoDestino,
+      tipo_dado: destino?.tipo_sugerido || 'string'
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <ArrowRight className="h-5 w-5" />
-          Mapeamento de Campos - {integracaoNome}
-        </CardTitle>
-        <CardDescription>
-          Configure o de-para entre os campos da API e a tabela de destino.
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ArrowRight className="h-5 w-5" />
+              Mapeamento de Campos - {integracaoNome}
+            </CardTitle>
+            <CardDescription>
+              Configure o de-para entre os campos da API e a tabela de destino.
+            </CardDescription>
+          </div>
+          {onRefreshCampos && (
+            <Button variant="outline" size="sm" onClick={onRefreshCampos} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Atualizar Campos
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Campos detectados da API */}
+        {camposApiDetectados.length > 0 && (
+          <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+            <Label className="text-sm font-medium text-blue-800 dark:text-blue-200">
+              Campos Disponíveis da API ({camposNaoMapeados.length} não mapeados)
+            </Label>
+            <div className="flex flex-wrap gap-1 mt-2 max-h-24 overflow-y-auto">
+              {camposNaoMapeados.map((campo) => (
+                <Badge 
+                  key={campo} 
+                  variant="outline" 
+                  className="text-xs font-mono cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900"
+                  onClick={() => setNovoCampo({ ...novoCampo, campo_api: campo })}
+                >
+                  {campo}
+                </Badge>
+              ))}
+              {camposNaoMapeados.length === 0 && (
+                <span className="text-xs text-muted-foreground">Todos os campos foram mapeados</span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Adicionar novo campo */}
         <div className="p-4 bg-muted/50 rounded-lg space-y-4">
-          <Label className="font-medium">Adicionar Novo Campo</Label>
+          <Label className="font-medium">Adicionar Novo Mapeamento</Label>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div>
               <Label className="text-xs">Campo da API</Label>
-              <Input
-                value={novoCampo.campo_api}
-                onChange={(e) => setNovoCampo({ ...novoCampo, campo_api: e.target.value })}
-                placeholder="d.results.PaymentDocument"
-                className="mt-1"
-              />
+              {camposApiDetectados.length > 0 ? (
+                <Select
+                  value={novoCampo.campo_api}
+                  onValueChange={(v) => setNovoCampo({ ...novoCampo, campo_api: v })}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {camposNaoMapeados.map((campo) => (
+                      <SelectItem key={campo} value={campo}>
+                        <span className="font-mono text-xs">{campo}</span>
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">
+                      <span className="text-muted-foreground">+ Campo personalizado</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={novoCampoApi}
+                  onChange={(e) => {
+                    setNovoCampoApi(e.target.value);
+                    setNovoCampo({ ...novoCampo, campo_api: e.target.value });
+                  }}
+                  placeholder="d.results.PaymentDocument"
+                  className="mt-1 font-mono text-xs"
+                />
+              )}
+              {novoCampo.campo_api === '__custom__' && (
+                <Input
+                  value={novoCampoApi}
+                  onChange={(e) => setNovoCampoApi(e.target.value)}
+                  placeholder="Digite o caminho do campo"
+                  className="mt-2 font-mono text-xs"
+                />
+              )}
             </div>
             <div>
               <Label className="text-xs">Campo Destino</Label>
               <Select
                 value={novoCampo.campo_destino}
-                onValueChange={(v) => setNovoCampo({ ...novoCampo, campo_destino: v })}
+                onValueChange={handleSelectCampoDestino}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -234,8 +336,8 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
               />
               <Label className="text-xs">Obrigatório</Label>
             </div>
-            <Button onClick={handleAddCampo} className="gap-2">
-              <Plus className="h-4 w-4" />
+            <Button onClick={handleAddCampo} disabled={loading} className="gap-2">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Adicionar
             </Button>
           </div>
@@ -253,6 +355,7 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
               <TableRow>
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Campo API</TableHead>
+                <TableHead>→</TableHead>
                 <TableHead>Campo Destino</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead className="text-center">Obrigatório</TableHead>
@@ -265,11 +368,28 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
                   <TableCell>
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{m.campo_api}</TableCell>
+                  <TableCell className="font-mono text-sm max-w-[200px] truncate" title={m.campo_api}>
+                    {m.campo_api}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant="outline">
-                      {CAMPOS_DESTINO.find(c => c.value === m.campo_destino)?.label || m.campo_destino}
-                    </Badge>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={m.campo_destino}
+                      onValueChange={(v) => handleUpdateCampo(m.id, 'campo_destino', v)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CAMPOS_DESTINO.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
@@ -297,7 +417,7 @@ export function MapeamentoCamposCard({ integracaoId, integracaoNome }: Mapeament
           </Table>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-8">
-            Nenhum campo mapeado. Adicione campos acima para configurar o de-para.
+            Nenhum campo mapeado. {camposApiDetectados.length > 0 ? 'Clique nos campos acima para mapeá-los.' : 'Adicione campos acima para configurar o de-para.'}
           </p>
         )}
       </CardContent>

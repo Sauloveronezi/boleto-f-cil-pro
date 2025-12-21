@@ -2,3 +2,6 @@ project_id = "upohmksvaswffubpkwzx"
 
 [functions.sync-api-boletos]
 verify_jwt = false
+
+[functions.test-api-connection]
+verify_jwt = false
