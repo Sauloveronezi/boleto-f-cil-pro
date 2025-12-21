@@ -1051,6 +1051,101 @@ export type Database = {
         }
         Relationships: []
       }
+      vv_b_api_integracoes: {
+        Row: {
+          ativo: boolean | null
+          campos_chave: string[] | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          endpoint_base: string | null
+          headers_autenticacao: Json | null
+          id: string
+          modo_demo: boolean | null
+          nome: string
+          tipo: string
+          ultima_sincronizacao: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          campos_chave?: string[] | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          endpoint_base?: string | null
+          headers_autenticacao?: Json | null
+          id?: string
+          modo_demo?: boolean | null
+          nome: string
+          tipo?: string
+          ultima_sincronizacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          campos_chave?: string[] | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          endpoint_base?: string | null
+          headers_autenticacao?: Json | null
+          id?: string
+          modo_demo?: boolean | null
+          nome?: string
+          tipo?: string
+          ultima_sincronizacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
+      vv_b_api_sync_log: {
+        Row: {
+          created_at: string
+          duracao_ms: number | null
+          erros: Json | null
+          id: string
+          integracao_id: string | null
+          registros_atualizados: number | null
+          registros_novos: number | null
+          registros_processados: number | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          duracao_ms?: number | null
+          erros?: Json | null
+          id?: string
+          integracao_id?: string | null
+          registros_atualizados?: number | null
+          registros_novos?: number | null
+          registros_processados?: number | null
+          status: string
+        }
+        Update: {
+          created_at?: string
+          duracao_ms?: number | null
+          erros?: Json | null
+          id?: string
+          integracao_id?: string | null
+          registros_atualizados?: number | null
+          registros_novos?: number | null
+          registros_processados?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_api_sync_log_integracao_id_fkey"
+            columns: ["integracao_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_api_integracoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vv_b_bancos: {
         Row: {
           ativo: boolean | null
@@ -1092,6 +1187,75 @@ export type Database = {
           usuario_delete_id?: string | null
         }
         Relationships: []
+      }
+      vv_b_boletos_api: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          dados_extras: Json | null
+          data_delete: string | null
+          data_emissao: string | null
+          data_vencimento: string | null
+          deleted: string | null
+          id: string
+          integracao_id: string | null
+          numero_cobranca: string
+          numero_nota: string
+          sincronizado_em: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+          valor: number | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          dados_extras?: Json | null
+          data_delete?: string | null
+          data_emissao?: string | null
+          data_vencimento?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          numero_cobranca: string
+          numero_nota: string
+          sincronizado_em?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor?: number | null
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          dados_extras?: Json | null
+          data_delete?: string | null
+          data_emissao?: string | null
+          data_vencimento?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          numero_cobranca?: string
+          numero_nota?: string
+          sincronizado_em?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_boletos_api_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vv_b_boletos_api_integracao_id_fkey"
+            columns: ["integracao_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_api_integracoes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vv_b_boletos_gerados: {
         Row: {

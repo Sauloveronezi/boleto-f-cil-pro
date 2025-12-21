@@ -13,6 +13,7 @@ import Modelos from "./pages/Modelos";
 import ImportarLayout from "./pages/ImportarLayout";
 import Configuracoes from "./pages/Configuracoes";
 import ConfiguracaoCNAB from "./pages/ConfiguracaoCNAB";
+import BoletosApi from "./pages/BoletosApi";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/importar-layout" element={<ImportarLayout />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/configuracao-cnab" element={<ConfiguracaoCNAB />} />
+            <Route path="/boletos-api" element={<BoletosApi />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,1 +1,4 @@
 project_id = "upohmksvaswffubpkwzx"
+
+[functions.sync-api-boletos]
+verify_jwt = false
