@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Calendar, Search, Filter, Printer, FileText, RefreshCw } from 'lucide-react';
-import { useBoletosApi, useSyncApi } from '@/hooks/useApiIntegracao';
+import { useBoletosApi, useSyncApi, useApiIntegracoes } from '@/hooks/useApiIntegracao';
 import { useClientes } from '@/hooks/useClientes';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,8 +44,10 @@ export default function BoletosApi() {
     cidade: '',
     transportadora: ''
   });
+  const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('');
 
   const { data: clientes } = useClientes();
+  const { data: integracoes } = useApiIntegracoes();
   const { data: boletos, isLoading, refetch } = useBoletosApi({
     dataEmissaoInicio: filtros.dataEmissaoInicio || undefined,
     dataEmissaoFim: filtros.dataEmissaoFim || undefined,
@@ -66,8 +68,17 @@ export default function BoletosApi() {
   }) || [];
 
   const handleSincronizar = async () => {
+    if (!integracaoSelecionada) {
+      toast({
+        title: 'Selecione uma integração',
+        description: 'Escolha a integração que deseja sincronizar',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
     try {
-      const result = await syncApi.mutateAsync({ modo_demo: true });
+      const result = await syncApi.mutateAsync({ integracao_id: integracaoSelecionada });
       if (result.success) {
         toast({
           title: 'Sincronização concluída',
@@ -112,11 +123,26 @@ export default function BoletosApi() {
               Dados importados da API SAP/ERP para impressão de boletos
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Select 
+              value={integracaoSelecionada} 
+              onValueChange={setIntegracaoSelecionada}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Selecione integração" />
+              </SelectTrigger>
+              <SelectContent>
+                {integracoes?.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button 
               variant="outline" 
               onClick={handleSincronizar}
-              disabled={syncApi.isPending}
+              disabled={syncApi.isPending || !integracaoSelecionada}
               className="gap-2"
             >
               {syncApi.isPending ? (
