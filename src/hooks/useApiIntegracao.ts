@@ -11,6 +11,8 @@ export interface ApiIntegracao {
   headers_autenticacao: Record<string, string>;
   ativo: boolean;
   ultima_sincronizacao: string | null;
+  json_path: string | null;
+  modelo_boleto_id: string | null;
   created_at: string;
   updated_at: string;
 }

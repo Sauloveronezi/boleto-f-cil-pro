@@ -1061,6 +1061,8 @@ export type Database = {
           endpoint_base: string | null
           headers_autenticacao: Json | null
           id: string
+          json_path: string | null
+          modelo_boleto_id: string | null
           modo_demo: boolean | null
           nome: string
           tipo: string
@@ -1077,6 +1079,8 @@ export type Database = {
           endpoint_base?: string | null
           headers_autenticacao?: Json | null
           id?: string
+          json_path?: string | null
+          modelo_boleto_id?: string | null
           modo_demo?: boolean | null
           nome: string
           tipo?: string
@@ -1093,6 +1097,8 @@ export type Database = {
           endpoint_base?: string | null
           headers_autenticacao?: Json | null
           id?: string
+          json_path?: string | null
+          modelo_boleto_id?: string | null
           modo_demo?: boolean | null
           nome?: string
           tipo?: string
@@ -1100,7 +1106,74 @@ export type Database = {
           updated_at?: string
           usuario_delete_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_api_integracoes_modelo_boleto_id_fkey"
+            columns: ["modelo_boleto_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_modelos_boleto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_api_mapeamento_campos: {
+        Row: {
+          campo_api: string
+          campo_destino: string
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          integracao_id: string | null
+          obrigatorio: boolean | null
+          ordem: number | null
+          tipo_dado: string | null
+          transformacao: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+          valor_padrao: string | null
+        }
+        Insert: {
+          campo_api: string
+          campo_destino: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          obrigatorio?: boolean | null
+          ordem?: number | null
+          tipo_dado?: string | null
+          transformacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_padrao?: string | null
+        }
+        Update: {
+          campo_api?: string
+          campo_destino?: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          obrigatorio?: boolean | null
+          ordem?: number | null
+          tipo_dado?: string | null
+          transformacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_padrao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_api_mapeamento_campos_integracao_id_fkey"
+            columns: ["integracao_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_api_integracoes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vv_b_api_sync_log: {
         Row: {

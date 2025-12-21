@@ -1,47 +1,30 @@
 import { useState } from 'react';
-import { Globe, Play, RefreshCw, Clock, Check, AlertCircle, Settings2 } from 'lucide-react';
+import { Globe, Play, RefreshCw, Clock, Check, AlertCircle, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { HelpCircle } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
-import { useApiIntegracoes, useSyncApi, useUpdateIntegracao, useSyncLogs } from '@/hooks/useApiIntegracao';
+import { useApiIntegracoes, useSyncApi, useSyncLogs } from '@/hooks/useApiIntegracao';
+import { IntegracaoForm } from './IntegracaoForm';
+import { MapeamentoCamposCard } from './MapeamentoCamposCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function ApiConfigCard() {
   const { toast } = useToast();
-  const { data: integracoes, isLoading } = useApiIntegracoes();
+  const { data: integracoes, isLoading, refetch } = useApiIntegracoes();
   const { data: logs } = useSyncLogs();
   const syncApi = useSyncApi();
-  const updateIntegracao = useUpdateIntegracao();
-
-  const integracao = integracoes?.[0]; // Pegar primeira integração
   
-  const [endpoint, setEndpoint] = useState(integracao?.endpoint_base || '');
-  const [apiToken, setApiToken] = useState('');
-  const [modoDemo, setModoDemo] = useState(integracao?.modo_demo ?? true);
-  const [camposChave, setCamposChave] = useState(
-    integracao?.campos_chave?.join(', ') || 'numero_nota, cliente_id, numero_cobranca'
-  );
+  const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
 
-  const handleSyncronizar = async () => {
+  const handleSyncronizar = async (integracaoId: string, modoDemo: boolean) => {
     try {
       const result = await syncApi.mutateAsync({
-        integracao_id: integracao?.id,
+        integracao_id: integracaoId,
         modo_demo: modoDemo,
-        endpoint: endpoint || undefined,
-        headers_auth: apiToken ? { Authorization: `Bearer ${apiToken}` } : undefined
       });
 
       if (result.success) {
@@ -55,30 +38,6 @@ export function ApiConfigCard() {
     } catch (error: any) {
       toast({
         title: 'Erro na sincronização',
-        description: error.message,
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleSalvarConfig = async () => {
-    if (!integracao) return;
-
-    try {
-      await updateIntegracao.mutateAsync({
-        id: integracao.id,
-        endpoint_base: endpoint,
-        modo_demo: modoDemo,
-        campos_chave: camposChave.split(',').map(c => c.trim())
-      });
-
-      toast({
-        title: 'Configurações salvas',
-        description: 'As configurações da API foram atualizadas.',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Erro ao salvar',
         description: error.message,
         variant: 'destructive'
       });
@@ -102,161 +61,155 @@ export function ApiConfigCard() {
 
   return (
     <div className="space-y-6">
-      {/* Card de Configuração */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Globe className="h-5 w-5" />
-            Integração SAP / API
-            <Badge variant={modoDemo ? 'secondary' : 'default'} className="ml-2">
-              {modoDemo ? 'Modo Demo' : 'Produção'}
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            Configure a conexão com a API SAP/ERP para importar dados de boletos.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Toggle Modo Demo */}
-          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-            <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-lg ${modoDemo ? 'bg-warning/10' : 'bg-success/10'}`}>
-                {modoDemo ? (
-                  <Settings2 className="h-5 w-5 text-warning" />
-                ) : (
-                  <Globe className="h-5 w-5 text-success" />
-                )}
-              </div>
-              <div>
-                <h3 className="font-medium">
-                  {modoDemo ? 'Modo Demonstração' : 'Modo Produção'}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {modoDemo
-                    ? 'Usando dados fictícios para testes'
-                    : 'Conectado à API real'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">Demo</span>
-              <Switch 
-                checked={!modoDemo} 
-                onCheckedChange={(checked) => setModoDemo(!checked)} 
-              />
-              <span className="text-sm text-muted-foreground">Produção</span>
-            </div>
-          </div>
+      {/* Header com botão de nova integração */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Integrações de API</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure conexões com APIs externas para importar dados de boletos.
+          </p>
+        </div>
+        <IntegracaoForm onSave={refetch} />
+      </div>
 
-          {/* Campos de Configuração */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label className="flex items-center gap-2">
-                Endpoint da API
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p>URL base da API SAP/ERP que retorna os dados de boletos.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <Input
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="https://api.sap.com/boletos"
-                disabled={modoDemo}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="flex items-center gap-2">
-                Token de Autenticação
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p>Token Bearer para autenticação na API.</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <Input
-                type="password"
-                value={apiToken}
-                onChange={(e) => setApiToken(e.target.value)}
-                placeholder="••••••••••••••••"
-                disabled={modoDemo}
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label className="flex items-center gap-2">
-              Campos Chave (para evitar duplicatas)
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>Campos separados por vírgula que compõem a chave única.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <Input
-              value={camposChave}
-              onChange={(e) => setCamposChave(e.target.value)}
-              placeholder="numero_nota, cliente_id, numero_cobranca"
-              className="mt-1"
-            />
-          </div>
-
-          <Separator />
-
-          {/* Botões de Ação */}
-          <div className="flex items-center gap-3">
-            <Button 
-              onClick={handleSyncronizar}
-              disabled={syncApi.isPending}
-              className="gap-2"
+      {/* Lista de integrações */}
+      {integracoes && integracoes.length > 0 ? (
+        <div className="space-y-4">
+          {integracoes.map((integracao) => (
+            <Collapsible
+              key={integracao.id}
+              open={expandedIntegracao === integracao.id}
+              onOpenChange={(open) => setExpandedIntegracao(open ? integracao.id : null)}
             >
-              {syncApi.isPending ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {modoDemo ? 'Sincronizar (Demo)' : 'Sincronizar API'}
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              onClick={handleSalvarConfig}
-              disabled={updateIntegracao.isPending}
-            >
-              Salvar Configurações
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${integracao.modo_demo ? 'bg-warning/10' : 'bg-success/10'}`}>
+                        {integracao.modo_demo ? (
+                          <Settings2 className="h-5 w-5 text-warning" />
+                        ) : (
+                          <Globe className="h-5 w-5 text-success" />
+                        )}
+                      </div>
+                      <div>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {integracao.nome}
+                          <Badge variant="outline">{integracao.tipo}</Badge>
+                          <Badge variant={integracao.modo_demo ? 'secondary' : 'default'}>
+                            {integracao.modo_demo ? 'Demo' : 'Produção'}
+                          </Badge>
+                          {!integracao.ativo && (
+                            <Badge variant="destructive">Inativo</Badge>
+                          )}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          {integracao.endpoint_base || 'Endpoint não configurado'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSyncronizar(integracao.id, integracao.modo_demo)}
+                        disabled={syncApi.isPending}
+                      >
+                        {syncApi.isPending ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                        <span className="ml-2">Sincronizar</span>
+                      </Button>
+                      <IntegracaoForm integracao={integracao as any} onSave={refetch} />
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          {expandedIntegracao === integracao.id ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-4">
+                    <Separator />
+                    
+                    {/* Info da integração */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Campos Chave</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {integracao.campos_chave?.map((c) => (
+                            <Badge key={c} variant="secondary" className="text-xs">
+                              {c}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Última Sincronização</p>
+                        <p className="font-medium">
+                          {integracao.ultima_sincronizacao
+                            ? format(new Date(integracao.ultima_sincronizacao), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                            : 'Nunca'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Caminho JSON</p>
+                        <code className="text-xs bg-muted px-1 rounded">
+                          {integracao.json_path || 'd.results'}
+                        </code>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Status</p>
+                        <Badge variant={integracao.ativo ? 'default' : 'secondary'}>
+                          {integracao.ativo ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </div>
+                    </div>
 
-      {/* Card de Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Clock className="h-5 w-5" />
-            Última Sincronização
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {ultimoLog ? (
+                    <Separator />
+
+                    {/* Mapeamento de campos */}
+                    <MapeamentoCamposCard
+                      integracaoId={integracao.id}
+                      integracaoNome={integracao.nome}
+                    />
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="font-medium mb-2">Nenhuma integração configurada</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Adicione uma integração para conectar a APIs externas.
+            </p>
+            <IntegracaoForm onSave={refetch} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Card de Status da última sincronização */}
+      {ultimoLog && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Clock className="h-5 w-5" />
+              Última Sincronização Global
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 {ultimoLog.status === 'sucesso' ? (
@@ -307,13 +260,9 @@ export function ApiConfigCard() {
                 </div>
               )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma sincronização realizada ainda. Clique em "Sincronizar" para importar dados.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
