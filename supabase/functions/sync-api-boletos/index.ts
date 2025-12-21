@@ -173,10 +173,15 @@ serve(async (req) => {
 
     console.log(`[sync-api-boletos] Auth: ${tipoAuth}, custom_headers: ${Object.keys(customHeaders).length}, auth_headers: ${Object.keys(authHeaders).join(',')}`);
 
-    // Chamar API real
-    console.log(`[sync-api-boletos] Chamando API: ${integracao.endpoint_base}`);
+    // Chamar API real (SEM filtros)
+    const urlObj = new URL(integracao.endpoint_base);
+    urlObj.searchParams.delete('$filter');
+    urlObj.searchParams.delete('filter');
+    const endpointSemFiltros = urlObj.toString();
 
-    const apiResponse = await fetch(integracao.endpoint_base, {
+    console.log(`[sync-api-boletos] Chamando API (sem filtros): ${endpointSemFiltros}`);
+
+    const apiResponse = await fetch(endpointSemFiltros, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -208,7 +213,7 @@ serve(async (req) => {
     const { data: clientes, error: clientesError } = await supabase
       .from('vv_b_clientes')
       .select('id, cnpj')
-      .is('deleted', null);
+      .or('deleted.is.null,deleted.eq.""');
 
     if (clientesError) {
       throw new Error(`Erro ao buscar clientes: ${clientesError.message}`);
@@ -222,7 +227,7 @@ serve(async (req) => {
       .from('vv_b_api_mapeamento_campos')
       .select('*')
       .eq('integracao_id', integracao_id)
-      .is('deleted', null)
+      .or('deleted.is.null,deleted.eq.""')
       .order('ordem', { ascending: true });
 
     let registrosNovos = 0;
@@ -311,7 +316,7 @@ serve(async (req) => {
           .eq('numero_nota', numeroNota)
           .eq('cliente_id', clienteId)
           .eq('numero_cobranca', numeroCobranca)
-          .is('deleted', null)
+          .or('deleted.is.null,deleted.eq.""')
           .maybeSingle();
 
         if (checkError) {

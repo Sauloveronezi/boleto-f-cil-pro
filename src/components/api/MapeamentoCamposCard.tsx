@@ -201,9 +201,12 @@ export function MapeamentoCamposCard({
 
   const handleRemoveCampo = async (id: string) => {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const usuarioId = userData.user?.id ?? null;
+
       const { error } = await supabase
         .from('vv_b_api_mapeamento_campos')
-        .update({ deleted: 'S', data_delete: new Date().toISOString() })
+        .update({ deleted: '*', data_delete: new Date().toISOString(), usuario_delete_id: usuarioId })
         .eq('id', id);
 
       if (error) throw error;
@@ -218,6 +221,7 @@ export function MapeamentoCamposCard({
       });
     }
   };
+
 
   const handleUpdateCampo = async (id: string, field: string, value: any) => {
     try {
@@ -260,24 +264,25 @@ export function MapeamentoCamposCard({
               Configure o de-para entre os campos da API e a tabela de destino.
             </CardDescription>
           </div>
-          {onRefreshCampos && (
-            <div className="flex gap-2">
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleTestarMapeamento} 
-                disabled={testando}
-                className="gap-2"
-              >
-                {testando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Testar API
-              </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={handleTestarMapeamento} 
+              disabled={testando}
+              className="gap-2"
+            >
+              {testando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Testar API
+            </Button>
+
+            {onRefreshCampos && (
               <Button variant="outline" size="sm" onClick={onRefreshCampos} className="gap-2">
                 <RefreshCw className="h-4 w-4" />
                 Atualizar Campos
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

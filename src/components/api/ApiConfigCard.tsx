@@ -46,6 +46,26 @@ export function ApiConfigCard() {
   const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
   const [syncingIntegracaoId, setSyncingIntegracaoId] = useState<string | null>(null);
 
+  const handleAtualizarCampos = async (integracaoId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('test-api-connection', {
+        body: { integracao_id: integracaoId, limit: 1 }
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Falha ao testar API');
+
+      toast({
+        title: 'Campos atualizados',
+        description: `${data.campos_detectados?.length || 0} campos detectados.`
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['api-integracoes'] });
+    } catch (err: any) {
+      toast({ title: 'Erro ao atualizar campos', description: err.message, variant: 'destructive' });
+    }
+  };
+
   const { data: integracoes, isLoading, refetch } = useQuery({
     queryKey: ['api-integracoes'],
     queryFn: async () => {
@@ -119,13 +139,22 @@ export function ApiConfigCard() {
       setSyncingIntegracaoId(integracaoId);
       const result = await syncApi.mutateAsync({ integracao_id: integracaoId, modo_demo: modoDemo });
 
-      if (result.success) {
+      if (result.success && result.status === 'sucesso') {
         toast({
           title: 'Sincronização concluída',
           description: `${result.registros_novos} novos, ${result.registros_atualizados} atualizados`,
         });
       } else {
-        throw new Error(result.error);
+        const primeiroErro = Array.isArray(result?.erros) ? result.erros[0] : null;
+        const motivo = primeiroErro?.tipo === 'cliente_nao_encontrado'
+          ? `Nenhum registro importado: CNPJ ${primeiroErro.cnpj} não existe em Clientes.`
+          : (result?.error || 'Nenhum registro importado. Verifique o preview (Testar API) e o cadastro de clientes.');
+
+        toast({
+          title: 'Sincronização sem importação',
+          description: motivo,
+          variant: 'destructive'
+        });
       }
     } catch (error: any) {
       toast({ title: 'Erro na sincronização', description: error.message, variant: 'destructive' });
@@ -224,6 +253,7 @@ export function ApiConfigCard() {
                       integracaoId={integracao.id}
                       integracaoNome={integracao.nome}
                       camposApiDetectados={integracao.campos_api_detectados || []}
+                      onRefreshCampos={() => handleAtualizarCampos(integracao.id)}
                     />
                   </CardContent>
                 </CollapsibleContent>
