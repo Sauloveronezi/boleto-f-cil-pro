@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Search, Filter, MapPin, Phone, Mail, Building } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -19,13 +19,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Cliente } from '@/types/boleto';
+import { useClientes } from '@/hooks/useClientes';
+import { MapPin, Phone, Mail, Building } from 'lucide-react';
 
 export default function Clientes() {
   const [busca, setBusca] = useState('');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
-
-  // Sem mocks - lista vazia por enquanto
-  const clientes: Cliente[] = [];
+  
+  const { data: clientes = [], isLoading, error } = useClientes();
 
   const clientesFiltrados = clientes.filter((cliente) => {
     const termoBusca = busca.toLowerCase();
@@ -71,51 +72,61 @@ export default function Clientes() {
         {/* Tabela de Clientes */}
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Razão Social</TableHead>
-                  <TableHead>CNPJ</TableHead>
-                  <TableHead>Cidade/UF</TableHead>
-                  <TableHead>Zona</TableHead>
-                  <TableHead>Parceiro</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clientesFiltrados.map((cliente) => (
-                  <TableRow
-                    key={cliente.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => setClienteSelecionado(cliente)}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      {cliente.business_partner}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {cliente.razao_social}
-                    </TableCell>
-                    <TableCell>{cliente.cnpj}</TableCell>
-                    <TableCell>
-                      {cliente.cidade}/{cliente.estado}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{cliente.lzone}</Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {cliente.parceiro_negocio}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {clientesFiltrados.length === 0 && (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 text-destructive">
+                Erro ao carregar clientes. Tente novamente.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Nenhum cliente encontrado.
-                    </TableCell>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Razão Social</TableHead>
+                    <TableHead>CNPJ</TableHead>
+                    <TableHead>Cidade/UF</TableHead>
+                    <TableHead>Zona</TableHead>
+                    <TableHead>Parceiro</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {clientesFiltrados.map((cliente) => (
+                    <TableRow
+                      key={cliente.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setClienteSelecionado(cliente)}
+                    >
+                      <TableCell className="font-mono text-sm">
+                        {cliente.business_partner || '-'}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {cliente.razao_social}
+                      </TableCell>
+                      <TableCell>{cliente.cnpj}</TableCell>
+                      <TableCell>
+                        {cliente.cidade}/{cliente.estado}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{cliente.lzone || '-'}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {cliente.parceiro_negocio || '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {clientesFiltrados.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Nenhum cliente encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -135,11 +146,11 @@ export default function Clientes() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Código do Parceiro</p>
-                    <p className="font-mono">{clienteSelecionado.business_partner}</p>
+                    <p className="font-mono">{clienteSelecionado.business_partner || '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Zona Logística</p>
-                    <Badge variant="outline">{clienteSelecionado.lzone}</Badge>
+                    <Badge variant="outline">{clienteSelecionado.lzone || '-'}</Badge>
                   </div>
                 </div>
 
@@ -147,9 +158,9 @@ export default function Clientes() {
                   <div className="flex items-start gap-3">
                     <MapPin className="h-4 w-4 text-muted-foreground mt-1" />
                     <div>
-                      <p className="text-sm">{clienteSelecionado.endereco}</p>
+                      <p className="text-sm">{clienteSelecionado.endereco || 'Endereço não informado'}</p>
                       <p className="text-sm text-muted-foreground">
-                        {clienteSelecionado.cidade}/{clienteSelecionado.estado} - CEP {clienteSelecionado.cep}
+                        {clienteSelecionado.cidade}/{clienteSelecionado.estado} - CEP {clienteSelecionado.cep || '-'}
                       </p>
                     </div>
                   </div>
@@ -171,7 +182,7 @@ export default function Clientes() {
                   <div className="flex items-center gap-3">
                     <Building className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm">{clienteSelecionado.parceiro_negocio}</p>
+                      <p className="text-sm">{clienteSelecionado.parceiro_negocio || '-'}</p>
                       <p className="text-xs text-muted-foreground">Parceiro de Negócio</p>
                     </div>
                   </div>
@@ -179,7 +190,7 @@ export default function Clientes() {
 
                 <div className="pt-4 border-t border-border">
                   <p className="text-xs text-muted-foreground">
-                    Agente de Frete: {clienteSelecionado.agente_frete}
+                    Agente de Frete: {clienteSelecionado.agente_frete || '-'}
                   </p>
                 </div>
               </div>

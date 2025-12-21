@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Filter, MapPin, Phone, Mail, Building } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { StatusNota, NotaFiscal, Cliente } from '@/types/boleto';
+import { StatusNota } from '@/types/boleto';
+import { useNotasFiscais } from '@/hooks/useNotasFiscais';
+import { useClientes } from '@/hooks/useClientes';
 
 const STATUS_LABELS: Record<StatusNota, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   aberta: { label: 'Em aberto', variant: 'default' },
@@ -32,10 +34,9 @@ const STATUS_LABELS: Record<StatusNota, { label: string; variant: 'default' | 's
 export default function NotasFiscais() {
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<string>('todos');
-
-  // Sem mocks
-  const notasFiscais: NotaFiscal[] = [];
-  const clientes: Cliente[] = [];
+  
+  const { data: notasFiscais = [], isLoading: notasLoading } = useNotasFiscais();
+  const { data: clientes = [] } = useClientes();
 
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -124,51 +125,57 @@ export default function NotasFiscais() {
         {/* Tabela */}
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nota Fiscal</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Emissão</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Referência</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {notasFiltradas.map((nota) => (
-                  <TableRow key={nota.id}>
-                    <TableCell className="font-medium">
-                      {nota.numero_nota}-{nota.serie}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {getClienteNome(nota.codigo_cliente)}
-                    </TableCell>
-                    <TableCell>{formatarData(nota.data_emissao)}</TableCell>
-                    <TableCell>{formatarData(nota.data_vencimento)}</TableCell>
-                    <TableCell className="font-semibold">
-                      {formatarMoeda(nota.valor_titulo)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_LABELS[nota.status].variant}>
-                        {STATUS_LABELS[nota.status].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-xs">
-                      {nota.referencia_interna}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {notasFiltradas.length === 0 && (
+            {notasLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Nenhum registro encontrado.
-                    </TableCell>
+                    <TableHead>Nota Fiscal</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Emissão</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Referência</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {notasFiltradas.map((nota) => (
+                    <TableRow key={nota.id}>
+                      <TableCell className="font-medium">
+                        {nota.numero_nota}-{nota.serie}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {getClienteNome(nota.codigo_cliente)}
+                      </TableCell>
+                      <TableCell>{formatarData(nota.data_emissao)}</TableCell>
+                      <TableCell>{formatarData(nota.data_vencimento)}</TableCell>
+                      <TableCell className="font-semibold">
+                        {formatarMoeda(nota.valor_titulo)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_LABELS[nota.status]?.variant || 'outline'}>
+                          {STATUS_LABELS[nota.status]?.label || nota.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground font-mono text-xs">
+                        {nota.referencia_interna || '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {notasFiltradas.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        Nenhum registro encontrado.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
