@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle, Play, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -75,6 +75,15 @@ export function MapeamentoCamposCard({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [novoCampoApi, setNovoCampoApi] = useState('');
+
+  const previewColumns = useMemo(() => {
+    if (!previewData?.length) return [] as string[];
+    const set = new Set<string>();
+    for (const row of previewData) {
+      Object.keys(row ?? {}).forEach((k) => set.add(k));
+    }
+    return Array.from(set);
+  }, [previewData]);
   
   const [novoCampo, setNovoCampo] = useState({
     campo_api: '',
@@ -122,7 +131,7 @@ export function MapeamentoCamposCard({
         .from('vv_b_api_mapeamento_campos')
         .select('*')
         .eq('integracao_id', integracaoId)
-        .is('deleted', null)
+        .or('deleted.is.null,deleted.eq.""')
         .order('ordem', { ascending: true });
 
       if (error) throw error;
@@ -297,40 +306,48 @@ export function MapeamentoCamposCard({
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <ScrollArea className="h-64">
-              <Table>
+
+            <div className="max-h-64 overflow-auto">
+              <Table className="min-w-max">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    {previewData.length > 0 && Object.keys(previewData[0]).slice(0, 8).map((key) => (
-                      <TableHead key={key} className="font-mono text-xs min-w-[120px]">
+                    {previewColumns.map((key) => (
+                      <TableHead key={key} className="font-mono text-xs min-w-[160px]">
                         {key}
                       </TableHead>
                     ))}
-                    {previewData.length > 0 && Object.keys(previewData[0]).length > 8 && (
-                      <TableHead className="text-muted-foreground">
-                        +{Object.keys(previewData[0]).length - 8} campos
-                      </TableHead>
-                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {previewData.map((row, idx) => (
                     <TableRow key={idx}>
                       <TableCell className="font-mono text-xs">{idx + 1}</TableCell>
-                      {Object.entries(row).slice(0, 8).map(([key, value]) => (
-                        <TableCell key={key} className="font-mono text-xs max-w-[200px] truncate" title={String(value)}>
-                          {value === null ? <span className="text-muted-foreground">null</span> : String(value).substring(0, 50)}
-                        </TableCell>
-                      ))}
-                      {Object.keys(row).length > 8 && (
-                        <TableCell className="text-muted-foreground text-xs">...</TableCell>
-                      )}
+                      {previewColumns.map((key) => {
+                        const value = (row as any)?.[key];
+                        const text = value === null || value === undefined ? '' : String(value);
+
+                        return (
+                          <TableCell
+                            key={key}
+                            className="font-mono text-xs max-w-[240px] truncate"
+                            title={text}
+                          >
+                            {value === null ? (
+                              <span className="text-muted-foreground">null</span>
+                            ) : value === undefined ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              text.substring(0, 80)
+                            )}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </div>
         )}
 

@@ -72,7 +72,7 @@ export function ApiConfigCard() {
       const { data, error } = await supabase
         .from('vv_b_api_integracoes')
         .select('*')
-        .is('deleted', null)
+        .or('deleted.is.null,deleted.eq.""')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as ApiIntegracao[];
@@ -115,7 +115,7 @@ export function ApiConfigCard() {
         .from('vv_b_api_mapeamento_campos')
         .select('campo_destino')
         .eq('integracao_id', integracaoId)
-        .is('deleted', null);
+        .or('deleted.is.null,deleted.eq.""');
 
       if (mapError) throw mapError;
 
@@ -139,10 +139,10 @@ export function ApiConfigCard() {
       setSyncingIntegracaoId(integracaoId);
       const result = await syncApi.mutateAsync({ integracao_id: integracaoId, modo_demo: modoDemo });
 
-      if (result.success && result.status === 'sucesso') {
+      if (result?.success && (result.status === 'sucesso' || result.status === 'parcial')) {
         toast({
-          title: 'Sincronização concluída',
-          description: `${result.registros_novos} novos, ${result.registros_atualizados} atualizados`,
+          title: result.status === 'parcial' ? 'Sincronização concluída (parcial)' : 'Sincronização concluída',
+          description: `${result.registros_novos || 0} novos, ${result.registros_atualizados || 0} atualizados`,
         });
       } else {
         const primeiroErro = Array.isArray(result?.erros) ? result.erros[0] : null;
