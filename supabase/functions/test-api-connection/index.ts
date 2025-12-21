@@ -129,21 +129,30 @@ serve(async (req) => {
       limit = 1
     } = await req.json();
 
-    console.log(`[test-api-connection] Testando conexão. Modo demo: ${modo_demo}`);
+    console.log(`[test-api-connection] Testando conexão. Modo demo: ${modo_demo}, Endpoint: ${endpoint}`);
 
     let apiResponse: any;
     let campos_detectados: string[] = [];
     let sample_data: any = null;
 
-    if (modo_demo) {
-      console.log('[test-api-connection] Usando dados mock');
+    // IMPORTANTE: Se modo_demo=false E temos endpoint, usar API real
+    // Só usar mock se modo_demo=true E não temos endpoint
+    const useMock = modo_demo && !endpoint;
+    
+    if (useMock) {
+      console.log('[test-api-connection] Usando dados mock (sem endpoint configurado)');
       apiResponse = MOCK_API_RESPONSE;
     } else {
+      // Usar API real - endpoint pode estar vazio em modo demo sem endpoint
+      if (!endpoint && !modo_demo) {
+        throw new Error('Endpoint da API não configurado. Configure o endpoint ou ative o modo demonstração.');
+      }
+      
       if (!endpoint) {
         throw new Error('Endpoint da API não configurado');
       }
 
-      console.log(`[test-api-connection] Chamando API: ${endpoint}`);
+      console.log(`[test-api-connection] Chamando API real: ${endpoint}`);
       
       // Construir headers de autenticação
       const authHeaders = buildAuthHeaders({
