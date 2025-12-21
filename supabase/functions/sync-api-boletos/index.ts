@@ -201,13 +201,13 @@ serve(async (req) => {
 
     for (const item of dadosApi) {
       try {
-        // Aplicar mapeamentos configurados
-        let numeroNota = item.numero_nota;
-        let numeroCobranca = item.numero_cobranca;
-        let cnpjCliente = item.cnpj_cliente;
-        let dataEmissao = item.data_emissao;
-        let dataVencimento = item.data_vencimento;
-        let valor = item.valor;
+        // Inicializar com valores undefined - serão preenchidos via mapeamento
+        let numeroNota: string | undefined = undefined;
+        let numeroCobranca: string | undefined = undefined;
+        let cnpjCliente: string | undefined = undefined;
+        let dataEmissao: string | undefined = undefined;
+        let dataVencimento: string | undefined = undefined;
+        let valor: number | undefined = undefined;
 
         // Aplicar mapeamentos personalizados
         if (mapeamentos && mapeamentos.length > 0) {
@@ -215,16 +215,19 @@ serve(async (req) => {
             const valorApi = getValueByPath(item, map.campo_api);
             if (valorApi !== undefined) {
               switch (map.campo_destino) {
-                case 'numero_nota': numeroNota = valorApi; break;
-                case 'numero_cobranca': numeroCobranca = valorApi; break;
-                case 'cnpj_cliente': cnpjCliente = valorApi; break;
-                case 'data_emissao': dataEmissao = valorApi; break;
-                case 'data_vencimento': dataVencimento = valorApi; break;
-                case 'valor': valor = valorApi; break;
+                case 'numero_nota': numeroNota = String(valorApi); break;
+                case 'numero_cobranca': numeroCobranca = String(valorApi); break;
+                case 'cliente_cnpj': cnpjCliente = String(valorApi); break;
+                case 'data_emissao': dataEmissao = String(valorApi); break;
+                case 'data_vencimento': dataVencimento = String(valorApi); break;
+                case 'valor': valor = Number(valorApi); break;
               }
             }
           }
         }
+
+        // Log para debug
+        console.log(`[sync-api-boletos] Item processado: nota=${numeroNota}, cobranca=${numeroCobranca}, cnpj=${cnpjCliente}`);
 
         // Buscar cliente pelo CNPJ
         const clienteId = cnpjToId.get(cnpjCliente);
