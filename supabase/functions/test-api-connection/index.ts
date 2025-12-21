@@ -6,34 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Dados mock para modo demonstração
-const MOCK_API_RESPONSE = {
-  d: {
-    results: [
-      {
-        PaymentRunID: "PR-001",
-        PaymentRunIsProposal: false,
-        PayingCompanyCode: "1000",
-        Supplier: "SUP-123",
-        Customer: "CUST-456",
-        PaymentRecipient: "REC-789",
-        PaymentDocument: "DOC-2024-001",
-        Bank: "341",
-        BankInternalID: "ITAU",
-        BankAccount: "12345-6",
-        BankAccountLongID: "0001123456",
-        BankControlKey: "001",
-        PaymentDueDate: "2024-12-15",
-        PaymentAmountInPaytCurrency: 15750.50,
-        PaytAmountInCoCodeCurrency: 15750.50,
-        numero_nota: "000123",
-        numero_cobranca: "COB-001",
-        cnpj_cliente: "12.345.678/0001-90"
-      }
-    ]
-  }
-};
-
 // Função para extrair campos de um objeto recursivamente
 function extractFields(obj: any, prefix: string = ''): string[] {
   const fields: string[] = [];
@@ -124,69 +96,55 @@ serve(async (req) => {
       auth_token,
       auth_api_key,
       auth_header_name,
-      modo_demo = true,
       integracao_id,
       limit = 1
     } = await req.json();
 
-    console.log(`[test-api-connection] Testando conexão. Modo demo: ${modo_demo}, Endpoint: ${endpoint}`);
+    // Validar que endpoint foi fornecido
+    if (!endpoint) {
+      throw new Error('Endpoint da API não configurado. Configure o endpoint antes de testar.');
+    }
+
+    console.log(`[test-api-connection] Testando conexão. Endpoint: ${endpoint}`);
 
     let apiResponse: any;
     let campos_detectados: string[] = [];
     let sample_data: any = null;
 
-    // IMPORTANTE: Se modo_demo=true, SEMPRE usar mock
-    // Só usar API real se modo_demo=false E temos endpoint
-    const useMock = modo_demo === true;
-    
-    if (useMock) {
-      console.log('[test-api-connection] Usando dados mock (sem endpoint configurado)');
-      apiResponse = MOCK_API_RESPONSE;
-    } else {
-      // Usar API real - endpoint pode estar vazio em modo demo sem endpoint
-      if (!endpoint && !modo_demo) {
-        throw new Error('Endpoint da API não configurado. Configure o endpoint ou ative o modo demonstração.');
-      }
-      
-      if (!endpoint) {
-        throw new Error('Endpoint da API não configurado');
-      }
+    // Construir headers de autenticação
+    const authHeaders = buildAuthHeaders({
+      tipo: tipo_autenticacao,
+      usuario: auth_usuario,
+      senha: auth_senha,
+      token: auth_token,
+      api_key: auth_api_key,
+      header_name: auth_header_name
+    });
 
-      console.log(`[test-api-connection] Chamando API real: ${endpoint}`);
-      
-      // Construir headers de autenticação
-      const authHeaders = buildAuthHeaders({
-        tipo: tipo_autenticacao,
-        usuario: auth_usuario,
-        senha: auth_senha,
-        token: auth_token,
-        api_key: auth_api_key,
-        header_name: auth_header_name
-      });
-
-      // Adicionar parâmetro de limite se a API suportar
-      let urlWithLimit = endpoint;
-      if (limit && !endpoint.includes('$top=') && !endpoint.includes('limit=')) {
-        const separator = endpoint.includes('?') ? '&' : '?';
-        urlWithLimit = `${endpoint}${separator}$top=${limit}`;
-      }
-
-      const response = await fetch(urlWithLimit, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...authHeaders
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro na API: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
-      }
-
-      apiResponse = await response.json();
+    // Adicionar parâmetro de limite se a API suportar
+    let urlWithLimit = endpoint;
+    if (limit && !endpoint.includes('$top=') && !endpoint.includes('limit=')) {
+      const separator = endpoint.includes('?') ? '&' : '?';
+      urlWithLimit = `${endpoint}${separator}$top=${limit}`;
     }
+
+    console.log(`[test-api-connection] Chamando API: ${urlWithLimit}`);
+
+    const response = await fetch(urlWithLimit, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...authHeaders
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro na API: ${response.status} ${response.statusText} - ${errorText.substring(0, 200)}`);
+    }
+
+    apiResponse = await response.json();
 
     // Extrair dados usando json_path
     let dados = apiResponse;
