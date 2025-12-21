@@ -6,113 +6,58 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Dados mock para modo demonstração
-const MOCK_BOLETOS_API = [
-  {
-    numero_nota: "000123",
-    numero_cobranca: "COB-001",
-    cnpj_cliente: "12.345.678/0001-90",
-    data_emissao: "2024-11-15",
-    data_vencimento: "2024-12-15",
-    valor: 15750.50,
-    status_sap: "ativo",
-    centro_custo: "CC-001",
-    empresa_sap: "1000",
-    divisao: "DIV-A",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000124",
-    numero_cobranca: "COB-002",
-    cnpj_cliente: "12.345.678/0001-90",
-    data_emissao: "2024-11-18",
-    data_vencimento: "2024-12-18",
-    valor: 8320.00,
-    status_sap: "ativo",
-    centro_custo: "CC-002",
-    empresa_sap: "1000",
-    divisao: "DIV-A",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000125",
-    numero_cobranca: "COB-003",
-    cnpj_cliente: "23.456.789/0001-01",
-    data_emissao: "2024-11-10",
-    data_vencimento: "2024-12-10",
-    valor: 22450.75,
-    status_sap: "ativo",
-    centro_custo: "CC-001",
-    empresa_sap: "1000",
-    divisao: "DIV-B",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000126",
-    numero_cobranca: "COB-004",
-    cnpj_cliente: "23.456.789/0001-01",
-    data_emissao: "2024-10-20",
-    data_vencimento: "2024-11-20",
-    valor: 5680.00,
-    status_sap: "vencido",
-    centro_custo: "CC-003",
-    empresa_sap: "1000",
-    divisao: "DIV-B",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000127",
-    numero_cobranca: "COB-005",
-    cnpj_cliente: "34.567.890/0001-12",
-    data_emissao: "2024-11-20",
-    data_vencimento: "2024-12-20",
-    valor: 31200.00,
-    status_sap: "ativo",
-    centro_custo: "CC-002",
-    empresa_sap: "2000",
-    divisao: "DIV-A",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000128",
-    numero_cobranca: "COB-006",
-    cnpj_cliente: "45.678.901/0001-23",
-    data_emissao: "2024-11-22",
-    data_vencimento: "2024-12-22",
-    valor: 12890.25,
-    status_sap: "ativo",
-    centro_custo: "CC-001",
-    empresa_sap: "2000",
-    divisao: "DIV-C",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000129",
-    numero_cobranca: "COB-007",
-    cnpj_cliente: "56.789.012/0001-34",
-    data_emissao: "2024-11-05",
-    data_vencimento: "2024-12-05",
-    valor: 7540.00,
-    status_sap: "ativo",
-    centro_custo: "CC-004",
-    empresa_sap: "1000",
-    divisao: "DIV-A",
-    moeda: "BRL"
-  },
-  {
-    numero_nota: "000130",
-    numero_cobranca: "COB-008",
-    cnpj_cliente: "67.890.123/0001-45",
-    data_emissao: "2024-10-15",
-    data_vencimento: "2024-11-15",
-    valor: 18900.00,
-    status_sap: "liquidado",
-    centro_custo: "CC-002",
-    empresa_sap: "2000",
-    divisao: "DIV-B",
-    moeda: "BRL"
+// Função para construir headers de autenticação
+function buildAuthHeaders(auth: {
+  tipo: string;
+  usuario?: string;
+  senha?: string;
+  token?: string;
+  api_key?: string;
+  header_name?: string;
+}): Record<string, string> {
+  const headers: Record<string, string> = {};
+  
+  switch (auth.tipo) {
+    case 'basic':
+      if (auth.usuario && auth.senha) {
+        const credentials = btoa(`${auth.usuario}:${auth.senha}`);
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+      break;
+    case 'bearer':
+      if (auth.token) {
+        headers['Authorization'] = `Bearer ${auth.token}`;
+      }
+      break;
+    case 'api_key':
+      if (auth.api_key) {
+        const headerName = auth.header_name || 'X-API-Key';
+        headers[headerName] = auth.api_key;
+      }
+      break;
+    case 'oauth2':
+      if (auth.token) {
+        headers['Authorization'] = `Bearer ${auth.token}`;
+      }
+      break;
   }
-];
+  
+  return headers;
+}
+
+// Função para obter valor em caminho JSON
+function getValueByPath(obj: any, path: string): any {
+  if (!path) return obj;
+  const parts = path.split('.');
+  let current = obj;
+  
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    current = current[part];
+  }
+  
+  return current;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -127,43 +72,73 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { integracao_id, modo_demo = true, endpoint, headers_auth } = await req.json();
+    const { integracao_id } = await req.json();
 
-    console.log(`[sync-api-boletos] Iniciando sincronização. Modo demo: ${modo_demo}`);
+    if (!integracao_id) {
+      throw new Error('ID da integração não fornecido');
+    }
 
-    let dadosApi: any[] = [];
-    let erros: any[] = [];
+    // Buscar configuração da integração
+    const { data: integracao, error: integracaoError } = await supabase
+      .from('vv_b_api_integracoes')
+      .select('*')
+      .eq('id', integracao_id)
+      .single();
 
-    if (modo_demo) {
-      // Usar dados mock
-      console.log('[sync-api-boletos] Usando dados mock para demonstração');
-      dadosApi = MOCK_BOLETOS_API;
-    } else {
-      // Chamar API real
-      if (!endpoint) {
-        throw new Error('Endpoint da API não configurado');
+    if (integracaoError || !integracao) {
+      throw new Error(`Integração não encontrada: ${integracaoError?.message || 'ID inválido'}`);
+    }
+
+    if (!integracao.endpoint_base) {
+      throw new Error('Endpoint da API não configurado na integração');
+    }
+
+    console.log(`[sync-api-boletos] Iniciando sincronização. Endpoint: ${integracao.endpoint_base}`);
+
+    // Construir headers de autenticação
+    const authHeaders = buildAuthHeaders({
+      tipo: integracao.tipo_autenticacao || 'none',
+      usuario: integracao.auth_usuario,
+      senha: integracao.auth_senha_encrypted, // TODO: descriptografar
+      token: integracao.auth_token_encrypted, // TODO: descriptografar
+      api_key: integracao.auth_api_key_encrypted, // TODO: descriptografar
+      header_name: integracao.auth_header_name
+    });
+
+    // Chamar API real
+    console.log(`[sync-api-boletos] Chamando API: ${integracao.endpoint_base}`);
+    
+    const apiResponse = await fetch(integracao.endpoint_base, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...authHeaders
       }
+    });
 
-      console.log(`[sync-api-boletos] Chamando API: ${endpoint}`);
-      
-      const apiResponse = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers_auth
-        }
-      });
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      throw new Error(`Erro na API: ${apiResponse.status} ${apiResponse.statusText} - ${errorText.substring(0, 200)}`);
+    }
 
-      if (!apiResponse.ok) {
-        throw new Error(`Erro na API: ${apiResponse.status} ${apiResponse.statusText}`);
-      }
+    let dadosApi = await apiResponse.json();
 
-      dadosApi = await apiResponse.json();
-      
-      if (!Array.isArray(dadosApi)) {
-        throw new Error('Resposta da API não é um array JSON');
+    // Extrair dados usando json_path se configurado
+    if (integracao.json_path) {
+      dadosApi = getValueByPath(dadosApi, integracao.json_path);
+    }
+
+    // Garantir que temos um array
+    if (!Array.isArray(dadosApi)) {
+      if (dadosApi && typeof dadosApi === 'object') {
+        dadosApi = [dadosApi];
+      } else {
+        throw new Error('Resposta da API não contém dados válidos');
       }
     }
+
+    let erros: any[] = [];
 
     // Buscar clientes para mapear CNPJ -> id
     const { data: clientes, error: clientesError } = await supabase
@@ -177,20 +152,53 @@ serve(async (req) => {
 
     const cnpjToId = new Map(clientes?.map(c => [c.cnpj, c.id]) || []);
 
+    // Buscar mapeamentos de campos configurados
+    const { data: mapeamentos } = await supabase
+      .from('vv_b_api_mapeamento_campos')
+      .select('*')
+      .eq('integracao_id', integracao_id)
+      .is('deleted', null)
+      .order('ordem', { ascending: true });
+
     let registrosNovos = 0;
     let registrosAtualizados = 0;
 
     for (const item of dadosApi) {
       try {
+        // Aplicar mapeamentos configurados
+        let numeroNota = item.numero_nota;
+        let numeroCobranca = item.numero_cobranca;
+        let cnpjCliente = item.cnpj_cliente;
+        let dataEmissao = item.data_emissao;
+        let dataVencimento = item.data_vencimento;
+        let valor = item.valor;
+
+        // Aplicar mapeamentos personalizados
+        if (mapeamentos && mapeamentos.length > 0) {
+          for (const map of mapeamentos) {
+            const valorApi = getValueByPath(item, map.campo_api);
+            if (valorApi !== undefined) {
+              switch (map.campo_destino) {
+                case 'numero_nota': numeroNota = valorApi; break;
+                case 'numero_cobranca': numeroCobranca = valorApi; break;
+                case 'cnpj_cliente': cnpjCliente = valorApi; break;
+                case 'data_emissao': dataEmissao = valorApi; break;
+                case 'data_vencimento': dataVencimento = valorApi; break;
+                case 'valor': valor = valorApi; break;
+              }
+            }
+          }
+        }
+
         // Buscar cliente pelo CNPJ
-        const clienteId = cnpjToId.get(item.cnpj_cliente);
+        const clienteId = cnpjToId.get(cnpjCliente);
         
         if (!clienteId) {
-          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${item.cnpj_cliente}`);
+          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente}`);
           erros.push({
             tipo: 'cliente_nao_encontrado',
-            cnpj: item.cnpj_cliente,
-            numero_nota: item.numero_nota
+            cnpj: cnpjCliente,
+            numero_nota: numeroNota
           });
           continue;
         }
@@ -198,12 +206,12 @@ serve(async (req) => {
         // Separar campos estruturados dos extras
         const dadosEstruturados = {
           integracao_id,
-          numero_nota: item.numero_nota,
+          numero_nota: numeroNota,
           cliente_id: clienteId,
-          numero_cobranca: item.numero_cobranca,
-          data_emissao: item.data_emissao,
-          data_vencimento: item.data_vencimento,
-          valor: item.valor,
+          numero_cobranca: numeroCobranca,
+          data_emissao: dataEmissao,
+          data_vencimento: dataVencimento,
+          valor: valor,
           sincronizado_em: new Date().toISOString()
         };
 
@@ -222,9 +230,9 @@ serve(async (req) => {
         const { data: existing, error: checkError } = await supabase
           .from('vv_b_boletos_api')
           .select('id')
-          .eq('numero_nota', item.numero_nota)
+          .eq('numero_nota', numeroNota)
           .eq('cliente_id', clienteId)
-          .eq('numero_cobranca', item.numero_cobranca)
+          .eq('numero_cobranca', numeroCobranca)
           .is('deleted', null)
           .maybeSingle();
 
@@ -283,12 +291,10 @@ serve(async (req) => {
     });
 
     // Atualizar última sincronização na integração
-    if (integracao_id) {
-      await supabase
-        .from('vv_b_api_integracoes')
-        .update({ ultima_sincronizacao: new Date().toISOString() })
-        .eq('id', integracao_id);
-    }
+    await supabase
+      .from('vv_b_api_integracoes')
+      .update({ ultima_sincronizacao: new Date().toISOString() })
+      .eq('id', integracao_id);
 
     console.log(`[sync-api-boletos] Sincronização concluída. Status: ${status}, Novos: ${registrosNovos}, Atualizados: ${registrosAtualizados}`);
 
