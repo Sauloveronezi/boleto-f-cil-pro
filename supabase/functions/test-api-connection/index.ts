@@ -100,12 +100,44 @@ serve(async (req) => {
       limit = 1
     } = await req.json();
 
+    // Buscar credenciais do banco se não fornecidas e tiver integracao_id
+    let finalAuthUsuario = auth_usuario;
+    let finalAuthSenha = auth_senha;
+    let finalAuthToken = auth_token;
+    let finalAuthApiKey = auth_api_key;
+    let finalEndpoint = endpoint;
+    let finalJsonPath = json_path;
+    let finalTipoAuth = tipo_autenticacao;
+    let finalHeaderName = auth_header_name;
+
+    if (integracao_id) {
+      const { data: integracao, error: integracaoError } = await supabase
+        .from('vv_b_api_integracoes')
+        .select('*')
+        .eq('id', integracao_id)
+        .single();
+
+      if (!integracaoError && integracao) {
+        // Usar valores do banco se não foram fornecidos no request
+        if (!finalEndpoint) finalEndpoint = integracao.endpoint_base;
+        if (!finalJsonPath) finalJsonPath = integracao.json_path;
+        if (!finalTipoAuth || finalTipoAuth === 'none') finalTipoAuth = integracao.tipo_autenticacao;
+        if (!finalHeaderName) finalHeaderName = integracao.auth_header_name;
+        if (!finalAuthUsuario) finalAuthUsuario = integracao.auth_usuario;
+        if (!finalAuthSenha) finalAuthSenha = integracao.auth_senha_encrypted;
+        if (!finalAuthToken) finalAuthToken = integracao.auth_token_encrypted;
+        if (!finalAuthApiKey) finalAuthApiKey = integracao.auth_api_key_encrypted;
+        
+        console.log(`[test-api-connection] Usando credenciais da integração: ${integracao.nome}`);
+      }
+    }
+
     // Validar que endpoint foi fornecido
-    if (!endpoint) {
+    if (!finalEndpoint) {
       throw new Error('Endpoint da API não configurado. Configure o endpoint antes de testar.');
     }
 
-    console.log(`[test-api-connection] Testando conexão. Endpoint: ${endpoint}`);
+    console.log(`[test-api-connection] Testando conexão. Endpoint: ${finalEndpoint}`);
 
     let apiResponse: any;
     let campos_detectados: string[] = [];
@@ -113,22 +145,23 @@ serve(async (req) => {
 
     // Construir headers de autenticação
     const authHeaders = buildAuthHeaders({
-      tipo: tipo_autenticacao,
-      usuario: auth_usuario,
-      senha: auth_senha,
-      token: auth_token,
-      api_key: auth_api_key,
-      header_name: auth_header_name
+      tipo: finalTipoAuth || 'none',
+      usuario: finalAuthUsuario,
+      senha: finalAuthSenha,
+      token: finalAuthToken,
+      api_key: finalAuthApiKey,
+      header_name: finalHeaderName
     });
 
     // Adicionar parâmetro de limite se a API suportar
-    let urlWithLimit = endpoint;
-    if (limit && !endpoint.includes('$top=') && !endpoint.includes('limit=')) {
-      const separator = endpoint.includes('?') ? '&' : '?';
-      urlWithLimit = `${endpoint}${separator}$top=${limit}`;
+    let urlWithLimit = finalEndpoint;
+    if (limit && !finalEndpoint.includes('$top=') && !finalEndpoint.includes('limit=')) {
+      const separator = finalEndpoint.includes('?') ? '&' : '?';
+      urlWithLimit = `${finalEndpoint}${separator}$top=${limit}`;
     }
 
     console.log(`[test-api-connection] Chamando API: ${urlWithLimit}`);
+    console.log(`[test-api-connection] Tipo auth: ${finalTipoAuth}, tem token: ${!!finalAuthToken}, tem senha: ${!!finalAuthSenha}`);
 
     const response = await fetch(urlWithLimit, {
       method: 'GET',
@@ -148,8 +181,8 @@ serve(async (req) => {
 
     // Extrair dados usando json_path
     let dados = apiResponse;
-    if (json_path) {
-      dados = getValueByPath(apiResponse, json_path);
+    if (finalJsonPath) {
+      dados = getValueByPath(apiResponse, finalJsonPath);
     }
 
     // Garantir que temos um array
