@@ -233,8 +233,7 @@ export default function ConfiguracaoCNAB() {
     if (camposDetectados.length === 0) {
         toast({
             title: 'Atenção',
-            description: 'Você está salvando um padrão sem campos mapeados.',
-            variant: 'warning'
+            description: 'Você está salvando um padrão sem campos mapeados.'
         });
     }
 
