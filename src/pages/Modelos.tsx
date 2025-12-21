@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye } from 'lucide-react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,11 +41,36 @@ import {
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
-import { DEFAULT_MODELOS } from '@/data/templates';
-import { ModeloBoleto, TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
+import { TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
-import { listarTemplates } from '@/lib/pdfTemplateGenerator';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useBancos } from '@/hooks/useBancos';
+
+interface CampoMapeado {
+  id: string | number;
+  nome: string;
+  variavel: string;
+  posicao_x: number;
+  posicao_y: number;
+  largura: number;
+  altura: number;
+}
+
+interface ModeloBoleto {
+  id: string;
+  nome_modelo: string;
+  banco_id: string | null;
+  bancos_compativeis: string[];
+  tipo_layout: TipoImpressao;
+  padrao: boolean;
+  campos_mapeados: CampoMapeado[];
+  texto_instrucoes: string;
+  template_pdf_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const VARIAVEIS_DISPONIVEIS = [
   { variavel: '{{cliente_razao_social}}', descricao: 'Razão social do cliente' },
@@ -61,94 +86,210 @@ const VARIAVEIS_DISPONIVEIS = [
 
 export default function Modelos() {
   const { toast } = useToast();
-  const [modelos, setModelos] = useState<ModeloBoleto[]>([]);
+  const queryClient = useQueryClient();
+  const { data: bancos } = useBancos();
 
-  // Carregar modelos do localStorage na inicialização
-  useEffect(() => {
-    const templatesImportados = listarTemplates();
-    
-    // Converter templates para ModeloBoleto
-    const modelosImportados: ModeloBoleto[] = templatesImportados.map((template) => ({
-      id: template.id,
-      nome_modelo: template.nome,
-      banco_id: template.bancos_compativeis[0] || '',
-      bancos_compativeis: template.bancos_compativeis,
-      tipo_layout: 'CNAB_400' as TipoImpressao,
-      padrao: false,
-      campos_mapeados: template.campos.map((campo) => ({
-        id: campo.tipo,
-        nome: campo.label,
-        variavel: `{{${campo.tipo}}}`,
-        posicao_x: campo.x,
-        posicao_y: campo.y,
-        largura: campo.largura,
-        altura: campo.altura,
-      })),
-      texto_instrucoes: '',
-      criado_em: template.criado_em,
-      atualizado_em: template.atualizado_em,
-      template_pdf_id: template.id,
-    }));
-
-    // Combinar com modelos padrão (substituindo mock)
-    setModelos([...DEFAULT_MODELOS, ...modelosImportados]);
-  }, []);
+  // Estado do formulário
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
   const [modeloVisualizando, setModeloVisualizando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
 
-  const getBancoNome = (bancoId: string) => {
-    const banco = BANCOS_SUPORTADOS.find((b) => b.id === bancoId);
+  // Form state para edição/criação
+  const [formNome, setFormNome] = useState('');
+  const [formBancoId, setFormBancoId] = useState<string>('');
+  const [formTipoLayout, setFormTipoLayout] = useState<string>('CNAB_400');
+  const [formTextoInstrucoes, setFormTextoInstrucoes] = useState('');
+
+  // Carregar modelos do banco de dados
+  const { data: modelos, isLoading } = useQuery({
+    queryKey: ['modelos-boleto'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .select('*')
+        .is('deleted', null)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return (data || []).map((m: any) => ({
+        id: m.id,
+        nome_modelo: m.nome_modelo,
+        banco_id: m.banco_id,
+        bancos_compativeis: m.bancos_compativeis || [],
+        tipo_layout: m.tipo_layout as TipoImpressao,
+        padrao: m.padrao || false,
+        campos_mapeados: (m.campos_mapeados || []) as CampoMapeado[],
+        texto_instrucoes: m.texto_instrucoes || '',
+        template_pdf_id: m.template_pdf_id,
+        created_at: m.created_at,
+        updated_at: m.updated_at,
+      })) as ModeloBoleto[];
+    }
+  });
+
+  // Mutation para criar modelo
+  const createModelo = useMutation({
+    mutationFn: async (modelo: Partial<ModeloBoleto>) => {
+      const payload = {
+        nome_modelo: modelo.nome_modelo!,
+        banco_id: modelo.banco_id || null,
+        bancos_compativeis: modelo.bancos_compativeis || [],
+        tipo_layout: modelo.tipo_layout || 'CNAB_400',
+        texto_instrucoes: modelo.texto_instrucoes || '',
+        campos_mapeados: JSON.parse(JSON.stringify(modelo.campos_mapeados || [])),
+        padrao: false,
+      };
+      
+      const { data, error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .insert(payload)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelos-boleto'] });
+      toast({ title: 'Modelo criado', description: 'O modelo foi salvo com sucesso.' });
+      setCriarNovo(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Mutation para atualizar modelo
+  const updateModelo = useMutation({
+    mutationFn: async ({ id, ...modelo }: { id: string } & Partial<ModeloBoleto>) => {
+      const payload = {
+        nome_modelo: modelo.nome_modelo,
+        banco_id: modelo.banco_id || null,
+        bancos_compativeis: modelo.bancos_compativeis || [],
+        tipo_layout: modelo.tipo_layout,
+        texto_instrucoes: modelo.texto_instrucoes,
+        campos_mapeados: JSON.parse(JSON.stringify(modelo.campos_mapeados || [])),
+      };
+      
+      const { data, error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelos-boleto'] });
+      toast({ title: 'Modelo atualizado', description: 'As alterações foram salvas.' });
+      setModeloEditando(null);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Mutation para deletar modelo
+  const deleteModelo = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .update({ deleted: 'S', data_delete: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['modelos-boleto'] });
+      toast({ title: 'Modelo excluído' });
+      setModeloDeletando(null);
+    },
+    onError: (error: any) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Reset form
+  const resetForm = () => {
+    setFormNome('');
+    setFormBancoId('');
+    setFormTipoLayout('CNAB_400');
+    setFormTextoInstrucoes('');
+  };
+
+  // Ao abrir edição, preencher form
+  useEffect(() => {
+    if (modeloEditando) {
+      setFormNome(modeloEditando.nome_modelo);
+      setFormBancoId(modeloEditando.banco_id || '');
+      setFormTipoLayout(modeloEditando.tipo_layout);
+      setFormTextoInstrucoes(modeloEditando.texto_instrucoes);
+    }
+  }, [modeloEditando]);
+
+  // Ao abrir criar novo, resetar
+  useEffect(() => {
+    if (criarNovo) {
+      resetForm();
+    }
+  }, [criarNovo]);
+
+  const getBancoNome = (bancoId: string | null) => {
+    if (!bancoId) return 'Banco não selecionado';
+    const banco = bancos?.find((b) => b.id === bancoId) || BANCOS_SUPORTADOS.find((b) => b.id === bancoId);
     return banco?.nome_banco || 'Banco não encontrado';
   };
 
   const handleSalvar = () => {
-    toast({
-      title: modeloEditando ? 'Modelo atualizado' : 'Modelo criado',
-      description: 'O modelo de layout foi salvo com sucesso.',
-    });
-    setModeloEditando(null);
-    setCriarNovo(false);
+    if (!formNome.trim()) {
+      toast({ title: 'Erro', description: 'Nome do modelo é obrigatório', variant: 'destructive' });
+      return;
+    }
+
+    const payload = {
+      nome_modelo: formNome,
+      banco_id: formBancoId || null,
+      bancos_compativeis: formBancoId ? [formBancoId] : [],
+      tipo_layout: formTipoLayout as TipoImpressao,
+      texto_instrucoes: formTextoInstrucoes,
+      campos_mapeados: modeloEditando?.campos_mapeados || [],
+    };
+
+    if (modeloEditando) {
+      updateModelo.mutate({ id: modeloEditando.id, ...payload });
+    } else {
+      createModelo.mutate(payload);
+    }
   };
 
-  const handleDuplicar = (modelo: ModeloBoleto) => {
-    const novoModelo: ModeloBoleto = {
+  const handleDuplicar = async (modelo: ModeloBoleto) => {
+    await createModelo.mutateAsync({
       ...modelo,
-      id: `modelo_${Date.now()}`,
       nome_modelo: `${modelo.nome_modelo} (Cópia)`,
       padrao: false,
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    };
-    setModelos(prev => [...prev, novoModelo]);
-    toast({
-      title: 'Modelo duplicado',
-      description: `Uma cópia de "${modelo.nome_modelo}" foi criada.`,
     });
   };
 
   const handleDeletar = () => {
     if (modeloDeletando) {
-      setModelos(prev => prev.filter(m => m.id !== modeloDeletando.id));
-      toast({
-        title: 'Modelo excluído',
-        description: 'O modelo de layout foi excluído com sucesso.',
-      });
+      deleteModelo.mutate(modeloDeletando.id);
     }
-    setModeloDeletando(null);
   };
 
   const handleImportarPDF = (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => {
-    // Criar um novo modelo baseado no template PDF importado
-    const novoModelo: ModeloBoleto = {
-      id: `modelo_${Date.now()}`,
+    createModelo.mutate({
       nome_modelo: nomeModelo,
-      banco_id: bancosCompativeis[0], // Banco principal
+      banco_id: bancosCompativeis[0] || null,
       bancos_compativeis: bancosCompativeis,
-      tipo_layout: 'CNAB_400', // Padrão
-      padrao: false,
+      tipo_layout: 'CNAB_400',
+      texto_instrucoes: '',
       campos_mapeados: template.layout_detectado.areas_texto.map(area => ({
         id: area.id,
         nome: area.texto_original || '',
@@ -158,24 +299,11 @@ export default function Modelos() {
         largura: area.largura,
         altura: area.altura,
       })),
-      texto_instrucoes: '',
-      template_pdf_id: template.id,
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    };
-
-    setModelos(prev => [...prev, novoModelo]);
-    
-    // Salvar template no localStorage
-    const templates = JSON.parse(localStorage.getItem('templates_pdf') || '[]');
-    templates.push(template);
-    localStorage.setItem('templates_pdf', JSON.stringify(templates));
-
-    toast({
-      title: 'Modelo importado com sucesso',
-      description: `O modelo "${nomeModelo}" foi criado a partir do PDF e está disponível para ${bancosCompativeis.length} banco(s).`,
     });
   };
+
+  const isFormDialogOpen = !!modeloEditando || criarNovo;
+  const isSaving = createModelo.isPending || updateModelo.isPending;
 
   return (
     <MainLayout>
@@ -209,24 +337,7 @@ export default function Modelos() {
                 <p className="font-medium text-sm">Importe um PDF de boleto existente</p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Faça upload de um boleto PDF para copiar o layout exato. 
-                  O mesmo modelo pode ser compartilhado entre vários bancos - apenas os dados impressos mudam.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Dica sobre variáveis */}
-        <Card className="bg-muted/30 border-muted">
-          <CardContent className="py-4">
-            <div className="flex items-start gap-3">
-              <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Dica: Use variáveis nos textos</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Você pode usar variáveis como <code className="bg-muted px-1 rounded">{'{{cliente_razao_social}}'}</code> 
-                  {' '}ou <code className="bg-muted px-1 rounded">{'{{valor_titulo}}'}</code> nos textos de instrução. 
-                  Elas serão substituídas automaticamente pelos dados reais do cliente e do boleto.
+                  O mesmo modelo pode ser compartilhado entre vários bancos.
                 </p>
               </div>
             </div>
@@ -234,133 +345,155 @@ export default function Modelos() {
         </Card>
 
         {/* Grid de Modelos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {modelos.map((modelo) => (
-            <Card key={modelo.id} className="hover:shadow-card-hover transition-shadow">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      {modelo.template_pdf_id ? (
-                        <FileText className="h-5 w-5 text-primary" />
-                      ) : (
-                        <Palette className="h-5 w-5 text-primary" />
-                      )}
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{modelo.nome_modelo}</CardTitle>
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {modelo.padrao && (
-                          <Badge variant="secondary">Padrão</Badge>
-                        )}
-                        {modelo.template_pdf_id && (
-                          <Badge variant="outline" className="text-xs">
-                            <FileText className="h-3 w-3 mr-1" />
-                            PDF
-                          </Badge>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {modelos?.map((modelo) => (
+              <Card key={modelo.id} className="hover:shadow-card-hover transition-shadow">
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        {modelo.template_pdf_id ? (
+                          <FileText className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Palette className="h-5 w-5 text-primary" />
                         )}
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2 text-sm">
-                  {modelo.bancos_compativeis && modelo.bancos_compativeis.length > 1 ? (
-                    <div className="flex items-start gap-2">
-                      <Share2 className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <div>
-                        <span className="text-muted-foreground">Compartilhado:</span>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {modelo.bancos_compativeis.map(bancoId => {
-                            const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoId);
-                            return banco ? (
-                              <Badge key={bancoId} variant="outline" className="text-xs">
-                                {banco.codigo_banco}
-                              </Badge>
-                            ) : null;
-                          })}
+                        <CardTitle className="text-base">{modelo.nome_modelo}</CardTitle>
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                          {modelo.padrao && (
+                            <Badge variant="secondary">Padrão</Badge>
+                          )}
+                          {modelo.template_pdf_id && (
+                            <Badge variant="outline" className="text-xs">
+                              <FileText className="h-3 w-3 mr-1" />
+                              PDF
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>{getBancoNome(modelo.banco_id)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{TIPOS_IMPRESSAO[modelo.tipo_layout].label}</span>
                   </div>
-                </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2 text-sm">
+                    {modelo.bancos_compativeis && modelo.bancos_compativeis.length > 1 ? (
+                      <div className="flex items-start gap-2">
+                        <Share2 className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <span className="text-muted-foreground">Compartilhado:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {modelo.bancos_compativeis.map(bancoId => {
+                              const banco = bancos?.find(b => b.id === bancoId) || BANCOS_SUPORTADOS.find(b => b.id === bancoId);
+                              return banco ? (
+                                <Badge key={bancoId} variant="outline" className="text-xs">
+                                  {banco.codigo_banco}
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span>{getBancoNome(modelo.banco_id)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span>{TIPOS_IMPRESSAO[modelo.tipo_layout]?.label || modelo.tipo_layout}</span>
+                    </div>
+                  </div>
 
-                <div className="text-xs text-muted-foreground">
-                  {modelo.campos_mapeados.length} campo(s) mapeado(s)
-                </div>
+                  <div className="text-xs text-muted-foreground">
+                    {modelo.campos_mapeados?.length || 0} campo(s) mapeado(s)
+                  </div>
 
-                <div className="flex gap-2 pt-2 border-t border-border">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setModeloVisualizando(modelo)}
-                  >
-                    <Eye className="h-4 w-4 mr-1" />
-                    Ver
+                  <div className="flex gap-2 pt-2 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setModeloVisualizando(modelo)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Ver
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setModeloEditando(modelo)}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Editar
+                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDuplicar(modelo)}
+                            disabled={createModelo.isPending}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Duplicar modelo</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setModeloDeletando(modelo)}
+                            disabled={modelo.padrao}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {(!modelos || modelos.length === 0) && (
+              <Card className="col-span-full">
+                <CardContent className="py-12 text-center">
+                  <Palette className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nenhum modelo cadastrado.</p>
+                  <Button className="mt-4" onClick={() => setCriarNovo(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Criar Primeiro Modelo
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setModeloEditando(modelo)}
-                  >
-                    <Edit className="h-4 w-4 mr-1" />
-                    Editar
-                  </Button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDuplicar(modelo)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Duplicar modelo</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setModeloDeletando(modelo)}
-                          disabled={modelo.padrao}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         {/* Modal de Edição/Criação */}
         <Dialog
-          open={!!modeloEditando || criarNovo}
-          onOpenChange={() => {
-            setModeloEditando(null);
-            setCriarNovo(false);
+          open={isFormDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setModeloEditando(null);
+              setCriarNovo(false);
+            }
           }}
         >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -370,8 +503,7 @@ export default function Modelos() {
                 {modeloEditando ? 'Editar Modelo' : 'Novo Modelo de Layout'}
               </DialogTitle>
               <DialogDescription>
-                Configure o modelo de layout para impressão de boletos. Use variáveis
-                nos textos para inserir dados dinâmicos.
+                Configure o modelo de layout para impressão de boletos.
               </DialogDescription>
             </DialogHeader>
 
@@ -379,21 +511,22 @@ export default function Modelos() {
               {/* Informações básicas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label>Nome do Modelo</Label>
+                  <Label>Nome do Modelo *</Label>
                   <Input
-                    defaultValue={modeloEditando?.nome_modelo || ''}
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
                     placeholder="Ex: Modelo Padrão BB"
                     className="mt-1"
                   />
                 </div>
                 <div>
                   <Label>Banco</Label>
-                  <Select defaultValue={modeloEditando?.banco_id || ''}>
+                  <Select value={formBancoId} onValueChange={setFormBancoId}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecione o banco" />
                     </SelectTrigger>
                     <SelectContent>
-                      {BANCOS_SUPORTADOS.map((banco) => (
+                      {(bancos || BANCOS_SUPORTADOS).map((banco) => (
                         <SelectItem key={banco.id} value={banco.id}>
                           {banco.nome_banco}
                         </SelectItem>
@@ -403,7 +536,7 @@ export default function Modelos() {
                 </div>
                 <div>
                   <Label>Tipo de Layout</Label>
-                  <Select defaultValue={modeloEditando?.tipo_layout || ''}>
+                  <Select value={formTipoLayout} onValueChange={setFormTipoLayout}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecione o tipo" />
                     </SelectTrigger>
@@ -437,7 +570,8 @@ export default function Modelos() {
                   </TooltipProvider>
                 </Label>
                 <Textarea
-                  defaultValue={modeloEditando?.texto_instrucoes || ''}
+                  value={formTextoInstrucoes}
+                  onChange={(e) => setFormTextoInstrucoes(e.target.value)}
                   placeholder="Ex: Não receber após 30 dias do vencimento. Cobrar juros de {{taxa_juros}}% ao mês..."
                   rows={4}
                   className="mt-1"
@@ -476,11 +610,24 @@ export default function Modelos() {
                 </div>
               </div>
 
-              {/* Campos mapeados (simplificado) */}
+              {/* Campos mapeados (info) */}
+              {modeloEditando && modeloEditando.campos_mapeados.length > 0 && (
+                <div>
+                  <Label className="text-sm font-medium">Campos Mapeados Atuais</Label>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {modeloEditando.campos_mapeados.map((campo, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {campo.nome || campo.variavel}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground text-center">
-                  O editor visual de campos estará disponível em breve.
-                  Por enquanto, os campos padrão serão utilizados automaticamente.
+                  O editor visual de posicionamento de campos estará disponível em breve.
+                  Por enquanto, os campos padrão serão utilizados.
                 </p>
               </div>
             </div>
@@ -492,11 +639,22 @@ export default function Modelos() {
                   setModeloEditando(null);
                   setCriarNovo(false);
                 }}
+                disabled={isSaving}
               >
                 Cancelar
               </Button>
-              <Button onClick={handleSalvar}>
-                {modeloEditando ? 'Salvar Alterações' : 'Criar Modelo'}
+              <Button onClick={handleSalvar} disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    {modeloEditando ? 'Salvar Alterações' : 'Criar Modelo'}
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -514,8 +672,12 @@ export default function Modelos() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeletar} className="bg-destructive text-destructive-foreground">
-                Excluir
+              <AlertDialogAction 
+                onClick={handleDeletar} 
+                className="bg-destructive text-destructive-foreground"
+                disabled={deleteModelo.isPending}
+              >
+                {deleteModelo.isPending ? 'Excluindo...' : 'Excluir'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -551,15 +713,8 @@ export default function Modelos() {
                       <p className="font-medium">{TIPOS_IMPRESSAO[modeloVisualizando.tipo_layout]?.label || modeloVisualizando.tipo_layout}</p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Bancos Compatíveis</Label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {modeloVisualizando.bancos_compativeis?.map(bancoId => {
-                          const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoId);
-                          return banco ? (
-                            <Badge key={bancoId} variant="outline">{banco.codigo_banco}</Badge>
-                          ) : null;
-                        })}
-                      </div>
+                      <Label className="text-muted-foreground">Banco</Label>
+                      <p className="font-medium">{getBancoNome(modeloVisualizando.banco_id)}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Total de Campos</Label>
@@ -573,7 +728,6 @@ export default function Modelos() {
                       Layout do Boleto (representação simplificada)
                     </div>
                     
-                    {/* Simular layout do boleto */}
                     <div className="space-y-2 font-mono text-xs">
                       <div className="border-b-2 border-black dark:border-white pb-2 flex justify-between items-center">
                         <div className="flex items-center gap-2">
