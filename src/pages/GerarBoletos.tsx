@@ -115,7 +115,6 @@ export default function GerarBoletos() {
              toast({
               title: 'Arquivo processado com ressalvas',
               description: `${dados.notas.length} registro(s) bruto(s) importados. Os dados podem estar incompletos.`,
-              variant: 'warning',
             });
           } else {
             toast({

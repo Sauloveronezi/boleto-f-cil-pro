@@ -84,7 +84,7 @@ export function CnabTextEditor({ conteudo, campos, tipoCNAB, onCamposChange, onE
     return conteudo.split('\n').filter(l => l.trim()).map((linha, index) => ({
       numero: index + 1,
       conteudo: linha,
-      tipoLinha: detectarTipoLinha(linha, tipoCNAB),
+      tipoLinha: identificarTipoLinha(linha, tipoCNAB),
       tipoRegistro: linha.charAt(0),
     }));
   }, [conteudo, tipoCNAB]);
