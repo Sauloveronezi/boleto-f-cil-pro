@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Save, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Save, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,14 +44,14 @@ interface MapeamentoCamposCardProps {
   onRefreshCampos?: () => void;
 }
 
-const CAMPOS_DESTINO = [
-  { value: 'numero_nota', label: 'Número da Nota', tipo_sugerido: 'string' },
-  { value: 'numero_cobranca', label: 'Número Cobrança', tipo_sugerido: 'string' },
-  { value: 'cliente_cnpj', label: 'CNPJ Cliente', tipo_sugerido: 'string' },
-  { value: 'valor', label: 'Valor', tipo_sugerido: 'number' },
-  { value: 'data_emissao', label: 'Data Emissão', tipo_sugerido: 'date' },
-  { value: 'data_vencimento', label: 'Data Vencimento', tipo_sugerido: 'date' },
-  { value: 'dados_extras', label: 'Dados Extras (JSON)', tipo_sugerido: 'string' },
+// Campos padrão que existem na tabela vv_b_boletos_api
+const CAMPOS_DESTINO_PADRAO = [
+  { value: 'numero_nota', label: 'Número da Nota', tipo_sugerido: 'string', obrigatorio: true },
+  { value: 'numero_cobranca', label: 'Número Cobrança', tipo_sugerido: 'string', obrigatorio: true },
+  { value: 'cliente_cnpj', label: 'CNPJ Cliente', tipo_sugerido: 'string', obrigatorio: true },
+  { value: 'valor', label: 'Valor', tipo_sugerido: 'number', obrigatorio: false },
+  { value: 'data_emissao', label: 'Data Emissão', tipo_sugerido: 'date', obrigatorio: false },
+  { value: 'data_vencimento', label: 'Data Vencimento', tipo_sugerido: 'date', obrigatorio: false },
 ];
 
 const TIPOS_DADO = [
@@ -74,7 +74,7 @@ export function MapeamentoCamposCard({
   
   const [novoCampo, setNovoCampo] = useState({
     campo_api: '',
-    campo_destino: 'dados_extras',
+    campo_destino: 'numero_nota',
     tipo_dado: 'string',
     obrigatorio: false,
   });
@@ -97,12 +97,17 @@ export function MapeamentoCamposCard({
 
   // Campos já mapeados (para marcar como usados, mas não remover)
   const camposMapeados = new Set(mapeamentos?.map(m => m.campo_api) || []);
+  const camposDestinoMapeados = new Set(mapeamentos?.map(m => m.campo_destino) || []);
   
   // TODOS os campos da API devem aparecer, marcando os já usados
   const camposDisponiveis = camposApiDetectados.map(campo => ({
     campo,
     jaMapeado: camposMapeados.has(campo)
   }));
+
+  // Verificar quais campos obrigatórios ainda faltam mapear
+  const camposObrigatoriosFaltando = CAMPOS_DESTINO_PADRAO
+    .filter(c => c.obrigatorio && !camposDestinoMapeados.has(c.value));
 
   // Atualizar seleção do campo quando mudar
   useEffect(() => {
@@ -198,7 +203,7 @@ export function MapeamentoCamposCard({
   };
 
   const handleSelectCampoDestino = (campoDestino: string) => {
-    const destino = CAMPOS_DESTINO.find(c => c.value === campoDestino);
+    const destino = CAMPOS_DESTINO_PADRAO.find(c => c.value === campoDestino);
     setNovoCampo({
       ...novoCampo,
       campo_destino: campoDestino,
@@ -228,6 +233,21 @@ export function MapeamentoCamposCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Alerta de campos obrigatórios faltando */}
+        {camposObrigatoriosFaltando.length > 0 && (
+          <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-300 dark:border-amber-700 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                Campos obrigatórios faltando
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Configure os mapeamentos para: {camposObrigatoriosFaltando.map(c => c.label).join(', ')}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Campos detectados da API - mostra todos, marca os já mapeados */}
         {camposApiDetectados.length > 0 && (
           <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -311,9 +331,9 @@ export function MapeamentoCamposCard({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CAMPOS_DESTINO.map((c) => (
+                  {CAMPOS_DESTINO_PADRAO.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
-                      {c.label}
+                      {c.label} {c.obrigatorio && <span className="text-destructive">*</span>}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -391,7 +411,7 @@ export function MapeamentoCamposCard({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CAMPOS_DESTINO.map((c) => (
+                        {CAMPOS_DESTINO_PADRAO.map((c) => (
                           <SelectItem key={c.value} value={c.value}>
                             {c.label}
                           </SelectItem>
