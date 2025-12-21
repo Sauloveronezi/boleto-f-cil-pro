@@ -274,15 +274,48 @@ serve(async (req) => {
           continue;
         }
 
-        // Buscar cliente pelo CNPJ (se não existir, ainda assim salvamos com cliente_id = null)
-        const clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente)) ?? null;
+        // Buscar cliente pelo CNPJ - se não existir, criar automaticamente
+        let clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente)) ?? null;
+        
         if (!clienteId) {
-          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente} (salvando com cliente_id = null)`);
-          erros.push({
-            tipo: 'cliente_nao_encontrado',
-            cnpj: cnpjCliente,
-            numero_nota: numeroNota,
-          });
+          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente} - criando automaticamente`);
+          
+          // Extrair dados do cliente da API (com fallbacks)
+          const nomeCliente = item?.CustomerName ?? item?.nome_cliente ?? item?.razao_social ?? 
+                              item?.BusinessPartnerFullName ?? item?.SupplierName ?? `Cliente ${cnpjCliente}`;
+          
+          // Criar novo cliente
+          const { data: novoCliente, error: createClienteError } = await supabase
+            .from('vv_b_clientes')
+            .insert({
+              cnpj: cnpjCliente,
+              razao_social: String(nomeCliente),
+              endereco: item?.endereco ?? item?.StreetName ?? null,
+              cidade: item?.cidade ?? item?.CityName ?? null,
+              estado: item?.estado ?? item?.Region ?? null,
+              cep: item?.cep ?? item?.PostalCode ?? null,
+              email: item?.email ?? item?.EmailAddress ?? null,
+              telefone: item?.telefone ?? item?.PhoneNumber ?? null,
+              business_partner: item?.BusinessPartner ?? item?.business_partner ?? null,
+              parceiro_negocio: item?.parceiro_negocio ?? null,
+            })
+            .select('id')
+            .single();
+          
+          if (createClienteError) {
+            console.error(`[sync-api-boletos] Erro ao criar cliente: ${createClienteError.message}`);
+            erros.push({
+              tipo: 'erro_criar_cliente',
+              cnpj: cnpjCliente,
+              numero_nota: numeroNota,
+              erro: createClienteError.message
+            });
+          } else if (novoCliente) {
+            clienteId = novoCliente.id;
+            // Atualizar o mapa local para evitar duplicatas no mesmo lote
+            cnpjToId.set(normalizeCnpj(cnpjCliente), clienteId);
+            console.log(`[sync-api-boletos] Cliente criado com sucesso: ${clienteId}`);
+          }
         }
 
         // Separar campos estruturados dos extras
