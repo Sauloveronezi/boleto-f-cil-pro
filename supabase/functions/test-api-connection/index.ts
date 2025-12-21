@@ -135,9 +135,9 @@ serve(async (req) => {
     let campos_detectados: string[] = [];
     let sample_data: any = null;
 
-    // IMPORTANTE: Se modo_demo=false E temos endpoint, usar API real
-    // Só usar mock se modo_demo=true E não temos endpoint
-    const useMock = modo_demo && !endpoint;
+    // IMPORTANTE: Se modo_demo=true, SEMPRE usar mock
+    // Só usar API real se modo_demo=false E temos endpoint
+    const useMock = modo_demo === true;
     
     if (useMock) {
       console.log('[test-api-connection] Usando dados mock (sem endpoint configurado)');
