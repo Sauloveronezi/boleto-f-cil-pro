@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette } from 'lucide-react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette, HelpCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,8 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { HelpCircle } from 'lucide-react';
-import { BANCOS_SUPORTADOS } from '@/data/bancos';
+import { useBancos } from '@/hooks/useBancos';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB, TipoRegistroCNAB } from '@/types/boleto';
@@ -101,6 +100,7 @@ function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 
 export default function ImportarLayout() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { data: bancos = [], isLoading: bancosLoading } = useBancos();
   const jsonInputRef = useRef<HTMLInputElement>(null);
   
   const [arquivoRemessa, setArquivoRemessa] = useState<File | null>(null);
@@ -519,7 +519,7 @@ export default function ImportarLayout() {
       setCamposDetectados(campos);
 
       // Gerar configuração CNAB
-      const banco = BANCOS_SUPORTADOS.find(b => b.id === bancoSelecionado);
+      const banco = bancos.find(b => b.id === bancoSelecionado);
       const configCampos: CampoCNAB[] = campos.map((c, index) => ({
         id: `campo_${index + 1}`,
         nome: c.nome,
@@ -1136,7 +1136,9 @@ export default function ImportarLayout() {
                           <SelectValue placeholder="Selecione o banco" />
                         </SelectTrigger>
                         <SelectContent>
-                          {BANCOS_SUPORTADOS.map((banco) => (
+                          {bancosLoading ? (
+                            <SelectItem value="" disabled>Carregando...</SelectItem>
+                          ) : bancos.map((banco) => (
                             <SelectItem key={banco.id} value={banco.id}>
                               {banco.codigo_banco} - {banco.nome_banco}
                             </SelectItem>

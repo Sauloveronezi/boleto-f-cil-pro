@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { WizardSteps, WizardStep } from '@/components/boleto/WizardSteps';
 import { BancoSelector } from '@/components/boleto/BancoSelector';
@@ -14,7 +14,7 @@ import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from 
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import { listarTemplates } from '@/lib/pdfTemplateGenerator';
-import { BANCOS_SUPORTADOS } from '@/data/bancos';
+import { useBancos } from '@/hooks/useBancos';
 import { DEFAULT_MODELOS } from '@/data/templates';
 
 const WIZARD_STEPS: WizardStep[] = [
@@ -27,6 +27,7 @@ const WIZARD_STEPS: WizardStep[] = [
 export default function GerarBoletos() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { data: bancos = [], isLoading: bancosLoading } = useBancos();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
@@ -40,13 +41,13 @@ export default function GerarBoletos() {
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
   const [modelos, setModelos] = useState<ModeloBoleto[]>(DEFAULT_MODELOS);
 
-  const banco = BANCOS_SUPORTADOS.find((b) => b.id === bancoSelecionado) || {
+  const banco = bancos.find((b) => b.id === bancoSelecionado) || {
     id: 'unknown',
     nome_banco: 'Banco Desconhecido',
     codigo_banco: '000',
     tipo_layout_padrao: 'CNAB_400',
     ativo: false
-  } as any; // Cast seguro para evitar crash se banco for null
+  } as any;
 
   // Configuração bancária específica (agência, conta, juros) deve vir de um store real.
   // Por enquanto, passamos undefined para usar os valores padrão do gerador ou inseridos manualmente no template.
@@ -219,9 +220,16 @@ export default function GerarBoletos() {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
+        if (bancosLoading) {
+          return (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          );
+        }
         return (
           <BancoSelector
-            bancos={BANCOS_SUPORTADOS}
+            bancos={bancos}
             bancoSelecionado={bancoSelecionado}
             tipoImpressao={tipoOrigem}
             arquivoCNAB={arquivoCNAB}
