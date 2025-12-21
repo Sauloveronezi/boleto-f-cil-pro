@@ -17,13 +17,18 @@ function buildAuthHeaders(auth: {
 }): Record<string, string> {
   const headers: Record<string, string> = {};
 
-  const headerName = auth.header_name || 'Authorization';
+  const authorizationHeaderName = auth.header_name || 'Authorization';
 
   switch (auth.tipo) {
     case 'basic': {
       if (auth.usuario && auth.senha) {
-        const credentials = btoa(`${auth.usuario}:${auth.senha}`);
-        headers['Authorization'] = `Basic ${credentials}`;
+        // Se já vier no formato "Basic xxx", respeitar
+        if (/^basic\s+/i.test(auth.senha.trim())) {
+          headers['Authorization'] = auth.senha.trim();
+        } else {
+          const credentials = btoa(`${auth.usuario}:${auth.senha}`);
+          headers['Authorization'] = `Basic ${credentials}`;
+        }
       }
       break;
     }
@@ -31,7 +36,9 @@ function buildAuthHeaders(auth: {
     case 'bearer':
     case 'oauth2': {
       if (auth.token) {
-        headers[headerName] = `Bearer ${auth.token}`;
+        const token = auth.token.trim();
+        // Se o usuário colou o header completo ("Bearer xxx"), não duplicar
+        headers[authorizationHeaderName] = /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
       }
       break;
     }
