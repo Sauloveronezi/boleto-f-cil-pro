@@ -277,9 +277,12 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
 
     setLoading(true);
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const usuarioId = userData.user?.id ?? null;
+
       const { error } = await supabase
         .from('vv_b_api_integracoes')
-        .update({ deleted: 'S', data_delete: new Date().toISOString() })
+        .update({ deleted: '*', data_delete: new Date().toISOString(), usuario_delete_id: usuarioId })
         .eq('id', integracao.id);
 
       if (error) throw error;
