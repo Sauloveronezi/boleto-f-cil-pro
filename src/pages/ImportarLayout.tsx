@@ -1137,7 +1137,9 @@ export default function ImportarLayout() {
                         </SelectTrigger>
                         <SelectContent>
                           {bancosLoading ? (
-                            <SelectItem value="" disabled>Carregando...</SelectItem>
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">Carregando...</div>
+                          ) : bancos.length === 0 ? (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum banco encontrado</div>
                           ) : bancos.map((banco) => (
                             <SelectItem key={banco.id} value={banco.id}>
                               {banco.codigo_banco} - {banco.nome_banco}
