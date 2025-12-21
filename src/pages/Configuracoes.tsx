@@ -18,6 +18,7 @@ import {
 import { HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DadosEmpresa, EMPRESA_PADRAO, salvarDadosEmpresa, carregarDadosEmpresa } from '@/types/empresa';
+import { ApiConfigCard } from '@/components/api/ApiConfigCard';
 
 export default function Configuracoes() {
   const { toast } = useToast();
@@ -332,82 +333,7 @@ export default function Configuracoes() {
 
           {/* Configuração de API */}
           <TabsContent value="api" className="space-y-6">
-            <Card className={modoDemo ? 'opacity-60' : ''}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Globe className="h-5 w-5" />
-                  Conexão com API / CDS
-                  {modoDemo && (
-                    <Badge variant="outline" className="ml-2">
-                      Desativado no modo demo
-                    </Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  Configure a conexão com a API de dados (ex.: SAP S/4HANA, CDS Views).
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      Endpoint da API
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            <p>
-                              URL base da API que fornece os dados de clientes e notas fiscais.
-                              Ex.: https://api.suaempresa.com/v1
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </Label>
-                    <Input
-                      value={apiEndpoint}
-                      onChange={(e) => setApiEndpoint(e.target.value)}
-                      placeholder="https://api.suaempresa.com/v1"
-                      disabled={modoDemo}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      Token de Autenticação
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs">
-                            <p>
-                              Token de autenticação para acesso à API. Mantenha este token seguro.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </Label>
-                    <Input
-                      type="password"
-                      value={apiToken}
-                      onChange={(e) => setApiToken(e.target.value)}
-                      placeholder="••••••••••••••••"
-                      disabled={modoDemo}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <Button variant="outline" disabled={modoDemo} size="sm">
-                    Testar Conexão
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ApiConfigCard />
           </TabsContent>
 
           {/* Configurações de Segurança */}

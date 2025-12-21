@@ -8,7 +8,8 @@ import {
   Palette,
   Building2,
   Upload,
-  FileCode
+  FileCode,
+  CloudDownload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +19,7 @@ const menuItems = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
       { icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' },
+      { icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' },
     ]
   },
   {
