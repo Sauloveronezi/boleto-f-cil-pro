@@ -1054,6 +1054,12 @@ export type Database = {
       vv_b_api_integracoes: {
         Row: {
           ativo: boolean | null
+          auth_api_key_encrypted: string | null
+          auth_header_name: string | null
+          auth_senha_encrypted: string | null
+          auth_token_encrypted: string | null
+          auth_usuario: string | null
+          campos_api_detectados: Json | null
           campos_chave: string[] | null
           created_at: string
           data_delete: string | null
@@ -1066,12 +1072,19 @@ export type Database = {
           modo_demo: boolean | null
           nome: string
           tipo: string
+          tipo_autenticacao: string | null
           ultima_sincronizacao: string | null
           updated_at: string
           usuario_delete_id: string | null
         }
         Insert: {
           ativo?: boolean | null
+          auth_api_key_encrypted?: string | null
+          auth_header_name?: string | null
+          auth_senha_encrypted?: string | null
+          auth_token_encrypted?: string | null
+          auth_usuario?: string | null
+          campos_api_detectados?: Json | null
           campos_chave?: string[] | null
           created_at?: string
           data_delete?: string | null
@@ -1084,12 +1097,19 @@ export type Database = {
           modo_demo?: boolean | null
           nome: string
           tipo?: string
+          tipo_autenticacao?: string | null
           ultima_sincronizacao?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
         }
         Update: {
           ativo?: boolean | null
+          auth_api_key_encrypted?: string | null
+          auth_header_name?: string | null
+          auth_senha_encrypted?: string | null
+          auth_token_encrypted?: string | null
+          auth_usuario?: string | null
+          campos_api_detectados?: Json | null
           campos_chave?: string[] | null
           created_at?: string
           data_delete?: string | null
@@ -1102,6 +1122,7 @@ export type Database = {
           modo_demo?: boolean | null
           nome?: string
           tipo?: string
+          tipo_autenticacao?: string | null
           ultima_sincronizacao?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
