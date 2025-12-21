@@ -1051,6 +1051,592 @@ export type Database = {
         }
         Relationships: []
       }
+      vv_b_bancos: {
+        Row: {
+          ativo: boolean | null
+          codigo_banco: string
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          logo_url: string | null
+          nome_banco: string
+          tipo_layout_padrao: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          codigo_banco: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          logo_url?: string | null
+          nome_banco: string
+          tipo_layout_padrao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          codigo_banco?: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          logo_url?: string | null
+          nome_banco?: string
+          tipo_layout_padrao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
+      vv_b_boletos_gerados: {
+        Row: {
+          banco_id: string
+          codigo_barras: string | null
+          created_at: string
+          created_by: string | null
+          data_delete: string | null
+          data_geracao: string | null
+          data_vencimento: string | null
+          deleted: string | null
+          id: string
+          linha_digitavel: string | null
+          modelo_boleto_id: string | null
+          nosso_numero: string | null
+          nota_fiscal_id: string | null
+          pdf_gerado_url: string | null
+          status: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+          valor: number | null
+        }
+        Insert: {
+          banco_id: string
+          codigo_barras?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_delete?: string | null
+          data_geracao?: string | null
+          data_vencimento?: string | null
+          deleted?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          modelo_boleto_id?: string | null
+          nosso_numero?: string | null
+          nota_fiscal_id?: string | null
+          pdf_gerado_url?: string | null
+          status?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor?: number | null
+        }
+        Update: {
+          banco_id?: string
+          codigo_barras?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_delete?: string | null
+          data_geracao?: string | null
+          data_vencimento?: string | null
+          deleted?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          modelo_boleto_id?: string | null
+          nosso_numero?: string | null
+          nota_fiscal_id?: string | null
+          pdf_gerado_url?: string | null
+          status?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_boletos_gerados_banco_id_fkey"
+            columns: ["banco_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_bancos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vv_b_boletos_gerados_modelo_boleto_id_fkey"
+            columns: ["modelo_boleto_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_modelos_boleto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vv_b_boletos_gerados_nota_fiscal_id_fkey"
+            columns: ["nota_fiscal_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_notas_fiscais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_clientes: {
+        Row: {
+          agente_frete: string | null
+          business_partner: string | null
+          cep: string | null
+          cidade: string | null
+          cnpj: string
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          lzone: string | null
+          parceiro_negocio: string | null
+          razao_social: string
+          telefone: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          agente_frete?: string | null
+          business_partner?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          lzone?: string | null
+          parceiro_negocio?: string | null
+          razao_social: string
+          telefone?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          agente_frete?: string | null
+          business_partner?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          lzone?: string | null
+          parceiro_negocio?: string | null
+          razao_social?: string
+          telefone?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
+      vv_b_configuracoes_banco: {
+        Row: {
+          agencia: string | null
+          banco_id: string
+          carteira: string | null
+          codigo_cedente: string | null
+          conta: string | null
+          convenio: string | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          dias_carencia: number | null
+          id: string
+          multa_percentual: number | null
+          taxa_juros_mensal: number | null
+          texto_instrucao_padrao: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          agencia?: string | null
+          banco_id: string
+          carteira?: string | null
+          codigo_cedente?: string | null
+          conta?: string | null
+          convenio?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          dias_carencia?: number | null
+          id?: string
+          multa_percentual?: number | null
+          taxa_juros_mensal?: number | null
+          texto_instrucao_padrao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          agencia?: string | null
+          banco_id?: string
+          carteira?: string | null
+          codigo_cedente?: string | null
+          conta?: string | null
+          convenio?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          dias_carencia?: number | null
+          id?: string
+          multa_percentual?: number | null
+          taxa_juros_mensal?: number | null
+          texto_instrucao_padrao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_configuracoes_banco_banco_id_fkey"
+            columns: ["banco_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_bancos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_configuracoes_cnab: {
+        Row: {
+          banco_id: string | null
+          campos: Json | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          descricao: string | null
+          id: string
+          linhas: Json | null
+          nome: string
+          tipo_cnab: string
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          banco_id?: string | null
+          campos?: Json | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          descricao?: string | null
+          id?: string
+          linhas?: Json | null
+          nome: string
+          tipo_cnab: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          banco_id?: string | null
+          campos?: Json | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          descricao?: string | null
+          id?: string
+          linhas?: Json | null
+          nome?: string
+          tipo_cnab?: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_configuracoes_cnab_banco_id_fkey"
+            columns: ["banco_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_bancos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_empresas: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          cnpj: string
+          complemento: string | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          inscricao_estadual: string | null
+          logo_url: string | null
+          nome_fantasia: string | null
+          numero: string | null
+          razao_social: string
+          site: string | null
+          telefone: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj: string
+          complemento?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          logo_url?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          razao_social: string
+          site?: string | null
+          telefone?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          cnpj?: string
+          complemento?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          logo_url?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          razao_social?: string
+          site?: string | null
+          telefone?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
+      vv_b_modelos_boleto: {
+        Row: {
+          banco_id: string | null
+          bancos_compativeis: string[] | null
+          campos_mapeados: Json | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          nome_modelo: string
+          padrao: boolean | null
+          pdf_exemplo_base64: string | null
+          template_pdf_id: string | null
+          texto_instrucoes: string | null
+          tipo_layout: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          banco_id?: string | null
+          bancos_compativeis?: string[] | null
+          campos_mapeados?: Json | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          nome_modelo: string
+          padrao?: boolean | null
+          pdf_exemplo_base64?: string | null
+          template_pdf_id?: string | null
+          texto_instrucoes?: string | null
+          tipo_layout?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          banco_id?: string | null
+          bancos_compativeis?: string[] | null
+          campos_mapeados?: Json | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          nome_modelo?: string
+          padrao?: boolean | null
+          pdf_exemplo_base64?: string | null
+          template_pdf_id?: string | null
+          texto_instrucoes?: string | null
+          tipo_layout?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_modelos_boleto_banco_id_fkey"
+            columns: ["banco_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_bancos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vv_b_modelos_boleto_template_pdf_id_fkey"
+            columns: ["template_pdf_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_templates_pdf"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_notas_fiscais: {
+        Row: {
+          cliente_id: string
+          created_at: string
+          data_delete: string | null
+          data_emissao: string
+          data_vencimento: string
+          deleted: string | null
+          id: string
+          moeda: string | null
+          numero_nota: string
+          referencia_interna: string | null
+          serie: string | null
+          status: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+          valor_titulo: number
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string
+          data_delete?: string | null
+          data_emissao: string
+          data_vencimento: string
+          deleted?: string | null
+          id?: string
+          moeda?: string | null
+          numero_nota: string
+          referencia_interna?: string | null
+          serie?: string | null
+          status?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_titulo: number
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string
+          data_delete?: string | null
+          data_emissao?: string
+          data_vencimento?: string
+          deleted?: string | null
+          id?: string
+          moeda?: string | null
+          numero_nota?: string
+          referencia_interna?: string | null
+          serie?: string | null
+          status?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_titulo?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_notas_fiscais_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_templates_pdf: {
+        Row: {
+          altura_pagina: number | null
+          areas_texto: Json | null
+          arquivo_base64: string | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          largura_pagina: number | null
+          nome: string
+          preview_url: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          altura_pagina?: number | null
+          areas_texto?: Json | null
+          arquivo_base64?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          largura_pagina?: number | null
+          nome: string
+          preview_url?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          altura_pagina?: number | null
+          areas_texto?: Json | null
+          arquivo_base64?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          largura_pagina?: number | null
+          nome?: string
+          preview_url?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
+      vv_b_user_roles: {
+        Row: {
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
+          user_id: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
+          user_id: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["vv_b_perfil_usuario"]
+          user_id?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
       vv_imagens: {
         Row: {
           base64: string | null
@@ -1239,11 +1825,19 @@ export type Database = {
           similarity: number
         }[]
       }
+      vv_b_has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       perfil_usuario: "administrativo" | "transportadora"
       rl_ticket_status: "available" | "reserved" | "confirmed"
       status_geral: "ativo" | "inativo"
+      vv_b_perfil_usuario: "admin" | "operador" | "visualizador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1374,6 +1968,7 @@ export const Constants = {
       perfil_usuario: ["administrativo", "transportadora"],
       rl_ticket_status: ["available", "reserved", "confirmed"],
       status_geral: ["ativo", "inativo"],
+      vv_b_perfil_usuario: ["admin", "operador", "visualizador"],
     },
   },
 } as const
