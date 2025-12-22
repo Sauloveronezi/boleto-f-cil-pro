@@ -142,15 +142,6 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       return;
     }
 
-    if (bancosCompativeis.length === 0) {
-      toast({
-        title: 'Selecione ao menos um banco',
-        description: 'O modelo precisa estar associado a pelo menos um banco.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     // Atualiza bancos compatíveis no template
     const templateFinal: TemplateBoletoCompleto = {
       ...templateProcessado,
@@ -409,7 +400,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
           </Button>
           <Button 
             onClick={handleImportar}
-            disabled={!templateProcessado || bancosCompativeis.length === 0 || !nomeModelo}
+            disabled={!templateProcessado || !nomeModelo || processando}
           >
             <Check className="h-4 w-4 mr-2" />
             Importar Modelo
