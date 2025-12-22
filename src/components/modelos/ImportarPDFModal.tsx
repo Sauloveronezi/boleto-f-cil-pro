@@ -57,70 +57,111 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       return;
     }
 
+    // reset do estado anterior para evitar "travamento" do botão
+    setTemplateProcessado(null);
+    setTemplatePDF(null);
+    setCamposDetectados([]);
+    setBancosCompativeis([]);
+
     setArquivo(file);
     setNomeModelo(file.name.replace('.pdf', ''));
-    
+
+    // Permite selecionar o mesmo arquivo novamente (re-dispara o onChange)
+    event.target.value = '';
+
     // Criar preview URL
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
 
     // Processar o PDF
     setProcessando(true);
-    
+
     // Converter para base64
     const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      
-      // Simular análise do layout - em produção usaria OCR/IA
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Criar template baseado no padrão FEBRABAN
-      // O sistema cria todos os campos padrão, mesmo que não detectados visualmente
-      const templateBase = criarTemplatePadraoFEBRABAN();
-      
-      const novoTemplate: TemplateBoletoCompleto = {
-        ...templateBase,
-        id: `template_${Date.now()}`,
-        nome: file.name.replace('.pdf', ''),
-        pdf_original_base64: base64,
-        bancos_compativeis: [],
-        criado_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString(),
-      };
-      
-      // Criar TemplatePDF para compatibilidade
-      const pdfTemplate: TemplatePDF = {
-        id: novoTemplate.id,
-        nome: novoTemplate.nome,
-        arquivo_base64: base64,
-        preview_url: url,
-        layout_detectado: {
-          largura_pagina: novoTemplate.largura_pagina,
-          altura_pagina: novoTemplate.altura_pagina,
-          areas_texto: novoTemplate.campos.map(campo => ({
-            id: campo.id,
-            x: campo.x,
-            y: campo.y,
-            largura: campo.largura,
-            altura: campo.altura,
-            texto_original: campo.label,
-            campo_mapeado: `{{${campo.tipo}}}`,
-          })),
-        },
-        criado_em: novoTemplate.criado_em,
-      };
-      
-      setTemplateProcessado(novoTemplate);
-      setTemplatePDF(pdfTemplate);
-      setCamposDetectados(novoTemplate.campos);
+
+    reader.onerror = () => {
+      console.error('Erro ao ler PDF (FileReader.onerror)', reader.error);
       setProcessando(false);
-      
       toast({
-        title: 'PDF analisado com sucesso',
-        description: `${novoTemplate.campos.length} campos configurados no template. O layout será replicado exatamente na impressão.`,
+        title: 'Falha ao ler o PDF',
+        description: 'Não foi possível ler o arquivo. Tente novamente.',
+        variant: 'destructive',
       });
     };
+
+    reader.onabort = () => {
+      console.warn('Leitura do PDF abortada (FileReader.onabort)');
+      setProcessando(false);
+      toast({
+        title: 'Leitura cancelada',
+        description: 'A leitura do arquivo foi cancelada. Tente novamente.',
+        variant: 'destructive',
+      });
+    };
+
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result as string;
+
+        // Simular análise do layout - em produção usaria OCR/IA
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Criar template baseado no padrão FEBRABAN
+        // O sistema cria todos os campos padrão, mesmo que não detectados visualmente
+        const templateBase = criarTemplatePadraoFEBRABAN();
+
+        const novoTemplate: TemplateBoletoCompleto = {
+          ...templateBase,
+          id: `template_${Date.now()}`,
+          nome: file.name.replace('.pdf', ''),
+          pdf_original_base64: base64,
+          bancos_compativeis: [],
+          criado_em: new Date().toISOString(),
+          atualizado_em: new Date().toISOString(),
+        };
+
+        // Criar TemplatePDF para compatibilidade
+        const pdfTemplate: TemplatePDF = {
+          id: novoTemplate.id,
+          nome: novoTemplate.nome,
+          arquivo_base64: base64,
+          preview_url: url,
+          layout_detectado: {
+            largura_pagina: novoTemplate.largura_pagina,
+            altura_pagina: novoTemplate.altura_pagina,
+            areas_texto: novoTemplate.campos.map(campo => ({
+              id: campo.id,
+              x: campo.x,
+              y: campo.y,
+              largura: campo.largura,
+              altura: campo.altura,
+              texto_original: campo.label,
+              campo_mapeado: `{{${campo.tipo}}}`,
+            })),
+          },
+          criado_em: novoTemplate.criado_em,
+        };
+
+        setTemplateProcessado(novoTemplate);
+        setTemplatePDF(pdfTemplate);
+        setCamposDetectados(novoTemplate.campos);
+
+        toast({
+          title: 'PDF analisado com sucesso',
+          description: `${novoTemplate.campos.length} campos configurados no template. O layout será replicado exatamente na impressão.`,
+        });
+      } catch (err) {
+        console.error('Erro ao processar PDF', err);
+        toast({
+          title: 'Erro ao processar o PDF',
+          description: 'Ocorreu um erro ao analisar o layout. Tente novamente com outro arquivo.',
+          variant: 'destructive',
+        });
+      } finally {
+        setProcessando(false);
+      }
+    };
+
     reader.readAsDataURL(file);
   };
 
@@ -400,7 +441,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
           </Button>
           <Button 
             onClick={handleImportar}
-            disabled={!templateProcessado || !nomeModelo || processando}
+            disabled={!templateProcessado || !nomeModelo}
           >
             <Check className="h-4 w-4 mr-2" />
             Importar Modelo
