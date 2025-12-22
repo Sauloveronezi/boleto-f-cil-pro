@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Eye, Check, Building2, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Eye, Building2, Loader2, AlertCircle, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,12 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { TemplatePDF } from '@/types/boleto';
-import { 
-  TemplateBoletoCompleto, 
-  CampoTemplateBoleto, 
-  CAMPOS_BOLETO_PADRAO,
-  criarTemplatePadraoFEBRABAN 
-} from '@/types/templateBoleto';
+import { TemplateBoletoCompleto, CampoTemplateBoleto } from '@/types/templateBoleto';
 import { salvarTemplate } from '@/lib/pdfTemplateGenerator';
 
 interface ImportarPDFModalProps {
@@ -103,17 +98,21 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       try {
         const base64 = reader.result as string;
 
-        // Simular análise do layout - em produção usaria OCR/IA
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Simular tempo de processamento rápido (sem criar template FEBRABAN)
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Criar template baseado no padrão FEBRABAN
-        // O sistema cria todos os campos padrão, mesmo que não detectados visualmente
-        const templateBase = criarTemplatePadraoFEBRABAN();
-
+        // Criar template vazio - usuário irá editar manualmente
         const novoTemplate: TemplateBoletoCompleto = {
-          ...templateBase,
           id: `template_${Date.now()}`,
           nome: file.name.replace('.pdf', ''),
+          largura_pagina: 210,
+          altura_pagina: 140,
+          margem_superior: 10,
+          margem_inferior: 10,
+          margem_esquerda: 10,
+          margem_direita: 10,
+          orientacao: 'portrait',
+          campos: [], // Sem campos pré-definidos - usuário adiciona manualmente
           pdf_original_base64: base64,
           bancos_compativeis: [],
           criado_em: new Date().toISOString(),
@@ -129,32 +128,24 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
           layout_detectado: {
             largura_pagina: novoTemplate.largura_pagina,
             altura_pagina: novoTemplate.altura_pagina,
-            areas_texto: novoTemplate.campos.map(campo => ({
-              id: campo.id,
-              x: campo.x,
-              y: campo.y,
-              largura: campo.largura,
-              altura: campo.altura,
-              texto_original: campo.label,
-              campo_mapeado: `{{${campo.tipo}}}`,
-            })),
+            areas_texto: [], // Vazio - edição manual
           },
           criado_em: novoTemplate.criado_em,
         };
 
         setTemplateProcessado(novoTemplate);
         setTemplatePDF(pdfTemplate);
-        setCamposDetectados(novoTemplate.campos);
+        setCamposDetectados([]);
 
         toast({
-          title: 'PDF analisado com sucesso',
-          description: `${novoTemplate.campos.length} campos configurados no template. O layout será replicado exatamente na impressão.`,
+          title: 'PDF carregado',
+          description: 'O PDF foi carregado. Clique em "Importar Modelo" para abrir o editor de layout.',
         });
       } catch (err) {
         console.error('Erro ao processar PDF', err);
         toast({
           title: 'Erro ao processar o PDF',
-          description: 'Ocorreu um erro ao analisar o layout. Tente novamente com outro arquivo.',
+          description: 'Ocorreu um erro ao carregar o arquivo. Tente novamente.',
           variant: 'destructive',
         });
       } finally {
@@ -217,16 +208,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     onOpenChange(false);
   };
 
-  // Agrupa campos por categoria
-  const camposPorCategoria = {
-    'Banco': camposDetectados.filter(c => c.tipo.startsWith('banco_')),
-    'Beneficiário': camposDetectados.filter(c => c.tipo.startsWith('beneficiario_')),
-    'Pagador': camposDetectados.filter(c => c.tipo.startsWith('pagador_')),
-    'Título': camposDetectados.filter(c => ['nosso_numero', 'numero_documento', 'especie_documento', 'aceite', 'data_documento', 'data_processamento', 'data_vencimento', 'valor_documento', 'valor_cobrado'].includes(c.tipo)),
-    'Dados Bancários': camposDetectados.filter(c => ['agencia_codigo', 'carteira', 'especie_moeda', 'quantidade', 'valor_moeda', 'local_pagamento'].includes(c.tipo)),
-    'Código de Barras': camposDetectados.filter(c => ['linha_digitavel', 'codigo_barras'].includes(c.tipo)),
-    'Instruções': camposDetectados.filter(c => c.tipo === 'instrucoes'),
-  };
+  // Não é mais necessário agrupar campos por categoria já que usamos edição manual
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -237,8 +219,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
             Importar Modelo de PDF para Impressão de Boletos
           </DialogTitle>
           <DialogDescription>
-            Faça upload de um boleto PDF existente. O sistema irá replicar EXATAMENTE o layout visual para gerar novos boletos.
-            Todos os campos padrão de boleto são incluídos automaticamente.
+            Faça upload de um boleto PDF existente. Após o upload, você poderá editar manualmente o layout no editor visual.
           </DialogDescription>
         </DialogHeader>
 
@@ -339,44 +320,15 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                   </div>
                 )}
 
-                {/* Campos Configurados */}
-                {templateProcessado && (
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-600" />
-                      Campos do Template ({camposDetectados.length} campos)
-                    </Label>
-                    <p className="text-sm text-muted-foreground mt-1 mb-3">
-                      Todos os campos padrão FEBRABAN estão configurados. O boleto impresso será idêntico ao modelo.
-                    </p>
-                    <div className="space-y-4">
-                      {Object.entries(camposPorCategoria).map(([categoria, campos]) => (
-                        campos.length > 0 && (
-                          <div key={categoria}>
-                            <p className="text-xs font-medium text-muted-foreground mb-1">{categoria}</p>
-                            <div className="flex flex-wrap gap-1">
-                              {campos.map(campo => (
-                                <Badge key={campo.id} variant="outline" className="text-xs">
-                                  {campo.label}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Aviso sobre campos não previstos */}
+                {/* Info sobre edição manual */}
                 {templateProcessado && (
                   <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-blue-700 dark:text-blue-300">
-                      <p className="font-medium">Campos Completos</p>
+                      <p className="font-medium">Edição Manual</p>
                       <p className="text-xs mt-1">
-                        Todos os campos padrão de boleto FEBRABAN estão incluídos, mesmo que não estejam 
-                        visíveis no PDF importado. Isso garante compatibilidade com qualquer banco.
+                        Clique em "Importar Modelo" para abrir o editor visual. 
+                        Você poderá adicionar campos, textos e linhas manualmente para replicar o layout do PDF.
                       </p>
                     </div>
                   </div>
@@ -394,10 +346,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 {processando ? (
                   <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                    <p className="mt-2 text-sm text-muted-foreground">Analisando layout do PDF...</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Detectando campos e configurando template...
-                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">Carregando PDF...</p>
                   </div>
                 ) : previewUrl ? (
                   <object
@@ -426,7 +375,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                     <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">Faça upload de um PDF de boleto</p>
                     <p className="text-xs mt-1">
-                      O layout será copiado exatamente para a impressão de novos boletos
+                      Você poderá editar o layout manualmente no editor visual
                     </p>
                   </div>
                 )}

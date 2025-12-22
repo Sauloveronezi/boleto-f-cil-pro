@@ -589,7 +589,13 @@ export function EditorLayoutBoleto({
                                   variant={jaAdicionado ? 'secondary' : 'ghost'}
                                   size="sm"
                                   className="w-full justify-start text-xs h-7"
-                                  onClick={() => !jaAdicionado && adicionarCampo(v.variavel, v.label)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!jaAdicionado) {
+                                      adicionarCampo(v.variavel, v.label);
+                                    }
+                                  }}
                                   disabled={jaAdicionado}
                                 >
                                   {jaAdicionado && <span className="text-green-500 mr-1">✓</span>}
@@ -608,7 +614,14 @@ export function EditorLayoutBoleto({
               
               <TabsContent value="textos" className="flex-1 overflow-hidden m-0">
                 <div className="p-3 space-y-2">
-                  <Button onClick={adicionarTexto} className="w-full">
+                  <Button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adicionarTexto();
+                    }} 
+                    className="w-full"
+                  >
                     <Type className="h-4 w-4 mr-2" />
                     Adicionar Texto
                   </Button>
@@ -620,15 +633,39 @@ export function EditorLayoutBoleto({
               
               <TabsContent value="linhas" className="flex-1 overflow-hidden m-0">
                 <div className="p-3 space-y-2">
-                  <Button onClick={() => adicionarLinha('horizontal')} variant="outline" className="w-full">
+                  <Button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adicionarLinha('horizontal');
+                    }} 
+                    variant="outline" 
+                    className="w-full"
+                  >
                     <Minus className="h-4 w-4 mr-2" />
                     Linha Horizontal
                   </Button>
-                  <Button onClick={() => adicionarLinha('vertical')} variant="outline" className="w-full">
+                  <Button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adicionarLinha('vertical');
+                    }} 
+                    variant="outline" 
+                    className="w-full"
+                  >
                     <Minus className="h-4 w-4 mr-2 rotate-90" />
                     Linha Vertical
                   </Button>
-                  <Button onClick={adicionarRetangulo} variant="outline" className="w-full">
+                  <Button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      adicionarRetangulo();
+                    }} 
+                    variant="outline" 
+                    className="w-full"
+                  >
                     <Square className="h-4 w-4 mr-2" />
                     Retângulo/Caixa
                   </Button>
