@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2 } from 'lucide-react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,7 @@ import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
+import { EditorLayoutBoleto, ElementoLayout } from '@/components/modelos/EditorLayoutBoleto';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useBancos } from '@/hooks/useBancos';
@@ -95,6 +96,8 @@ export default function Modelos() {
   const [modeloVisualizando, setModeloVisualizando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
+  const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
+  const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
 
   // Form state para edição/criação
   const [formNome, setFormNome] = useState('');
@@ -284,12 +287,15 @@ export default function Modelos() {
   };
 
   const handleImportarPDF = (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => {
-    createModelo.mutate({
+    // Cria modelo temporário e abre o editor de layout
+    const novoModelo: ModeloBoleto = {
+      id: `temp_${Date.now()}`,
       nome_modelo: nomeModelo,
       banco_id: bancosCompativeis[0] || null,
       bancos_compativeis: bancosCompativeis,
       tipo_layout: 'CNAB_400',
       texto_instrucoes: '',
+      padrao: false,
       campos_mapeados: template.layout_detectado.areas_texto.map(area => ({
         id: area.id,
         nome: area.texto_original || '',
@@ -299,7 +305,53 @@ export default function Modelos() {
         largura: area.largura,
         altura: area.altura,
       })),
-    });
+      template_pdf_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    
+    setModeloParaEditor(novoModelo);
+    setEditorLayoutOpen(true);
+  };
+
+  const handleAbrirEditor = (modelo: ModeloBoleto) => {
+    setModeloParaEditor(modelo);
+    setEditorLayoutOpen(true);
+  };
+
+  const handleSalvarLayout = (elementos: ElementoLayout[]) => {
+    if (!modeloParaEditor) return;
+
+    const camposMapeados = elementos.map((el, idx) => ({
+      id: el.id,
+      nome: el.nome,
+      variavel: el.variavel || '',
+      posicao_x: el.x,
+      posicao_y: el.y,
+      largura: el.largura,
+      altura: el.altura,
+    }));
+
+    // Se é um modelo novo (temp_), cria
+    if (modeloParaEditor.id.startsWith('temp_')) {
+      createModelo.mutate({
+        nome_modelo: modeloParaEditor.nome_modelo,
+        banco_id: modeloParaEditor.banco_id,
+        bancos_compativeis: modeloParaEditor.bancos_compativeis,
+        tipo_layout: modeloParaEditor.tipo_layout,
+        texto_instrucoes: modeloParaEditor.texto_instrucoes,
+        campos_mapeados: camposMapeados,
+      });
+    } else {
+      // Atualiza modelo existente
+      updateModelo.mutate({
+        id: modeloParaEditor.id,
+        campos_mapeados: camposMapeados,
+      });
+    }
+    
+    setEditorLayoutOpen(false);
+    setModeloParaEditor(null);
   };
 
   const isFormDialogOpen = !!modeloEditando || criarNovo;
@@ -429,10 +481,10 @@ export default function Modelos() {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => setModeloEditando(modelo)}
+                      onClick={() => handleAbrirEditor(modelo)}
                     >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar
+                      <Layers className="h-4 w-4 mr-1" />
+                      Layout
                     </Button>
                     <TooltipProvider>
                       <Tooltip>
@@ -688,6 +740,25 @@ export default function Modelos() {
           open={importarPDFOpen}
           onOpenChange={setImportarPDFOpen}
           onImportar={handleImportarPDF}
+        />
+
+        {/* Editor de Layout Visual */}
+        <EditorLayoutBoleto
+          open={editorLayoutOpen}
+          onOpenChange={setEditorLayoutOpen}
+          elementos={modeloParaEditor?.campos_mapeados?.map(c => ({
+            id: String(c.id),
+            tipo: 'campo' as const,
+            nome: c.nome,
+            variavel: c.variavel,
+            x: c.posicao_x,
+            y: c.posicao_y,
+            largura: c.largura,
+            altura: c.altura,
+            visivel: true,
+          })) || []}
+          onSave={handleSalvarLayout}
+          nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
         />
 
         {/* Modal de Visualização do Modelo */}
