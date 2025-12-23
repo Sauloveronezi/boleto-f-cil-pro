@@ -69,6 +69,7 @@ interface ModeloBoleto {
   campos_mapeados: CampoMapeado[];
   texto_instrucoes: string;
   template_pdf_id: string | null;
+  pdf_exemplo_base64: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +99,7 @@ export default function Modelos() {
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
   const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
+  const [pdfParaEditor, setPdfParaEditor] = useState<string | null>(null);
 
   // Form state para edição/criação
   const [formNome, setFormNome] = useState('');
@@ -127,6 +129,7 @@ export default function Modelos() {
         campos_mapeados: (m.campos_mapeados || []) as CampoMapeado[],
         texto_instrucoes: m.texto_instrucoes || '',
         template_pdf_id: m.template_pdf_id,
+        pdf_exemplo_base64: m.pdf_exemplo_base64 || null,
         created_at: m.created_at,
         updated_at: m.updated_at,
       })) as ModeloBoleto[];
@@ -306,10 +309,12 @@ export default function Modelos() {
         altura: area.altura,
       })),
       template_pdf_id: null,
+      pdf_exemplo_base64: template.arquivo_base64 || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     
+    setPdfParaEditor(template.arquivo_base64 || null);
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
   };
@@ -745,7 +750,10 @@ export default function Modelos() {
         {/* Editor de Layout Visual */}
         <EditorLayoutBoleto
           open={editorLayoutOpen}
-          onOpenChange={setEditorLayoutOpen}
+          onOpenChange={(open) => {
+            setEditorLayoutOpen(open);
+            if (!open) setPdfParaEditor(null);
+          }}
           elementos={modeloParaEditor?.campos_mapeados?.map(c => ({
             id: String(c.id),
             tipo: 'campo' as const,
@@ -759,6 +767,7 @@ export default function Modelos() {
           })) || []}
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
+          pdfBase64={pdfParaEditor || modeloParaEditor?.pdf_exemplo_base64 || undefined}
         />
 
         {/* Modal de Visualização do Modelo */}
