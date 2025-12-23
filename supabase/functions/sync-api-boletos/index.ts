@@ -236,6 +236,7 @@ serve(async (req) => {
     let registrosAtualizados = 0;
     const erros: any[] = [];
     const clientesParaCriar: Map<string, any> = new Map();
+    const registrosComErro: any[] = []; // Para registrar na tabela de erros
 
     // Primeiro passo: preparar todos os dados e identificar clientes a criar
     const registrosPreparados: any[] = [];
@@ -266,8 +267,22 @@ serve(async (req) => {
           }
         }
 
-        if (!numeroNota || !numeroCobranca || !cnpjCliente) {
-          continue; // Pular registros incompletos silenciosamente
+        // Validar campos obrigatórios e registrar erro se faltando
+        const camposFaltando: string[] = [];
+        if (!numeroNota) camposFaltando.push('numero_nota');
+        if (!numeroCobranca) camposFaltando.push('numero_cobranca');
+        if (!cnpjCliente) camposFaltando.push('cliente_cnpj');
+
+        if (camposFaltando.length > 0) {
+          registrosComErro.push({
+            integracao_id,
+            json_original: item,
+            tipo_erro: 'validacao',
+            mensagem_erro: `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`,
+            campo_erro: camposFaltando.join(', '),
+            valor_erro: null
+          });
+          continue;
         }
 
         const cnpjNormalizado = normalizeCnpj(cnpjCliente);
@@ -289,17 +304,6 @@ serve(async (req) => {
           });
         }
 
-        const camposConhecidos = ['numero_nota', 'numero_cobranca', 'cliente_cnpj', 'cnpj_cliente',
-          'data_emissao', 'data_vencimento', 'valor'];
-        const dadosExtras: Record<string, any> = {};
-        
-        for (const [key, value] of Object.entries(item)) {
-          if (!camposConhecidos.includes(key)) {
-            dadosExtras[key] = value;
-          }
-        }
-        dadosExtras.cliente_cnpj = cnpjCliente;
-
         registrosPreparados.push({
           cnpjNormalizado,
           numeroNota,
@@ -307,11 +311,19 @@ serve(async (req) => {
           dataEmissao: parseODataDate(dataEmissao),
           dataVencimento: parseODataDate(dataVencimento),
           valor,
-          dadosExtras
+          jsonOriginal: item // Guardar JSON original
         });
 
       } catch (err: any) {
         erros.push({ tipo: 'preparacao', erro: err.message });
+        registrosComErro.push({
+          integracao_id,
+          json_original: item,
+          tipo_erro: 'excecao',
+          mensagem_erro: err.message,
+          campo_erro: null,
+          valor_erro: null
+        });
       }
     }
 
@@ -362,11 +374,32 @@ serve(async (req) => {
     for (const reg of registrosPreparados) {
       const clienteId = cnpjToId.get(reg.cnpjNormalizado) ?? null;
       
+      // Se cliente não foi encontrado/criado, registrar erro
+      if (!clienteId) {
+        registrosComErro.push({
+          integracao_id,
+          json_original: reg.jsonOriginal,
+          tipo_erro: 'cliente_nao_encontrado',
+          mensagem_erro: `Cliente com CNPJ ${reg.cnpjNormalizado} não encontrado ou não pôde ser criado`,
+          campo_erro: 'cliente_cnpj',
+          valor_erro: reg.cnpjNormalizado
+        });
+        continue;
+      }
+      
       // Criar chave única para evitar duplicatas no batch
       const chaveUnica = `${reg.numeroNota}|${clienteId}|${reg.numeroCobranca}`;
       
       if (chavesDuplicadas.has(chaveUnica)) {
-        continue; // Pular duplicatas
+        registrosComErro.push({
+          integracao_id,
+          json_original: reg.jsonOriginal,
+          tipo_erro: 'duplicado',
+          mensagem_erro: `Registro duplicado no mesmo lote: ${chaveUnica}`,
+          campo_erro: 'chave_unica',
+          valor_erro: chaveUnica
+        });
+        continue;
       }
       chavesDuplicadas.add(chaveUnica);
 
@@ -378,7 +411,7 @@ serve(async (req) => {
         data_emissao: reg.dataEmissao,
         data_vencimento: reg.dataVencimento,
         valor: reg.valor,
-        dados_extras: reg.dadosExtras,
+        json_original: reg.jsonOriginal, // Salvar JSON original
         sincronizado_em: new Date().toISOString()
       });
     }
@@ -420,8 +453,29 @@ serve(async (req) => {
       }
     }
 
+    // Salvar registros com erro na tabela de erros
+    if (registrosComErro.length > 0) {
+      console.log(`[sync-api-boletos] Salvando ${registrosComErro.length} registros com erro`);
+      
+      const batchesErros = [];
+      for (let i = 0; i < registrosComErro.length; i += BATCH_SIZE) {
+        batchesErros.push(registrosComErro.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batchesErros) {
+        const { error: erroInsert } = await supabase
+          .from('vv_b_boletos_api_erros')
+          .insert(batch);
+
+        if (erroInsert) {
+          console.error('[sync-api-boletos] Erro ao salvar registros com erro:', erroInsert.message);
+        }
+      }
+    }
+
     const duracao = Date.now() - startTime;
-    const status = erros.length === 0 ? 'sucesso' : (registrosAtualizados > 0 ? 'parcial' : 'erro');
+    const totalErros = erros.length + registrosComErro.length;
+    const status = totalErros === 0 ? 'sucesso' : (registrosAtualizados > 0 ? 'parcial' : 'erro');
 
     // Registrar log de sincronização
     await supabase.from('vv_b_api_sync_log').insert({
@@ -440,13 +494,14 @@ serve(async (req) => {
       .update({ ultima_sincronizacao: new Date().toISOString() })
       .eq('id', integracao_id);
 
-    console.log(`[sync-api-boletos] Concluído. Status: ${status}, Processados: ${registrosAtualizados}, Duração: ${duracao}ms`);
+    console.log(`[sync-api-boletos] Concluído. Status: ${status}, Processados: ${registrosAtualizados}, Erros: ${registrosComErro.length}, Duração: ${duracao}ms`);
 
     return new Response(JSON.stringify({
       success: true,
       status,
       registros_processados: dadosApi.length,
       registros_atualizados: registrosAtualizados,
+      registros_com_erro: registrosComErro.length,
       erros: erros.length > 0 ? erros.slice(0, 10) : undefined,
       duracao_ms: duracao
     }), {

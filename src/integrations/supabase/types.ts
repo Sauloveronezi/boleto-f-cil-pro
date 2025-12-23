@@ -1293,6 +1293,7 @@ export type Database = {
           deleted: string | null
           id: string
           integracao_id: string | null
+          json_original: Json | null
           numero_cobranca: string
           numero_nota: string
           sincronizado_em: string | null
@@ -1310,6 +1311,7 @@ export type Database = {
           deleted?: string | null
           id?: string
           integracao_id?: string | null
+          json_original?: Json | null
           numero_cobranca: string
           numero_nota: string
           sincronizado_em?: string | null
@@ -1327,6 +1329,7 @@ export type Database = {
           deleted?: string | null
           id?: string
           integracao_id?: string | null
+          json_original?: Json | null
           numero_cobranca?: string
           numero_nota?: string
           sincronizado_em?: string | null
@@ -1344,6 +1347,71 @@ export type Database = {
           },
           {
             foreignKeyName: "vv_b_boletos_api_integracao_id_fkey"
+            columns: ["integracao_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_api_integracoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_boletos_api_erros: {
+        Row: {
+          campo_erro: string | null
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          integracao_id: string | null
+          json_original: Json
+          mensagem_erro: string
+          resolvido: boolean | null
+          resolvido_em: string | null
+          resolvido_por: string | null
+          tentativas: number | null
+          tipo_erro: string
+          updated_at: string
+          usuario_delete_id: string | null
+          valor_erro: string | null
+        }
+        Insert: {
+          campo_erro?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          json_original: Json
+          mensagem_erro: string
+          resolvido?: boolean | null
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          tentativas?: number | null
+          tipo_erro: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_erro?: string | null
+        }
+        Update: {
+          campo_erro?: string | null
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          integracao_id?: string | null
+          json_original?: Json
+          mensagem_erro?: string
+          resolvido?: boolean | null
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          tentativas?: number | null
+          tipo_erro?: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+          valor_erro?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_boletos_api_erros_integracao_id_fkey"
             columns: ["integracao_id"]
             isOneToOne: false
             referencedRelation: "vv_b_api_integracoes"
