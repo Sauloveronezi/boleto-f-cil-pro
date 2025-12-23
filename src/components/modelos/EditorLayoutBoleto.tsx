@@ -88,6 +88,7 @@ interface EditorLayoutBoletoProps {
   nomeModelo: string;
   larguraPagina?: number;
   alturaPagina?: number;
+  pdfBase64?: string; // PDF como fundo do editor
 }
 
 const VARIAVEIS_BOLETO = [
@@ -155,6 +156,7 @@ export function EditorLayoutBoleto({
   nomeModelo,
   larguraPagina = LARGURA_BOLETO_MM,
   alturaPagina = ALTURA_BOLETO_MM,
+  pdfBase64,
 }: EditorLayoutBoletoProps) {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -722,6 +724,22 @@ export function EditorLayoutBoleto({
                 onMouseLeave={handleMouseUp}
                 onClick={() => setElementoSelecionado(null)}
               >
+                {/* PDF como fundo */}
+                {pdfBase64 && (
+                  <object
+                    data={pdfBase64}
+                    type="application/pdf"
+                    className="absolute inset-0 w-full h-full pointer-events-none opacity-50"
+                    style={{ zIndex: 0 }}
+                  >
+                    <img 
+                      src={pdfBase64} 
+                      alt="Modelo PDF" 
+                      className="absolute inset-0 w-full h-full object-contain opacity-50"
+                    />
+                  </object>
+                )}
+
                 {/* Grade de fundo */}
                 {mostrarGrade && (
                   <div
@@ -732,6 +750,7 @@ export function EditorLayoutBoleto({
                         linear-gradient(to bottom, #ccc 1px, transparent 1px)
                       `,
                       backgroundSize: `${tamanhoGrid * zoom}px ${tamanhoGrid * zoom}px`,
+                      zIndex: 1,
                     }}
                   />
                 )}
