@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -100,6 +100,8 @@ export default function Modelos() {
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
   const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
   const [pdfParaEditor, setPdfParaEditor] = useState<string | null>(null);
+  const [modeloParaReanexar, setModeloParaReanexar] = useState<ModeloBoleto | null>(null);
+  const reanexarInputRef = useRef<HTMLInputElement>(null);
 
   // Form state para edição/criação
   const [formNome, setFormNome] = useState('');
@@ -295,6 +297,75 @@ export default function Modelos() {
     }
   };
 
+  // Função para reanexar PDF a um modelo existente
+  const handleReanexarPDF = (modelo: ModeloBoleto) => {
+    setModeloParaReanexar(modelo);
+    // Disparar o file input
+    setTimeout(() => {
+      reanexarInputRef.current?.click();
+    }, 100);
+  };
+
+  const handleReanexarFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !modeloParaReanexar) {
+      setModeloParaReanexar(null);
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      toast({
+        title: 'Formato inválido',
+        description: 'Por favor, selecione um arquivo PDF.',
+        variant: 'destructive',
+      });
+      setModeloParaReanexar(null);
+      event.target.value = '';
+      return;
+    }
+
+    // Ler o PDF como base64
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+
+      // Atualizar o modelo existente com o novo PDF
+      updateModelo.mutate({
+        id: modeloParaReanexar.id,
+        pdf_exemplo_base64: base64,
+      }, {
+        onSuccess: () => {
+          toast({
+            title: 'PDF reanexado',
+            description: `O PDF foi vinculado ao modelo "${modeloParaReanexar.nome_modelo}".`,
+          });
+        },
+        onError: () => {
+          toast({
+            title: 'Erro',
+            description: 'Não foi possível reanexar o PDF.',
+            variant: 'destructive',
+          });
+        },
+        onSettled: () => {
+          setModeloParaReanexar(null);
+        },
+      });
+    };
+
+    reader.onerror = () => {
+      toast({
+        title: 'Erro ao ler arquivo',
+        description: 'Não foi possível ler o arquivo PDF.',
+        variant: 'destructive',
+      });
+      setModeloParaReanexar(null);
+    };
+
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
   const handleImportarPDF = (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => {
     // Cria modelo temporário e abre o editor de layout
     const novoModelo: ModeloBoleto = {
@@ -372,6 +443,15 @@ export default function Modelos() {
 
   return (
     <MainLayout>
+      {/* Input invisível para reanexar PDF */}
+      <input
+        ref={reanexarInputRef}
+        type="file"
+        accept=".pdf"
+        onChange={handleReanexarFileSelect}
+        className="hidden"
+      />
+
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
@@ -499,6 +579,25 @@ export default function Modelos() {
                       <Layers className="h-4 w-4 mr-1" />
                       Layout
                     </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReanexarPDF(modelo)}
+                            disabled={updateModelo.isPending && modeloParaReanexar?.id === modelo.id}
+                          >
+                            {updateModelo.isPending && modeloParaReanexar?.id === modelo.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Reanexar PDF ao modelo</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
