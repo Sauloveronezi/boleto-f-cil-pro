@@ -100,6 +100,7 @@ export default function Modelos() {
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
   const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
   const [pdfParaEditor, setPdfParaEditor] = useState<string | null>(null);
+  const [iniciarEditorVazio, setIniciarEditorVazio] = useState(false);
   const [modeloParaReanexar, setModeloParaReanexar] = useState<ModeloBoleto | null>(null);
   const reanexarInputRef = useRef<HTMLInputElement>(null);
 
@@ -392,12 +393,15 @@ export default function Modelos() {
     };
     
     setPdfParaEditor(template.arquivo_base64 || null);
+    setIniciarEditorVazio(true); // Importação de PDF = iniciar vazio
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
   };
 
   const handleAbrirEditor = (modelo: ModeloBoleto) => {
     setModeloParaEditor(modelo);
+    setIniciarEditorVazio(false); // Modelo existente = não iniciar vazio
+    setPdfParaEditor(null); // Usa o pdf_exemplo_base64 do modelo
     setEditorLayoutOpen(true);
   };
 
@@ -859,7 +863,10 @@ export default function Modelos() {
           open={editorLayoutOpen}
           onOpenChange={(open) => {
             setEditorLayoutOpen(open);
-            if (!open) setPdfParaEditor(null);
+            if (!open) {
+              setPdfParaEditor(null);
+              setIniciarEditorVazio(false);
+            }
           }}
           elementos={modeloParaEditor?.campos_mapeados?.map(c => ({
             id: String(c.id),
@@ -875,6 +882,7 @@ export default function Modelos() {
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
           pdfBase64={pdfParaEditor || modeloParaEditor?.pdf_exemplo_base64 || undefined}
+          iniciarVazio={iniciarEditorVazio}
         />
 
         {/* Modal de Visualização do Modelo */}
