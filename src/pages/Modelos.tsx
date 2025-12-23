@@ -146,6 +146,8 @@ export default function Modelos() {
         tipo_layout: modelo.tipo_layout || 'CNAB_400',
         texto_instrucoes: modelo.texto_instrucoes || '',
         campos_mapeados: JSON.parse(JSON.stringify(modelo.campos_mapeados || [])),
+        template_pdf_id: modelo.template_pdf_id ?? null,
+        pdf_exemplo_base64: modelo.pdf_exemplo_base64 ?? null,
         padrao: false,
       };
       
@@ -172,14 +174,18 @@ export default function Modelos() {
   // Mutation para atualizar modelo
   const updateModelo = useMutation({
     mutationFn: async ({ id, ...modelo }: { id: string } & Partial<ModeloBoleto>) => {
-      const payload = {
-        nome_modelo: modelo.nome_modelo,
-        banco_id: modelo.banco_id || null,
-        bancos_compativeis: modelo.bancos_compativeis || [],
-        tipo_layout: modelo.tipo_layout,
-        texto_instrucoes: modelo.texto_instrucoes,
-        campos_mapeados: JSON.parse(JSON.stringify(modelo.campos_mapeados || [])),
-      };
+      const payload: Record<string, any> = {};
+
+      if (modelo.nome_modelo !== undefined) payload.nome_modelo = modelo.nome_modelo;
+      if (modelo.banco_id !== undefined) payload.banco_id = modelo.banco_id || null;
+      if (modelo.bancos_compativeis !== undefined) payload.bancos_compativeis = modelo.bancos_compativeis || [];
+      if (modelo.tipo_layout !== undefined) payload.tipo_layout = modelo.tipo_layout;
+      if (modelo.texto_instrucoes !== undefined) payload.texto_instrucoes = modelo.texto_instrucoes;
+      if (modelo.campos_mapeados !== undefined) {
+        payload.campos_mapeados = JSON.parse(JSON.stringify(modelo.campos_mapeados || []));
+      }
+      if (modelo.template_pdf_id !== undefined) payload.template_pdf_id = modelo.template_pdf_id;
+      if (modelo.pdf_exemplo_base64 !== undefined) payload.pdf_exemplo_base64 = modelo.pdf_exemplo_base64;
       
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
@@ -346,6 +352,8 @@ export default function Modelos() {
         tipo_layout: modeloParaEditor.tipo_layout,
         texto_instrucoes: modeloParaEditor.texto_instrucoes,
         campos_mapeados: camposMapeados,
+        template_pdf_id: modeloParaEditor.template_pdf_id,
+        pdf_exemplo_base64: modeloParaEditor.pdf_exemplo_base64,
       });
     } else {
       // Atualiza modelo existente
