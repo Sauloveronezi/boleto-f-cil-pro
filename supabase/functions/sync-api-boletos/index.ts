@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Tamanho do batch para processamento
+const BATCH_SIZE = 100;
+
 // Função para construir headers de autenticação
 function buildAuthHeaders(auth: {
   tipo: string;
@@ -16,13 +19,11 @@ function buildAuthHeaders(auth: {
   header_name?: string | null;
 }): Record<string, string> {
   const headers: Record<string, string> = {};
-
   const authorizationHeaderName = auth.header_name || 'Authorization';
 
   switch (auth.tipo) {
     case 'basic': {
       if (auth.usuario && auth.senha) {
-        // Se já vier no formato "Basic xxx", respeitar
         if (/^basic\s+/i.test(auth.senha.trim())) {
           headers['Authorization'] = auth.senha.trim();
         } else {
@@ -32,17 +33,14 @@ function buildAuthHeaders(auth: {
       }
       break;
     }
-
     case 'bearer':
     case 'oauth2': {
       if (auth.token) {
         const token = auth.token.trim();
-        // Se o usuário colou o header completo ("Bearer xxx"), não duplicar
         headers[authorizationHeaderName] = /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
       }
       break;
     }
-
     case 'api_key': {
       if (auth.api_key) {
         const apiKeyHeaderName = auth.header_name || 'X-API-Key';
@@ -50,36 +48,27 @@ function buildAuthHeaders(auth: {
       }
       break;
     }
-
-    case 'custom':
-    case 'none':
     default:
       break;
   }
-
   return headers;
 }
 
 // Função para converter data OData para ISO
 function parseODataDate(value: any): string | null {
   if (!value) return null;
-  
   const strValue = String(value);
   
-  // Formato OData: /Date(1765411200000)/ ou /Date(1765411200000+0000)/
   const odataMatch = strValue.match(/\/Date\((-?\d+)([+-]\d{4})?\)\//);
   if (odataMatch) {
     const timestamp = parseInt(odataMatch[1], 10);
-    const date = new Date(timestamp);
-    return date.toISOString().split('T')[0]; // Retorna YYYY-MM-DD
+    return new Date(timestamp).toISOString().split('T')[0];
   }
   
-  // Formato ISO já válido
   if (/^\d{4}-\d{2}-\d{2}/.test(strValue)) {
     return strValue.split('T')[0];
   }
   
-  // Tenta parsear como data genérica
   const parsed = new Date(strValue);
   if (!isNaN(parsed.getTime())) {
     return parsed.toISOString().split('T')[0];
@@ -93,12 +82,10 @@ function getValueByPath(obj: any, path: string): any {
   if (!path) return obj;
   const parts = path.split('.');
   let current = obj;
-
   for (const part of parts) {
     if (current === null || current === undefined) return undefined;
     current = current[part];
   }
-
   return current;
 }
 
@@ -109,8 +96,6 @@ function extractArrayFromApiResponse(raw: any, jsonPath?: string | null): any[] 
     const viaPath = getValueByPath(raw, jsonPath);
     if (viaPath !== undefined && viaPath !== null) {
       candidate = viaPath;
-    } else {
-      console.log(`[sync-api-boletos] json_path "${jsonPath}" não retornou dados; tentando detecção automática.`);
     }
   }
 
@@ -135,8 +120,9 @@ function extractArrayFromApiResponse(raw: any, jsonPath?: string | null): any[] 
   return [];
 }
 
+const normalizeCnpj = (v: any) => String(v ?? '').replace(/\D/g, '');
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -171,26 +157,25 @@ serve(async (req) => {
 
     console.log(`[sync-api-boletos] Iniciando sincronização. Endpoint: ${integracao.endpoint_base}`);
 
-    // Construir headers de autenticação (e mesclar com headers personalizados)
+    // Construir headers de autenticação
     const tipoAuth = integracao.tipo_autenticacao || 'none';
     const authHeaders = buildAuthHeaders({
       tipo: tipoAuth,
       usuario: integracao.auth_usuario,
-      senha: integracao.auth_senha_encrypted, // atualmente armazenado em texto
-      token: integracao.auth_token_encrypted, // atualmente armazenado em texto
-      api_key: integracao.auth_api_key_encrypted, // atualmente armazenado em texto
+      senha: integracao.auth_senha_encrypted,
+      token: integracao.auth_token_encrypted,
+      api_key: integracao.auth_api_key_encrypted,
       header_name: integracao.auth_header_name
     });
 
-    // Headers personalizados (tipo custom)
     const customHeaders: Record<string, string> =
       integracao.headers_autenticacao && typeof integracao.headers_autenticacao === 'object'
         ? (integracao.headers_autenticacao as Record<string, string>)
         : {};
 
-    // Validação mínima para evitar 401 por credencial ausente
+    // Validação de credenciais
     if (tipoAuth === 'basic' && (!integracao.auth_usuario || !integracao.auth_senha_encrypted)) {
-      throw new Error('Credenciais Basic Auth não configuradas (usuário e senha).');
+      throw new Error('Credenciais Basic Auth não configuradas.');
     }
     if ((tipoAuth === 'bearer' || tipoAuth === 'oauth2') && !integracao.auth_token_encrypted) {
       throw new Error('Token Bearer/OAuth2 não configurado.');
@@ -199,15 +184,13 @@ serve(async (req) => {
       throw new Error('API Key não configurada.');
     }
 
-    console.log(`[sync-api-boletos] Auth: ${tipoAuth}, custom_headers: ${Object.keys(customHeaders).length}, auth_headers: ${Object.keys(authHeaders).join(',')}`);
-
-    // Chamar API real (SEM filtros)
+    // Chamar API
     const urlObj = new URL(integracao.endpoint_base);
     urlObj.searchParams.delete('$filter');
     urlObj.searchParams.delete('filter');
     const endpointSemFiltros = urlObj.toString();
 
-    console.log(`[sync-api-boletos] Chamando API (sem filtros): ${endpointSemFiltros}`);
+    console.log(`[sync-api-boletos] Chamando API: ${endpointSemFiltros}`);
 
     const apiResponse = await fetch(endpointSemFiltros, {
       method: 'GET',
@@ -221,36 +204,27 @@ serve(async (req) => {
 
     if (!apiResponse.ok) {
       const errorText = await apiResponse.text();
-      throw new Error(`Erro na API: ${apiResponse.status} ${apiResponse.statusText} - ${errorText.substring(0, 200)}`);
+      throw new Error(`Erro na API: ${apiResponse.status} - ${errorText.substring(0, 200)}`);
     }
 
     const rawApiResponse = await apiResponse.json();
-
     const dadosApi = extractArrayFromApiResponse(rawApiResponse, integracao.json_path);
 
-    // Garantir que temos dados
     if (!Array.isArray(dadosApi) || dadosApi.length === 0) {
-      throw new Error('Resposta da API não contém lista de dados (verifique o caminho JSON ou o formato OData)');
+      throw new Error('Resposta da API não contém lista de dados');
     }
 
-    console.log(`[sync-api-boletos] Registros recebidos da API: ${dadosApi.length}`);
-
-    let erros: any[] = [];
+    console.log(`[sync-api-boletos] Registros recebidos: ${dadosApi.length}`);
 
     // Buscar clientes para mapear CNPJ -> id
-    const { data: clientes, error: clientesError } = await supabase
+    const { data: clientes } = await supabase
       .from('vv_b_clientes')
       .select('id, cnpj')
       .or('deleted.is.null,deleted.eq.""');
 
-    if (clientesError) {
-      throw new Error(`Erro ao buscar clientes: ${clientesError.message}`);
-    }
-
-    const normalizeCnpj = (v: any) => String(v ?? '').replace(/\D/g, '');
     const cnpjToId = new Map(clientes?.map(c => [normalizeCnpj(c.cnpj), c.id]) || []);
 
-    // Buscar mapeamentos de campos configurados
+    // Buscar mapeamentos de campos
     const { data: mapeamentos } = await supabase
       .from('vv_b_api_mapeamento_campos')
       .select('*')
@@ -260,10 +234,14 @@ serve(async (req) => {
 
     let registrosNovos = 0;
     let registrosAtualizados = 0;
+    const erros: any[] = [];
+    const clientesParaCriar: Map<string, any> = new Map();
+
+    // Primeiro passo: preparar todos os dados e identificar clientes a criar
+    const registrosPreparados: any[] = [];
 
     for (const item of dadosApi) {
       try {
-        // Inicializar com heurísticas (funciona mesmo sem mapeamento, mas o recomendado é mapear)
         let numeroNota: string | undefined = item?.numero_nota ?? item?.numeroNota ?? item?.PaymentDocument;
         let numeroCobranca: string | undefined = item?.numero_cobranca ?? item?.numeroCobranca ?? item?.PaymentRunID;
         let cnpjCliente: string | undefined = item?.cliente_cnpj ?? item?.cnpj_cliente ?? item?.TaxNumber1;
@@ -288,83 +266,29 @@ serve(async (req) => {
           }
         }
 
-        // Log para debug
-        console.log(`[sync-api-boletos] Item processado: nota=${numeroNota}, cobranca=${numeroCobranca}, cnpj=${cnpjCliente}`);
-
-        // Validar campos essenciais antes de gravar/consultar
         if (!numeroNota || !numeroCobranca || !cnpjCliente) {
-          erros.push({
-            tipo: 'campos_obrigatorios_ausentes',
-            numero_nota: numeroNota,
-            numero_cobranca: numeroCobranca,
+          continue; // Pular registros incompletos silenciosamente
+        }
+
+        const cnpjNormalizado = normalizeCnpj(cnpjCliente);
+        let clienteId = cnpjToId.get(cnpjNormalizado) ?? null;
+
+        // Marcar cliente para criação se não existir
+        if (!clienteId && !clientesParaCriar.has(cnpjNormalizado)) {
+          clientesParaCriar.set(cnpjNormalizado, {
             cnpj: cnpjCliente,
+            razao_social: item?.CustomerName ?? item?.nome_cliente ?? item?.razao_social ?? 
+                          item?.BusinessPartnerFullName ?? `Cliente ${cnpjCliente}`,
+            endereco: item?.endereco ?? item?.StreetName ?? null,
+            cidade: item?.cidade ?? item?.CityName ?? null,
+            estado: item?.estado ?? item?.Region ?? null,
+            cep: item?.cep ?? item?.PostalCode ?? null,
+            email: item?.email ?? item?.EmailAddress ?? null,
+            telefone: item?.telefone ?? item?.PhoneNumber ?? null,
+            business_partner: item?.BusinessPartner ?? null,
           });
-          continue;
         }
 
-        // Buscar cliente pelo CNPJ - se não existir, criar automaticamente
-        let clienteId = cnpjToId.get(normalizeCnpj(cnpjCliente)) ?? null;
-        
-        if (!clienteId) {
-          console.log(`[sync-api-boletos] Cliente não encontrado para CNPJ: ${cnpjCliente} - criando automaticamente`);
-          
-          // Extrair dados do cliente da API (com fallbacks)
-          const nomeCliente = item?.CustomerName ?? item?.nome_cliente ?? item?.razao_social ?? 
-                              item?.BusinessPartnerFullName ?? item?.SupplierName ?? `Cliente ${cnpjCliente}`;
-          
-          // Criar novo cliente
-          const { data: novoCliente, error: createClienteError } = await supabase
-            .from('vv_b_clientes')
-            .insert({
-              cnpj: cnpjCliente,
-              razao_social: String(nomeCliente),
-              endereco: item?.endereco ?? item?.StreetName ?? null,
-              cidade: item?.cidade ?? item?.CityName ?? null,
-              estado: item?.estado ?? item?.Region ?? null,
-              cep: item?.cep ?? item?.PostalCode ?? null,
-              email: item?.email ?? item?.EmailAddress ?? null,
-              telefone: item?.telefone ?? item?.PhoneNumber ?? null,
-              business_partner: item?.BusinessPartner ?? item?.business_partner ?? null,
-              parceiro_negocio: item?.parceiro_negocio ?? null,
-            })
-            .select('id')
-            .single();
-          
-          if (createClienteError) {
-            console.error(`[sync-api-boletos] Erro ao criar cliente: ${createClienteError.message}`);
-            erros.push({
-              tipo: 'erro_criar_cliente',
-              cnpj: cnpjCliente,
-              numero_nota: numeroNota,
-              erro: createClienteError.message
-            });
-          } else if (novoCliente) {
-            clienteId = novoCliente.id;
-            // Atualizar o mapa local para evitar duplicatas no mesmo lote
-            cnpjToId.set(normalizeCnpj(cnpjCliente), clienteId);
-            console.log(`[sync-api-boletos] Cliente criado com sucesso: ${clienteId}`);
-          }
-        }
-
-        // Converter datas do formato OData para ISO
-        const dataEmissaoConvertida = parseODataDate(dataEmissao);
-        const dataVencimentoConvertida = parseODataDate(dataVencimento);
-
-        console.log(`[sync-api-boletos] Datas convertidas: emissao=${dataEmissaoConvertida}, vencimento=${dataVencimentoConvertida}`);
-
-        // Separar campos estruturados dos extras
-        const dadosEstruturados = {
-          integracao_id,
-          numero_nota: numeroNota,
-          cliente_id: clienteId,
-          numero_cobranca: numeroCobranca,
-          data_emissao: dataEmissaoConvertida,
-          data_vencimento: dataVencimentoConvertida,
-          valor: valor,
-          sincronizado_em: new Date().toISOString()
-        };
-
-        // Campos extras (todos que não são estruturados)
         const camposConhecidos = ['numero_nota', 'numero_cobranca', 'cliente_cnpj', 'cnpj_cliente',
           'data_emissao', 'data_vencimento', 'valor'];
         const dadosExtras: Record<string, any> = {};
@@ -374,67 +298,130 @@ serve(async (req) => {
             dadosExtras[key] = value;
           }
         }
-
-        // Sempre persistir o CNPJ original nos extras para conciliação
         dadosExtras.cliente_cnpj = cnpjCliente;
 
-        // Upsert - inserir ou atualizar se já existe
-        let existingQuery: any = supabase
-          .from('vv_b_boletos_api')
-          .select('id')
-          .eq('integracao_id', integracao_id)
-          .eq('numero_nota', numeroNota)
-          .eq('numero_cobranca', numeroCobranca)
-          .or('deleted.is.null,deleted.eq.""');
-
-        existingQuery = clienteId
-          ? existingQuery.eq('cliente_id', clienteId)
-          : existingQuery.is('cliente_id', null);
-
-        const { data: existing, error: checkError } = await existingQuery.maybeSingle();
-
-        if (checkError) {
-          console.error('[sync-api-boletos] Erro ao verificar existência:', checkError);
-          throw checkError;
-        }
-
-        if (existing) {
-          // Atualizar registro existente
-          const { error: updateError } = await supabase
-            .from('vv_b_boletos_api')
-            .update({
-              ...dadosEstruturados,
-              dados_extras: dadosExtras
-            })
-            .eq('id', existing.id);
-
-          if (updateError) throw updateError;
-          registrosAtualizados++;
-        } else {
-          // Inserir novo registro
-          const { error: insertError } = await supabase
-            .from('vv_b_boletos_api')
-            .insert({
-              ...dadosEstruturados,
-              dados_extras: dadosExtras
-            });
-
-          if (insertError) throw insertError;
-          registrosNovos++;
-        }
-
-      } catch (itemError: any) {
-        console.error('[sync-api-boletos] Erro no item:', itemError);
-        erros.push({
-          tipo: 'processamento',
-          item: item.numero_nota,
-          erro: itemError.message
+        registrosPreparados.push({
+          cnpjNormalizado,
+          numeroNota,
+          numeroCobranca,
+          dataEmissao: parseODataDate(dataEmissao),
+          dataVencimento: parseODataDate(dataVencimento),
+          valor,
+          dadosExtras
         });
+
+      } catch (err: any) {
+        erros.push({ tipo: 'preparacao', erro: err.message });
+      }
+    }
+
+    console.log(`[sync-api-boletos] Registros válidos: ${registrosPreparados.length}, Clientes novos: ${clientesParaCriar.size}`);
+
+    // Criar clientes em batch
+    if (clientesParaCriar.size > 0) {
+      const clientesArray = Array.from(clientesParaCriar.values());
+      const batchesClientes = [];
+      
+      for (let i = 0; i < clientesArray.length; i += BATCH_SIZE) {
+        batchesClientes.push(clientesArray.slice(i, i + BATCH_SIZE));
+      }
+
+      for (const batch of batchesClientes) {
+        const { data: novosClientes, error: createError } = await supabase
+          .from('vv_b_clientes')
+          .upsert(batch, { 
+            onConflict: 'cnpj',
+            ignoreDuplicates: true 
+          })
+          .select('id, cnpj');
+
+        if (!createError && novosClientes) {
+          for (const c of novosClientes) {
+            cnpjToId.set(normalizeCnpj(c.cnpj), c.id);
+          }
+        }
+      }
+
+      // Buscar novamente todos os clientes para garantir mapeamento correto
+      const { data: todosClientes } = await supabase
+        .from('vv_b_clientes')
+        .select('id, cnpj')
+        .or('deleted.is.null,deleted.eq.""');
+
+      if (todosClientes) {
+        for (const c of todosClientes) {
+          cnpjToId.set(normalizeCnpj(c.cnpj), c.id);
+        }
+      }
+    }
+
+    // Preparar registros finais com cliente_id
+    const registrosParaUpsert: any[] = [];
+    const chavesDuplicadas = new Set<string>();
+
+    for (const reg of registrosPreparados) {
+      const clienteId = cnpjToId.get(reg.cnpjNormalizado) ?? null;
+      
+      // Criar chave única para evitar duplicatas no batch
+      const chaveUnica = `${reg.numeroNota}|${clienteId}|${reg.numeroCobranca}`;
+      
+      if (chavesDuplicadas.has(chaveUnica)) {
+        continue; // Pular duplicatas
+      }
+      chavesDuplicadas.add(chaveUnica);
+
+      registrosParaUpsert.push({
+        integracao_id,
+        numero_nota: reg.numeroNota,
+        cliente_id: clienteId,
+        numero_cobranca: reg.numeroCobranca,
+        data_emissao: reg.dataEmissao,
+        data_vencimento: reg.dataVencimento,
+        valor: reg.valor,
+        dados_extras: reg.dadosExtras,
+        sincronizado_em: new Date().toISOString()
+      });
+    }
+
+    console.log(`[sync-api-boletos] Registros únicos para upsert: ${registrosParaUpsert.length}`);
+
+    // Processar em batches usando upsert nativo
+    const batches = [];
+    for (let i = 0; i < registrosParaUpsert.length; i += BATCH_SIZE) {
+      batches.push(registrosParaUpsert.slice(i, i + BATCH_SIZE));
+    }
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      
+      try {
+        const { data, error: upsertError } = await supabase
+          .from('vv_b_boletos_api')
+          .upsert(batch, {
+            onConflict: 'numero_nota,cliente_id,numero_cobranca',
+            ignoreDuplicates: false
+          })
+          .select('id');
+
+        if (upsertError) {
+          console.error(`[sync-api-boletos] Erro no batch ${i + 1}:`, upsertError.message);
+          erros.push({ tipo: 'batch', batch: i + 1, erro: upsertError.message });
+        } else {
+          registrosAtualizados += data?.length || batch.length;
+        }
+      } catch (batchErr: any) {
+        console.error(`[sync-api-boletos] Exceção no batch ${i + 1}:`, batchErr.message);
+        erros.push({ tipo: 'batch_exception', batch: i + 1, erro: batchErr.message });
+      }
+
+      // Log de progresso a cada 10 batches
+      if ((i + 1) % 10 === 0) {
+        console.log(`[sync-api-boletos] Progresso: ${i + 1}/${batches.length} batches processados`);
       }
     }
 
     const duracao = Date.now() - startTime;
-    const status = erros.length === 0 ? 'sucesso' : (registrosNovos + registrosAtualizados > 0 ? 'parcial' : 'erro');
+    const status = erros.length === 0 ? 'sucesso' : (registrosAtualizados > 0 ? 'parcial' : 'erro');
 
     // Registrar log de sincronização
     await supabase.from('vv_b_api_sync_log').insert({
@@ -443,25 +430,24 @@ serve(async (req) => {
       registros_processados: dadosApi.length,
       registros_novos: registrosNovos,
       registros_atualizados: registrosAtualizados,
-      erros,
+      erros: erros.length > 0 ? erros : null,
       duracao_ms: duracao
     });
 
-    // Atualizar última sincronização na integração
+    // Atualizar última sincronização
     await supabase
       .from('vv_b_api_integracoes')
       .update({ ultima_sincronizacao: new Date().toISOString() })
       .eq('id', integracao_id);
 
-    console.log(`[sync-api-boletos] Sincronização concluída. Status: ${status}, Novos: ${registrosNovos}, Atualizados: ${registrosAtualizados}`);
+    console.log(`[sync-api-boletos] Concluído. Status: ${status}, Processados: ${registrosAtualizados}, Duração: ${duracao}ms`);
 
     return new Response(JSON.stringify({
       success: true,
       status,
       registros_processados: dadosApi.length,
-      registros_novos: registrosNovos,
       registros_atualizados: registrosAtualizados,
-      erros: erros.length > 0 ? erros : undefined,
+      erros: erros.length > 0 ? erros.slice(0, 10) : undefined,
       duracao_ms: duracao
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
