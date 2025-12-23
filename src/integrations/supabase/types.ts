@@ -1769,6 +1769,8 @@ export type Database = {
           nome_modelo: string
           padrao: boolean | null
           pdf_exemplo_base64: string | null
+          pdf_storage_bucket: string | null
+          pdf_storage_path: string | null
           template_pdf_id: string | null
           texto_instrucoes: string | null
           tipo_layout: string | null
@@ -1786,6 +1788,8 @@ export type Database = {
           nome_modelo: string
           padrao?: boolean | null
           pdf_exemplo_base64?: string | null
+          pdf_storage_bucket?: string | null
+          pdf_storage_path?: string | null
           template_pdf_id?: string | null
           texto_instrucoes?: string | null
           tipo_layout?: string | null
@@ -1803,6 +1807,8 @@ export type Database = {
           nome_modelo?: string
           padrao?: boolean | null
           pdf_exemplo_base64?: string | null
+          pdf_storage_bucket?: string | null
+          pdf_storage_path?: string | null
           template_pdf_id?: string | null
           texto_instrucoes?: string | null
           tipo_layout?: string | null

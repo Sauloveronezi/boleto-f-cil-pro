@@ -89,6 +89,7 @@ interface EditorLayoutBoletoProps {
   larguraPagina?: number;
   alturaPagina?: number;
   pdfBase64?: string; // PDF como fundo do editor
+  iniciarVazio?: boolean; // Quando true, não carrega o layout padrão (usado ao importar PDF)
 }
 
 const VARIAVEIS_BOLETO = [
@@ -157,6 +158,7 @@ export function EditorLayoutBoleto({
   larguraPagina = LARGURA_BOLETO_MM,
   alturaPagina = ALTURA_BOLETO_MM,
   pdfBase64,
+  iniciarVazio = false,
 }: EditorLayoutBoletoProps) {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -180,12 +182,16 @@ export function EditorLayoutBoleto({
     if (open) {
       if (elementosIniciais.length > 0) {
         setElementos(elementosIniciais.map((e, i) => ({ ...e, ordem: e.ordem ?? i, visivel: e.visivel ?? true })));
+      } else if (iniciarVazio) {
+        // Quando é importação de PDF, inicia sem elementos
+        setElementos([]);
       } else {
+        // Modelo novo sem PDF - carrega layout padrão
         setElementos(getElementosPadrao());
       }
       setElementoSelecionado(null);
     }
-  }, [open, elementosIniciais]);
+  }, [open, elementosIniciais, iniciarVazio]);
 
   const getElementosPadrao = (): ElementoLayout[] => {
     return [
