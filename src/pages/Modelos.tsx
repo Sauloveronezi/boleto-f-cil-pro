@@ -428,17 +428,44 @@ export default function Modelos() {
   const handleImportarPDF = async (result: ImportarPDFResult) => {
     // Guarda o arquivo para upload quando salvar
     setPendingPdfFile(result.file);
-    
+
+    const shouldCopyCamposPadrao = result.copiarCamposPadrao !== false;
+    const bancoBaseId = result.bancosCompativeis?.[0];
+
+    let camposPadrao: CampoMapeado[] = [];
+
+    if (shouldCopyCamposPadrao && bancoBaseId) {
+      try {
+        const { data, error } = await supabase
+          .from('vv_b_modelos_boleto')
+          .select('campos_mapeados')
+          .eq('padrao', true)
+          .eq('banco_id', bancoBaseId)
+          .or('deleted.is.null,deleted.eq.')
+          .limit(1)
+          .maybeSingle();
+
+        if (!error) {
+          const raw = (data?.campos_mapeados || []) as unknown;
+          if (Array.isArray(raw)) {
+            camposPadrao = JSON.parse(JSON.stringify(raw)) as CampoMapeado[];
+          }
+        }
+      } catch (e) {
+        console.warn('[Modelos] Não foi possível carregar campos padrão:', e);
+      }
+    }
+
     // Cria modelo temporário e abre o editor de layout
     const novoModelo: ModeloBoleto = {
       id: `temp_${Date.now()}`,
       nome_modelo: result.nomeModelo,
-      banco_id: result.bancosCompativeis[0] || null,
+      banco_id: bancoBaseId || null,
       bancos_compativeis: result.bancosCompativeis,
       tipo_layout: 'CNAB_400',
       texto_instrucoes: '',
       padrao: false,
-      campos_mapeados: [],
+      campos_mapeados: camposPadrao,
       template_pdf_id: null,
       pdf_storage_path: null,
       pdf_storage_bucket: null,
@@ -448,10 +475,19 @@ export default function Modelos() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    
+
     // Passa o arquivo diretamente para o editor (não usa blob URL que é revogada)
     setPdfSourceParaEditor(result.file);
-    setIniciarEditorVazio(true);
+
+    const temCampos = camposPadrao.length > 0;
+    setIniciarEditorVazio(!temCampos);
+    if (temCampos) {
+      toast({
+        title: 'Campos pré-carregados',
+        description: 'Carregamos os campos do modelo padrão do banco selecionado. Ajuste as posições se necessário.',
+      });
+    }
+
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
   };
