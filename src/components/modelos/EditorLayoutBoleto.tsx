@@ -3,7 +3,7 @@ import {
   Move, Plus, Trash2, Save, ZoomIn, ZoomOut, RotateCcw, 
   Type, Minus, Square, AlignLeft, AlignCenter, AlignRight,
   Bold, Italic, ChevronDown, Settings2, Copy, Layers, Eye, EyeOff,
-  ArrowUp, ArrowDown, GripVertical
+  ArrowUp, ArrowDown, GripVertical, FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
-import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -29,19 +28,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { renderPDFToImage, PAGE_FORMATS, PageFormatKey } from '@/lib/pdfAnalyzer';
 
 // Tipos de elementos do layout
 export type TipoElemento = 'campo' | 'texto' | 'linha' | 'retangulo';
@@ -50,15 +43,12 @@ export interface ElementoLayout {
   id: string;
   tipo: TipoElemento;
   nome: string;
-  // Posição e dimensões
   x: number;
   y: number;
   largura: number;
   altura: number;
-  // Conteúdo
-  variavel?: string; // Para campos
-  textoFixo?: string; // Para textos estáticos
-  // Estilos
+  variavel?: string;
+  textoFixo?: string;
   fonte?: string;
   tamanhoFonte?: number;
   negrito?: boolean;
@@ -66,17 +56,14 @@ export interface ElementoLayout {
   alinhamento?: 'left' | 'center' | 'right';
   corTexto?: string;
   corFundo?: string;
-  // Bordas individuais
   bordaSuperior?: boolean;
   bordaInferior?: boolean;
   bordaEsquerda?: boolean;
   bordaDireita?: boolean;
   espessuraBorda?: number;
   corBorda?: string;
-  // Controle de visibilidade
   visivel?: boolean;
   bloqueado?: boolean;
-  // Ordem de renderização
   ordem?: number;
 }
 
@@ -88,8 +75,8 @@ interface EditorLayoutBoletoProps {
   nomeModelo: string;
   larguraPagina?: number;
   alturaPagina?: number;
-  pdfBase64?: string; // PDF como fundo do editor
-  iniciarVazio?: boolean; // Quando true, não carrega o layout padrão (usado ao importar PDF)
+  pdfBase64?: string;
+  iniciarVazio?: boolean;
 }
 
 const VARIAVEIS_BOLETO = [
@@ -144,10 +131,8 @@ const FONTES = [
   { value: 'arial', label: 'Arial' },
 ];
 
-// Dimensões padrão do boleto (em mm, escala para px)
-const ESCALA = 2; // 1mm = 2px
-const LARGURA_BOLETO_MM = 210; // A4 width
-const ALTURA_BOLETO_MM = 140; // Altura típica de boleto
+// Scale: 1mm = 2px in editor
+const ESCALA = 2;
 
 export function EditorLayoutBoleto({ 
   open, 
@@ -155,91 +140,122 @@ export function EditorLayoutBoleto({
   elementos: elementosIniciais, 
   onSave, 
   nomeModelo,
-  larguraPagina = LARGURA_BOLETO_MM,
-  alturaPagina = ALTURA_BOLETO_MM,
+  larguraPagina: larguraPaginaInicial,
+  alturaPagina: alturaPaginaInicial,
   pdfBase64,
   iniciarVazio = false,
 }: EditorLayoutBoletoProps) {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
   
+  // Page format state
+  const [formatoPagina, setFormatoPagina] = useState<PageFormatKey>('A4');
+  const [larguraPagina, setLarguraPagina] = useState(larguraPaginaInicial || PAGE_FORMATS.A4.larguraMm);
+  const [alturaPagina, setAlturaPagina] = useState(alturaPaginaInicial || PAGE_FORMATS.A4.alturaMm);
+  
+  // Elements state
   const [elementos, setElementos] = useState<ElementoLayout[]>([]);
   const [elementoSelecionado, setElementoSelecionado] = useState<string | null>(null);
+  
+  // Canvas state
   const [zoom, setZoom] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [mostrarGrade, setMostrarGrade] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [tamanhoGrid, setTamanhoGrid] = useState(5);
   const [abaSelecionada, setAbaSelecionada] = useState<'campos' | 'textos' | 'linhas'>('campos');
+  
+  // Drag state - stored in refs to avoid stale closures
+  const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
+  const resizeHandleRef = useRef<string | null>(null);
+  const dragStartRef = useRef({ x: 0, y: 0, elemX: 0, elemY: 0, elemW: 0, elemH: 0 });
+  const selectedIdRef = useRef<string | null>(null);
+  
+  // PDF background as image
+  const [pdfImageUrl, setPdfImageUrl] = useState<string | null>(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   const larguraCanvas = larguraPagina * ESCALA;
   const alturaCanvas = alturaPagina * ESCALA;
 
+  // Load PDF as image when pdfBase64 changes
+  useEffect(() => {
+    if (pdfBase64 && open) {
+      setLoadingPdf(true);
+      renderPDFToImage(pdfBase64, 2)
+        .then(({ dataUrl }) => {
+          setPdfImageUrl(dataUrl);
+        })
+        .catch((err) => {
+          console.error('Error rendering PDF:', err);
+          setPdfImageUrl(null);
+        })
+        .finally(() => {
+          setLoadingPdf(false);
+        });
+    } else {
+      setPdfImageUrl(null);
+    }
+  }, [pdfBase64, open]);
+
+  // Initialize elements when dialog opens
   useEffect(() => {
     if (open) {
       if (elementosIniciais.length > 0) {
-        setElementos(elementosIniciais.map((e, i) => ({ ...e, ordem: e.ordem ?? i, visivel: e.visivel ?? true })));
+        setElementos(elementosIniciais.map((e, i) => ({ 
+          ...e, 
+          ordem: e.ordem ?? i, 
+          visivel: e.visivel ?? true 
+        })));
       } else if (iniciarVazio) {
-        // Quando é importação de PDF, inicia sem elementos
+        // When importing PDF, start empty
         setElementos([]);
       } else {
-        // Modelo novo sem PDF - carrega layout padrão
-        setElementos(getElementosPadrao());
+        // New model without PDF - start empty (no default layout)
+        setElementos([]);
       }
       setElementoSelecionado(null);
+      
+      // Set page dimensions
+      if (larguraPaginaInicial && alturaPaginaInicial) {
+        setLarguraPagina(larguraPaginaInicial);
+        setAlturaPagina(alturaPaginaInicial);
+        setFormatoPagina('CUSTOM');
+      }
     }
-  }, [open, elementosIniciais, iniciarVazio]);
+  }, [open, elementosIniciais, iniciarVazio, larguraPaginaInicial, alturaPaginaInicial]);
 
-  const getElementosPadrao = (): ElementoLayout[] => {
-    return [
-      // Cabeçalho com logo e linha digitável
-      { id: 'el_1', tipo: 'linha', nome: 'Linha Cabeçalho', x: 0, y: 40, largura: larguraCanvas, altura: 2, corFundo: '#000000', visivel: true, ordem: 0 },
-      { id: 'el_2', tipo: 'campo', nome: 'Logo Banco', variavel: '{{banco_logo}}', x: 10, y: 5, largura: 80, altura: 30, visivel: true, ordem: 1 },
-      { id: 'el_3', tipo: 'campo', nome: 'Código Banco', variavel: '{{banco_codigo}}', x: 100, y: 10, largura: 60, altura: 20, tamanhoFonte: 16, negrito: true, alinhamento: 'center', bordaEsquerda: true, bordaDireita: true, visivel: true, ordem: 2 },
-      { id: 'el_4', tipo: 'campo', nome: 'Linha Digitável', variavel: '{{linha_digitavel}}', x: 170, y: 10, largura: 240, altura: 20, tamanhoFonte: 12, negrito: true, alinhamento: 'right', visivel: true, ordem: 3 },
-      
-      // Segunda linha
-      { id: 'el_5', tipo: 'linha', nome: 'Linha 2', x: 0, y: 80, largura: larguraCanvas, altura: 1, corFundo: '#000000', visivel: true, ordem: 4 },
-      { id: 'el_6', tipo: 'texto', nome: 'Label Local Pagamento', textoFixo: 'Local de Pagamento', x: 10, y: 45, largura: 100, altura: 12, tamanhoFonte: 8, visivel: true, ordem: 5 },
-      { id: 'el_7', tipo: 'campo', nome: 'Local Pagamento', variavel: '{{local_pagamento}}', x: 10, y: 55, largura: 300, altura: 18, tamanhoFonte: 10, visivel: true, ordem: 6 },
-      { id: 'el_8', tipo: 'texto', nome: 'Label Vencimento', textoFixo: 'Vencimento', x: 330, y: 45, largura: 80, altura: 12, tamanhoFonte: 8, visivel: true, ordem: 7 },
-      { id: 'el_9', tipo: 'campo', nome: 'Data Vencimento', variavel: '{{data_vencimento}}', x: 330, y: 55, largura: 80, altura: 18, tamanhoFonte: 10, negrito: true, alinhamento: 'center', visivel: true, ordem: 8 },
-      
-      // Beneficiário
-      { id: 'el_10', tipo: 'linha', nome: 'Linha 3', x: 0, y: 120, largura: larguraCanvas, altura: 1, corFundo: '#000000', visivel: true, ordem: 9 },
-      { id: 'el_11', tipo: 'texto', nome: 'Label Beneficiário', textoFixo: 'Beneficiário', x: 10, y: 85, largura: 80, altura: 12, tamanhoFonte: 8, visivel: true, ordem: 10 },
-      { id: 'el_12', tipo: 'campo', nome: 'Beneficiário', variavel: '{{beneficiario_nome}}', x: 10, y: 95, largura: 280, altura: 18, tamanhoFonte: 10, visivel: true, ordem: 11 },
-      { id: 'el_13', tipo: 'texto', nome: 'Label Agência', textoFixo: 'Agência/Código Beneficiário', x: 300, y: 85, largura: 110, altura: 12, tamanhoFonte: 8, visivel: true, ordem: 12 },
-      { id: 'el_14', tipo: 'campo', nome: 'Agência Conta', variavel: '{{agencia}}', x: 300, y: 95, largura: 110, altura: 18, tamanhoFonte: 10, alinhamento: 'center', visivel: true, ordem: 13 },
-      
-      // Pagador
-      { id: 'el_15', tipo: 'linha', nome: 'Linha Pagador', x: 0, y: 200, largura: larguraCanvas, altura: 1, corFundo: '#000000', visivel: true, ordem: 14 },
-      { id: 'el_16', tipo: 'texto', nome: 'Label Pagador', textoFixo: 'Pagador', x: 10, y: 205, largura: 60, altura: 12, tamanhoFonte: 8, visivel: true, ordem: 15 },
-      { id: 'el_17', tipo: 'campo', nome: 'Pagador Nome', variavel: '{{pagador_nome}}', x: 10, y: 215, largura: 350, altura: 15, tamanhoFonte: 9, visivel: true, ordem: 16 },
-      { id: 'el_18', tipo: 'campo', nome: 'Pagador Endereço', variavel: '{{pagador_endereco}}', x: 10, y: 230, largura: 350, altura: 15, tamanhoFonte: 9, visivel: true, ordem: 17 },
-      { id: 'el_19', tipo: 'campo', nome: 'Pagador CNPJ', variavel: '{{pagador_cnpj}}', x: 370, y: 215, largura: 40, altura: 15, tamanhoFonte: 9, visivel: true, ordem: 18 },
-      
-      // Código de barras
-      { id: 'el_20', tipo: 'campo', nome: 'Código de Barras', variavel: '{{codigo_barras}}', x: 10, y: 255, largura: 350, altura: 40, corFundo: '#000000', visivel: true, ordem: 19 },
-    ];
-  };
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedIdRef.current = elementoSelecionado;
+  }, [elementoSelecionado]);
 
   const snapValue = (value: number): number => {
     if (!snapToGrid) return value;
     return Math.round(value / tamanhoGrid) * tamanhoGrid;
   };
 
+  const handleFormatoChange = (formato: PageFormatKey) => {
+    setFormatoPagina(formato);
+    if (formato !== 'CUSTOM') {
+      setLarguraPagina(PAGE_FORMATS[formato].larguraMm);
+      setAlturaPagina(PAGE_FORMATS[formato].alturaMm);
+    }
+  };
+
   const adicionarElemento = (tipo: TipoElemento, config?: Partial<ElementoLayout>) => {
-    const id = `el_${Date.now()}`;
+    const id = `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Position new element in visible area
+    const centerX = Math.min(100, larguraCanvas / 2 - 60);
+    const centerY = Math.min(50, alturaCanvas / 2 - 10);
+    
     const novoElemento: ElementoLayout = {
       id,
       tipo,
       nome: config?.nome || `Novo ${tipo}`,
-      x: 10,
-      y: 10 + elementos.length * 5,
+      x: snapValue(centerX + elementos.length * 10),
+      y: snapValue(centerY + elementos.length * 10),
       largura: tipo === 'linha' ? 200 : (tipo === 'retangulo' ? 100 : 120),
       altura: tipo === 'linha' ? 2 : (tipo === 'retangulo' ? 50 : 20),
       tamanhoFonte: 10,
@@ -251,7 +267,11 @@ export function EditorLayoutBoleto({
       ...config,
     };
     
-    setElementos(prev => [...prev, novoElemento]);
+    setElementos(prev => {
+      const updated = [...prev, novoElemento];
+      console.log('[Editor] Elemento adicionado:', novoElemento.nome, 'Total:', updated.length);
+      return updated;
+    });
     setElementoSelecionado(id);
     
     toast({
@@ -316,7 +336,7 @@ export function EditorLayoutBoleto({
     const elemento = elementos.find(e => e.id === id);
     if (!elemento) return;
     
-    const novoId = `el_${Date.now()}`;
+    const novoId = `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const novoElemento: ElementoLayout = {
       ...elemento,
       id: novoId,
@@ -334,87 +354,110 @@ export function EditorLayoutBoleto({
     setElementos(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
   };
 
-  const moverElemento = (id: string, direcao: 'up' | 'down') => {
-    const index = elementos.findIndex(e => e.id === id);
-    if (index === -1) return;
+  // Global mouse handlers for drag/resize
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!canvasRef.current) return;
+      const selectedId = selectedIdRef.current;
+      if (!selectedId) return;
+      
+      if (!isDraggingRef.current && !isResizingRef.current) return;
+      
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = (e.clientX - rect.left) / zoom;
+      const mouseY = (e.clientY - rect.top) / zoom;
+      
+      const startData = dragStartRef.current;
+      
+      if (isDraggingRef.current) {
+        const deltaX = mouseX - startData.x;
+        const deltaY = mouseY - startData.y;
+        
+        let newX = snapValue(startData.elemX + deltaX);
+        let newY = snapValue(startData.elemY + deltaY);
+        
+        // Constrain to canvas
+        newX = Math.max(0, Math.min(larguraCanvas - startData.elemW, newX));
+        newY = Math.max(0, Math.min(alturaCanvas - startData.elemH, newY));
+        
+        setElementos(prev => prev.map(el => 
+          el.id === selectedId 
+            ? { ...el, x: Math.round(newX), y: Math.round(newY) }
+            : el
+        ));
+      } else if (isResizingRef.current && resizeHandleRef.current) {
+        const handle = resizeHandleRef.current;
+        let updates: Partial<ElementoLayout> = {};
+        
+        if (handle.includes('e')) {
+          updates.largura = snapValue(Math.max(20, mouseX - startData.elemX));
+        }
+        if (handle.includes('w')) {
+          const newWidth = snapValue(Math.max(20, startData.elemX + startData.elemW - mouseX));
+          updates.x = snapValue(startData.elemX + startData.elemW - newWidth);
+          updates.largura = newWidth;
+        }
+        if (handle.includes('s')) {
+          updates.altura = snapValue(Math.max(10, mouseY - startData.elemY));
+        }
+        if (handle.includes('n')) {
+          const newHeight = snapValue(Math.max(10, startData.elemY + startData.elemH - mouseY));
+          updates.y = snapValue(startData.elemY + startData.elemH - newHeight);
+          updates.altura = newHeight;
+        }
+        
+        setElementos(prev => prev.map(el => 
+          el.id === selectedId ? { ...el, ...updates } : el
+        ));
+      }
+    };
     
-    const novaOrdem = [...elementos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-    const novoIndex = direcao === 'up' ? Math.max(0, index - 1) : Math.min(elementos.length - 1, index + 1);
+    const handleGlobalMouseUp = () => {
+      isDraggingRef.current = false;
+      isResizingRef.current = false;
+      resizeHandleRef.current = null;
+    };
     
-    if (novoIndex !== index) {
-      const item = novaOrdem.splice(index, 1)[0];
-      novaOrdem.splice(novoIndex, 0, item);
-      setElementos(novaOrdem.map((e, i) => ({ ...e, ordem: i })));
+    if (open) {
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
     }
-  };
+    
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [open, zoom, snapValue, larguraCanvas, alturaCanvas]);
 
-  const handleMouseDown = (e: React.MouseEvent, elementoId: string, handle?: string) => {
+  const handleElementMouseDown = (e: React.MouseEvent, elementoId: string, handle?: string) => {
     e.preventDefault();
     e.stopPropagation();
     
     const elemento = elementos.find(el => el.id === elementoId);
     if (!elemento || elemento.bloqueado || !canvasRef.current) return;
-
+    
     const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / zoom;
+    const mouseY = (e.clientY - rect.top) / zoom;
+    
+    // Store initial state
+    dragStartRef.current = {
+      x: mouseX,
+      y: mouseY,
+      elemX: elemento.x,
+      elemY: elemento.y,
+      elemW: elemento.largura,
+      elemH: elemento.altura,
+    };
     
     if (handle) {
-      setIsResizing(true);
-      setResizeHandle(handle);
+      isResizingRef.current = true;
+      resizeHandleRef.current = handle;
     } else {
-      setDragOffset({
-        x: e.clientX - rect.left - elemento.x * zoom,
-        y: e.clientY - rect.top - elemento.y * zoom,
-      });
-      setIsDragging(true);
+      isDraggingRef.current = true;
     }
     
     setElementoSelecionado(elementoId);
-  };
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!elementoSelecionado || !canvasRef.current) return;
-
-    const elemento = elementos.find(el => el.id === elementoSelecionado);
-    if (!elemento) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-
-    if (isDragging) {
-      const newX = snapValue(Math.max(0, Math.min(larguraCanvas - elemento.largura, (e.clientX - rect.left - dragOffset.x) / zoom)));
-      const newY = snapValue(Math.max(0, Math.min(alturaCanvas - elemento.altura, (e.clientY - rect.top - dragOffset.y) / zoom)));
-      
-      atualizarElemento(elementoSelecionado, { x: Math.round(newX), y: Math.round(newY) });
-    } else if (isResizing && resizeHandle) {
-      const mouseX = (e.clientX - rect.left) / zoom;
-      const mouseY = (e.clientY - rect.top) / zoom;
-
-      let updates: Partial<ElementoLayout> = {};
-
-      if (resizeHandle.includes('e')) {
-        updates.largura = snapValue(Math.max(20, mouseX - elemento.x));
-      }
-      if (resizeHandle.includes('w')) {
-        const newWidth = snapValue(Math.max(20, elemento.x + elemento.largura - mouseX));
-        updates.x = snapValue(elemento.x + elemento.largura - newWidth);
-        updates.largura = newWidth;
-      }
-      if (resizeHandle.includes('s')) {
-        updates.altura = snapValue(Math.max(10, mouseY - elemento.y));
-      }
-      if (resizeHandle.includes('n')) {
-        const newHeight = snapValue(Math.max(10, elemento.y + elemento.altura - mouseY));
-        updates.y = snapValue(elemento.y + elemento.altura - newHeight);
-        updates.altura = newHeight;
-      }
-
-      atualizarElemento(elementoSelecionado, updates);
-    }
-  }, [isDragging, isResizing, elementoSelecionado, zoom, dragOffset, resizeHandle, elementos, snapValue, larguraCanvas, alturaCanvas]);
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setIsResizing(false);
-    setResizeHandle(null);
   };
 
   const handleSave = () => {
@@ -437,6 +480,7 @@ export function EditorLayoutBoleto({
       top: elemento.y * zoom,
       width: elemento.largura * zoom,
       height: elemento.altura * zoom,
+      zIndex: isSelected ? 15 : 10,
     };
 
     const getBorderStyle = () => {
@@ -464,6 +508,45 @@ export function EditorLayoutBoleto({
       fontFamily: elemento.fonte || 'helvetica, sans-serif',
     });
 
+    const renderResizeHandles = () => {
+      if (!isSelected) return null;
+      
+      const handleSize = 8;
+      const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+      
+      return handles.map(handle => {
+        let style: React.CSSProperties = {
+          position: 'absolute',
+          width: handleSize,
+          height: handleSize,
+          backgroundColor: 'hsl(var(--primary))',
+          border: '1px solid white',
+          zIndex: 25,
+        };
+
+        if (handle.includes('n')) style.top = -handleSize / 2;
+        if (handle.includes('s')) style.bottom = -handleSize / 2;
+        if (handle.includes('e')) style.right = -handleSize / 2;
+        if (handle.includes('w')) style.left = -handleSize / 2;
+        if (handle === 'n' || handle === 's') { style.left = '50%'; style.transform = 'translateX(-50%)'; }
+        if (handle === 'e' || handle === 'w') { style.top = '50%'; style.transform = 'translateY(-50%)'; }
+
+        const cursors: Record<string, string> = {
+          n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
+          ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize',
+        };
+        style.cursor = cursors[handle];
+
+        return (
+          <div
+            key={handle}
+            style={style}
+            onMouseDown={(e) => handleElementMouseDown(e, elemento.id, handle)}
+          />
+        );
+      });
+    };
+
     if (elemento.tipo === 'linha') {
       return (
         <div
@@ -473,8 +556,10 @@ export function EditorLayoutBoleto({
             ...baseStyle,
             backgroundColor: elemento.corFundo || '#000000',
           }}
-          onMouseDown={(e) => handleMouseDown(e, elemento.id)}
-        />
+          onMouseDown={(e) => handleElementMouseDown(e, elemento.id)}
+        >
+          {renderResizeHandles()}
+        </div>
       );
     }
 
@@ -488,9 +573,9 @@ export function EditorLayoutBoleto({
             backgroundColor: elemento.corFundo || 'transparent',
             ...getBorderStyle(),
           }}
-          onMouseDown={(e) => handleMouseDown(e, elemento.id)}
+          onMouseDown={(e) => handleElementMouseDown(e, elemento.id)}
         >
-          {isSelected && renderResizeHandles()}
+          {renderResizeHandles()}
         </div>
       );
     }
@@ -498,60 +583,21 @@ export function EditorLayoutBoleto({
     return (
       <div
         key={elemento.id}
-        className={`absolute cursor-move overflow-hidden ${isSelected ? 'ring-2 ring-primary ring-offset-1 z-10' : ''}`}
+        className={`absolute cursor-move overflow-hidden ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
         style={{
           ...baseStyle,
           backgroundColor: elemento.corFundo || 'transparent',
           ...getBorderStyle(),
           ...getTextStyle(),
         }}
-        onMouseDown={(e) => handleMouseDown(e, elemento.id)}
+        onMouseDown={(e) => handleElementMouseDown(e, elemento.id)}
       >
         <div className="h-full flex items-center px-1 truncate">
           {elemento.tipo === 'texto' ? elemento.textoFixo : elemento.variavel}
         </div>
-        {isSelected && renderResizeHandles()}
+        {renderResizeHandles()}
       </div>
     );
-  };
-
-  const renderResizeHandles = () => {
-    const handleSize = 8;
-    const handles = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
-    
-    return handles.map(handle => {
-      let style: React.CSSProperties = {
-        position: 'absolute',
-        width: handleSize,
-        height: handleSize,
-        backgroundColor: 'hsl(var(--primary))',
-        border: '1px solid white',
-        zIndex: 20,
-      };
-
-      if (handle.includes('n')) style.top = -handleSize / 2;
-      if (handle.includes('s')) style.bottom = -handleSize / 2;
-      if (handle.includes('e')) style.right = -handleSize / 2;
-      if (handle.includes('w')) style.left = -handleSize / 2;
-      if (handle === 'n' || handle === 's') style.left = '50%';
-      if (handle === 'e' || handle === 'w') style.top = '50%';
-      if (handle === 'n' || handle === 's') style.transform = 'translateX(-50%)';
-      if (handle === 'e' || handle === 'w') style.transform = 'translateY(-50%)';
-
-      const cursors: Record<string, string> = {
-        n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
-        ne: 'nesw-resize', sw: 'nesw-resize', nw: 'nwse-resize', se: 'nwse-resize',
-      };
-      style.cursor = cursors[handle];
-
-      return (
-        <div
-          key={handle}
-          style={style}
-          onMouseDown={(e) => handleMouseDown(e, elementoSelecionado!, handle)}
-        />
-      );
-    });
   };
 
   return (
@@ -563,12 +609,12 @@ export function EditorLayoutBoleto({
             Editor de Layout - {nomeModelo}
           </DialogTitle>
           <DialogDescription>
-            Adicione campos, textos e linhas. Arraste para posicionar e redimensionar. Configure bordas individualmente.
+            Adicione campos, textos e linhas. Arraste para posicionar e redimensionar.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Painel Esquerdo - Adicionar elementos */}
+          {/* Left Panel - Add elements */}
           <div className="w-72 border-r bg-muted/30 flex flex-col">
             <Tabs value={abaSelecionada} onValueChange={(v) => setAbaSelecionada(v as typeof abaSelecionada)} className="flex-1 flex flex-col">
               <TabsList className="w-full rounded-none border-b">
@@ -597,9 +643,7 @@ export function EditorLayoutBoleto({
                                   variant={jaAdicionado ? 'secondary' : 'ghost'}
                                   size="sm"
                                   className="w-full justify-start text-xs h-7"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
+                                  onClick={() => {
                                     if (!jaAdicionado) {
                                       adicionarCampo(v.variavel, v.label);
                                     }
@@ -622,14 +666,7 @@ export function EditorLayoutBoleto({
               
               <TabsContent value="textos" className="flex-1 overflow-hidden m-0">
                 <div className="p-3 space-y-2">
-                  <Button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      adicionarTexto();
-                    }} 
-                    className="w-full"
-                  >
+                  <Button onClick={() => adicionarTexto()} className="w-full">
                     <Type className="h-4 w-4 mr-2" />
                     Adicionar Texto
                   </Button>
@@ -641,55 +678,28 @@ export function EditorLayoutBoleto({
               
               <TabsContent value="linhas" className="flex-1 overflow-hidden m-0">
                 <div className="p-3 space-y-2">
-                  <Button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      adicionarLinha('horizontal');
-                    }} 
-                    variant="outline" 
-                    className="w-full"
-                  >
+                  <Button onClick={() => adicionarLinha('horizontal')} variant="outline" className="w-full">
                     <Minus className="h-4 w-4 mr-2" />
                     Linha Horizontal
                   </Button>
-                  <Button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      adicionarLinha('vertical');
-                    }} 
-                    variant="outline" 
-                    className="w-full"
-                  >
+                  <Button onClick={() => adicionarLinha('vertical')} variant="outline" className="w-full">
                     <Minus className="h-4 w-4 mr-2 rotate-90" />
                     Linha Vertical
                   </Button>
-                  <Button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      adicionarRetangulo();
-                    }} 
-                    variant="outline" 
-                    className="w-full"
-                  >
+                  <Button onClick={() => adicionarRetangulo()} variant="outline" className="w-full">
                     <Square className="h-4 w-4 mr-2" />
                     Retângulo/Caixa
                   </Button>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Use linhas para dividir seções e retângulos para criar caixas com bordas.
-                  </p>
                 </div>
               </TabsContent>
             </Tabs>
           </div>
 
-          {/* Área Central - Canvas */}
+          {/* Central Area - Canvas */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-background">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-background flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button variant="outline" size="sm" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}>
                   <ZoomOut className="h-4 w-4" />
                 </Button>
@@ -707,10 +717,42 @@ export function EditorLayoutBoleto({
                   <Label htmlFor="snap" className="text-xs">Snap</Label>
                 </div>
                 <Separator orientation="vertical" className="h-6" />
-                <Button variant="outline" size="sm" onClick={() => setElementos(getElementosPadrao())}>
-                  <RotateCcw className="h-4 w-4 mr-1" />
-                  Resetar
-                </Button>
+                {/* Page Format Selector */}
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <Select value={formatoPagina} onValueChange={(v) => handleFormatoChange(v as PageFormatKey)}>
+                    <SelectTrigger className="h-8 w-40 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PAGE_FORMATS).map(([key, format]) => (
+                        <SelectItem key={key} value={key}>{format.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {formatoPagina === 'CUSTOM' && (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={larguraPagina}
+                      onChange={(e) => setLarguraPagina(parseInt(e.target.value) || 210)}
+                      className="h-8 w-16 text-xs"
+                      min={50}
+                      max={500}
+                    />
+                    <span className="text-xs text-muted-foreground">×</span>
+                    <Input
+                      type="number"
+                      value={alturaPagina}
+                      onChange={(e) => setAlturaPagina(parseInt(e.target.value) || 297)}
+                      className="h-8 w-16 text-xs"
+                      min={50}
+                      max={500}
+                    />
+                    <span className="text-xs text-muted-foreground">mm</span>
+                  </div>
+                )}
               </div>
               <Badge variant="outline">{elementos.length} elementos</Badge>
             </div>
@@ -723,30 +765,26 @@ export function EditorLayoutBoleto({
                 style={{
                   width: larguraCanvas * zoom,
                   height: alturaCanvas * zoom,
-                  cursor: isDragging ? 'grabbing' : 'default',
+                  cursor: 'default',
                 }}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
                 onClick={() => setElementoSelecionado(null)}
               >
-                {/* PDF como fundo */}
-                {pdfBase64 && (
-                  <object
-                    data={pdfBase64}
-                    type="application/pdf"
-                    className="absolute inset-0 w-full h-full pointer-events-none opacity-50"
-                    style={{ zIndex: 0 }}
-                  >
-                    <img 
-                      src={pdfBase64} 
-                      alt="Modelo PDF" 
-                      className="absolute inset-0 w-full h-full object-contain opacity-50"
-                    />
-                  </object>
+                {/* PDF as background image */}
+                {loadingPdf && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                    <span className="text-sm text-muted-foreground">Carregando PDF...</span>
+                  </div>
+                )}
+                {pdfImageUrl && !loadingPdf && (
+                  <img
+                    src={pdfImageUrl}
+                    alt="Modelo PDF"
+                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    style={{ zIndex: 0, opacity: 0.5 }}
+                  />
                 )}
 
-                {/* Grade de fundo */}
+                {/* Background grid */}
                 {mostrarGrade && (
                   <div
                     className="absolute inset-0 pointer-events-none opacity-30"
@@ -761,7 +799,7 @@ export function EditorLayoutBoleto({
                   />
                 )}
 
-                {/* Elementos ordenados */}
+                {/* Sorted elements */}
                 {[...elementos]
                   .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
                   .map(renderElemento)}
@@ -769,7 +807,7 @@ export function EditorLayoutBoleto({
             </div>
           </div>
 
-          {/* Painel Direito - Propriedades */}
+          {/* Right Panel - Properties */}
           <div className="w-80 border-l bg-muted/30 flex flex-col">
             <div className="p-3 border-b">
               <h3 className="font-medium text-sm">Propriedades</h3>
@@ -778,7 +816,7 @@ export function EditorLayoutBoleto({
             {elementoAtual ? (
               <ScrollArea className="flex-1">
                 <div className="p-3 space-y-4">
-                  {/* Informações básicas */}
+                  {/* Basic info */}
                   <div className="space-y-2">
                     <Label className="text-xs">Nome</Label>
                     <Input
@@ -822,7 +860,7 @@ export function EditorLayoutBoleto({
 
                   <Separator />
 
-                  {/* Posição e Tamanho */}
+                  {/* Position and Size */}
                   <div>
                     <Label className="text-xs text-muted-foreground">Posição e Tamanho</Label>
                     <div className="grid grid-cols-2 gap-2 mt-2">
@@ -865,7 +903,7 @@ export function EditorLayoutBoleto({
                     </div>
                   </div>
 
-                  {/* Fonte e Texto (para campos e textos) */}
+                  {/* Font and text formatting */}
                   {(elementoAtual.tipo === 'campo' || elementoAtual.tipo === 'texto') && (
                     <>
                       <Separator />
@@ -954,7 +992,7 @@ export function EditorLayoutBoleto({
                     </>
                   )}
 
-                  {/* Bordas */}
+                  {/* Borders */}
                   {elementoAtual.tipo !== 'linha' && (
                     <>
                       <Separator />
@@ -1019,7 +1057,7 @@ export function EditorLayoutBoleto({
                     </>
                   )}
 
-                  {/* Cor de fundo */}
+                  {/* Background color */}
                   <Separator />
                   <div className="flex items-center gap-2">
                     <Label className="text-xs w-20">Cor Fundo</Label>
@@ -1041,7 +1079,7 @@ export function EditorLayoutBoleto({
 
                   <Separator />
 
-                  {/* Ações */}
+                  {/* Actions */}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1072,7 +1110,7 @@ export function EditorLayoutBoleto({
               </div>
             )}
 
-            {/* Lista de elementos */}
+            {/* Elements list */}
             <div className="border-t p-3">
               <Label className="text-xs text-muted-foreground">Elementos ({elementos.length})</Label>
               <ScrollArea className="h-32 mt-2">
