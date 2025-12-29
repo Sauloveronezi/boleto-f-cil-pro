@@ -3,7 +3,7 @@ import {
   Move, Plus, Trash2, Save, ZoomIn, ZoomOut, RotateCcw, 
   Type, Minus, Square, AlignLeft, AlignCenter, AlignRight,
   Bold, Italic, ChevronDown, Settings2, Copy, Layers, Eye, EyeOff,
-  ArrowUp, ArrowDown, GripVertical, FileText
+  ArrowUp, ArrowDown, GripVertical, FileText, Clipboard, ClipboardPaste
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -178,6 +178,9 @@ export function EditorLayoutBoleto({
   // PDF background as image
   const [pdfImageUrl, setPdfImageUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  
+  // Clipboard for copy/paste
+  const [clipboard, setClipboard] = useState<ElementoLayout | null>(null);
 
   const larguraCanvas = larguraPagina * ESCALA;
   const alturaCanvas = alturaPagina * ESCALA;
@@ -376,9 +379,82 @@ export function EditorLayoutBoleto({
     setElementoSelecionado(novoId);
   };
 
+  // Copiar elemento para área de transferência
+  const copiarElemento = (id: string) => {
+    const elemento = elementos.find(e => e.id === id);
+    if (!elemento) return;
+    
+    setClipboard({ ...elemento });
+    toast({
+      title: 'Elemento copiado',
+      description: `${elemento.nome} copiado para área de transferência.`,
+    });
+  };
+
+  // Colar elemento da área de transferência
+  const colarElemento = () => {
+    if (!clipboard) {
+      toast({
+        title: 'Nada para colar',
+        description: 'Copie um elemento primeiro (Ctrl+C).',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const novoId = `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const novoElemento: ElementoLayout = {
+      ...clipboard,
+      id: novoId,
+      nome: `${clipboard.nome} (cópia)`,
+      x: clipboard.x + 20,
+      y: clipboard.y + 20,
+      ordem: elementos.length,
+      // Não duplicar variável de campo
+      variavel: clipboard.tipo === 'campo' ? undefined : clipboard.variavel,
+    };
+    
+    setElementos(prev => [...prev, novoElemento]);
+    setElementoSelecionado(novoId);
+    
+    toast({
+      title: 'Elemento colado',
+      description: `${novoElemento.nome} adicionado ao layout.`,
+    });
+  };
+
   const atualizarElemento = (id: string, updates: Partial<ElementoLayout>) => {
     setElementos(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
   };
+  
+  // Keyboard shortcuts for copy/paste/delete
+  useEffect(() => {
+    if (!open) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'c' && elementoSelecionado) {
+          e.preventDefault();
+          copiarElemento(elementoSelecionado);
+        } else if (e.key === 'v') {
+          e.preventDefault();
+          colarElemento();
+        } else if (e.key === 'd' && elementoSelecionado) {
+          e.preventDefault();
+          duplicarElemento(elementoSelecionado);
+        }
+      } else if (e.key === 'Delete' && elementoSelecionado) {
+        e.preventDefault();
+        removerElemento(elementoSelecionado);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, elementoSelecionado, clipboard]);
 
   // Global mouse handlers for drag/resize
   useEffect(() => {
@@ -1111,7 +1187,31 @@ export function EditorLayoutBoleto({
                       variant="outline"
                       size="sm"
                       className="flex-1"
+                      onClick={() => copiarElemento(elementoAtual.id)}
+                      title="Ctrl+C"
+                    >
+                      <Clipboard className="h-3 w-3 mr-1" />
+                      Copiar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => colarElemento()}
+                      disabled={!clipboard}
+                      title="Ctrl+V"
+                    >
+                      <ClipboardPaste className="h-3 w-3 mr-1" />
+                      Colar
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
                       onClick={() => duplicarElemento(elementoAtual.id)}
+                      title="Ctrl+D"
                     >
                       <Copy className="h-3 w-3 mr-1" />
                       Duplicar
@@ -1121,6 +1221,7 @@ export function EditorLayoutBoleto({
                       size="sm"
                       className="flex-1"
                       onClick={() => removerElemento(elementoAtual.id)}
+                      title="Delete"
                     >
                       <Trash2 className="h-3 w-3 mr-1" />
                       Remover
