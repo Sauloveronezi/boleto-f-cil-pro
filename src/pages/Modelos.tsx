@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw, FileCheck, AlertCircle, LogIn } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,6 +52,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { uploadPdfToStorage, getPdfUrl } from '@/lib/pdfStorage';
 import { useNavigate } from 'react-router-dom';
+import { inferirCamposDoBoletoPDF } from '@/lib/boletoPdfFieldInference';
 
 interface CampoMapeado {
   id: string | number;
@@ -115,6 +116,9 @@ export default function Modelos() {
   const [modeloParaReanexar, setModeloParaReanexar] = useState<ModeloBoleto | null>(null);
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const reanexarInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estado estável para elementos do editor - evita recriação de arrays a cada render
+  const [elementosParaEditor, setElementosParaEditor] = useState<ElementoLayout[]>([]);
 
   // Form state para edição/criação
   const [formNome, setFormNome] = useState('');
@@ -429,12 +433,31 @@ export default function Modelos() {
     // Guarda o arquivo para upload quando salvar
     setPendingPdfFile(result.file);
 
-    const shouldCopyCamposPadrao = result.copiarCamposPadrao !== false;
     const bancoBaseId = result.bancosCompativeis?.[0];
+    let elementosDetectados: ElementoLayout[] = [];
 
-    let camposPadrao: CampoMapeado[] = [];
+    // Tentar detectar campos automaticamente do PDF
+    try {
+      toast({
+        title: 'Analisando PDF...',
+        description: 'Detectando campos automaticamente.',
+      });
+      
+      elementosDetectados = await inferirCamposDoBoletoPDF(result.file);
+      console.log('[Modelos] Campos detectados do PDF:', elementosDetectados.length);
+      
+      if (elementosDetectados.length > 0) {
+        toast({
+          title: 'Campos detectados',
+          description: `Detectamos ${elementosDetectados.length} campos no PDF. Ajuste as posições conforme necessário.`,
+        });
+      }
+    } catch (e) {
+      console.warn('[Modelos] Falha ao detectar campos do PDF:', e);
+    }
 
-    if (shouldCopyCamposPadrao && bancoBaseId) {
+    // Se não detectou campos, tenta copiar do modelo padrão
+    if (elementosDetectados.length === 0 && result.copiarCamposPadrao !== false && bancoBaseId) {
       try {
         const { data, error } = await supabase
           .from('vv_b_modelos_boleto')
@@ -445,16 +468,50 @@ export default function Modelos() {
           .limit(1)
           .maybeSingle();
 
-        if (!error) {
-          const raw = (data?.campos_mapeados || []) as unknown;
+        if (!error && data?.campos_mapeados) {
+          const raw = data.campos_mapeados as unknown;
           if (Array.isArray(raw)) {
-            camposPadrao = JSON.parse(JSON.stringify(raw)) as CampoMapeado[];
+            elementosDetectados = raw.map((c: any) => ({
+              id: c.id || `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              tipo: 'campo' as const,
+              nome: c.nome || '',
+              variavel: c.variavel || '',
+              x: c.posicao_x || 0,
+              y: c.posicao_y || 0,
+              largura: c.largura || 120,
+              altura: c.altura || 20,
+              tamanhoFonte: 10,
+              alinhamento: 'left' as const,
+              corTexto: '#000000',
+              corFundo: 'transparent',
+              visivel: true,
+              ordem: 0,
+            }));
+            console.log('[Modelos] Campos do modelo padrão:', elementosDetectados.length);
+            
+            if (elementosDetectados.length > 0) {
+              toast({
+                title: 'Campos pré-carregados',
+                description: 'Carregamos os campos do modelo padrão do banco. Ajuste as posições se necessário.',
+              });
+            }
           }
         }
       } catch (e) {
         console.warn('[Modelos] Não foi possível carregar campos padrão:', e);
       }
     }
+
+    // Converter para CampoMapeado para o modelo
+    const camposMapeados: CampoMapeado[] = elementosDetectados.map((el) => ({
+      id: el.id,
+      nome: el.nome,
+      variavel: el.variavel || '',
+      posicao_x: el.x,
+      posicao_y: el.y,
+      largura: el.largura,
+      altura: el.altura,
+    }));
 
     // Cria modelo temporário e abre o editor de layout
     const novoModelo: ModeloBoleto = {
@@ -465,7 +522,7 @@ export default function Modelos() {
       tipo_layout: 'CNAB_400',
       texto_instrucoes: '',
       padrao: false,
-      campos_mapeados: camposPadrao,
+      campos_mapeados: camposMapeados,
       template_pdf_id: null,
       pdf_storage_path: null,
       pdf_storage_bucket: null,
@@ -478,15 +535,12 @@ export default function Modelos() {
 
     // Passa o arquivo diretamente para o editor (não usa blob URL que é revogada)
     setPdfSourceParaEditor(result.file);
+    
+    // Armazena elementos para o editor
+    setElementosParaEditor(elementosDetectados);
 
-    const temCampos = camposPadrao.length > 0;
+    const temCampos = elementosDetectados.length > 0;
     setIniciarEditorVazio(!temCampos);
-    if (temCampos) {
-      toast({
-        title: 'Campos pré-carregados',
-        description: 'Carregamos os campos do modelo padrão do banco selecionado. Ajuste as posições se necessário.',
-      });
-    }
 
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
@@ -496,6 +550,26 @@ export default function Modelos() {
     setModeloParaEditor(modelo);
     setIniciarEditorVazio(false);
     setPendingPdfFile(null);
+    
+    // Converter campos_mapeados para ElementoLayout
+    const elementos: ElementoLayout[] = (modelo.campos_mapeados || []).map((c, i) => ({
+      id: String(c.id) || `field_${Date.now()}_${i}`,
+      tipo: 'campo' as const,
+      nome: c.nome || '',
+      variavel: c.variavel || '',
+      x: c.posicao_x || 0,
+      y: c.posicao_y || 0,
+      largura: c.largura || 120,
+      altura: c.altura || 20,
+      tamanhoFonte: 10,
+      alinhamento: 'left' as const,
+      corTexto: '#000000',
+      corFundo: 'transparent',
+      visivel: true,
+      ordem: i,
+    }));
+    
+    setElementosParaEditor(elementos);
     
     // Carregar URL do PDF do Storage
     if (modelo.pdf_storage_path) {
@@ -551,6 +625,7 @@ export default function Modelos() {
     setModeloParaEditor(null);
     setPdfSourceParaEditor(null);
     setPendingPdfFile(null);
+    setElementosParaEditor([]);
   };
 
   const isFormDialogOpen = !!modeloEditando || criarNovo;
@@ -1004,19 +1079,10 @@ export default function Modelos() {
               setPdfSourceParaEditor(null);
               setIniciarEditorVazio(false);
               setPendingPdfFile(null);
+              setElementosParaEditor([]);
             }
           }}
-          elementos={modeloParaEditor?.campos_mapeados?.map(c => ({
-            id: String(c.id),
-            tipo: 'campo' as const,
-            nome: c.nome,
-            variavel: c.variavel,
-            x: c.posicao_x,
-            y: c.posicao_y,
-            largura: c.largura,
-            altura: c.altura,
-            visivel: true,
-          })) || []}
+          elementos={elementosParaEditor}
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
           pdfSource={pdfSourceParaEditor || undefined}
