@@ -1759,13 +1759,16 @@ export type Database = {
       }
       vv_b_modelos_boleto: {
         Row: {
+          altura_pagina: number | null
           banco_id: string | null
           bancos_compativeis: string[] | null
           campos_mapeados: Json | null
           created_at: string
           data_delete: string | null
           deleted: string | null
+          formato_pagina: string | null
           id: string
+          largura_pagina: number | null
           nome_modelo: string
           padrao: boolean | null
           pdf_exemplo_base64: string | null
@@ -1778,13 +1781,16 @@ export type Database = {
           usuario_delete_id: string | null
         }
         Insert: {
+          altura_pagina?: number | null
           banco_id?: string | null
           bancos_compativeis?: string[] | null
           campos_mapeados?: Json | null
           created_at?: string
           data_delete?: string | null
           deleted?: string | null
+          formato_pagina?: string | null
           id?: string
+          largura_pagina?: number | null
           nome_modelo: string
           padrao?: boolean | null
           pdf_exemplo_base64?: string | null
@@ -1797,13 +1803,16 @@ export type Database = {
           usuario_delete_id?: string | null
         }
         Update: {
+          altura_pagina?: number | null
           banco_id?: string | null
           bancos_compativeis?: string[] | null
           campos_mapeados?: Json | null
           created_at?: string
           data_delete?: string | null
           deleted?: string | null
+          formato_pagina?: string | null
           id?: string
+          largura_pagina?: number | null
           nome_modelo?: string
           padrao?: boolean | null
           pdf_exemplo_base64?: string | null

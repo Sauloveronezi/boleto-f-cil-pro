@@ -75,6 +75,9 @@ interface ModeloBoleto {
   template_pdf_id: string | null;
   pdf_storage_path: string | null;
   pdf_storage_bucket: string | null;
+  largura_pagina?: number;
+  altura_pagina?: number;
+  formato_pagina?: string;
   created_at: string;
   updated_at: string;
 }
@@ -177,6 +180,9 @@ export default function Modelos() {
         template_pdf_id: modelo.template_pdf_id ?? null,
         pdf_storage_path: pdfPath,
         pdf_storage_bucket: pdfPath ? 'boleto_templates' : null,
+        largura_pagina: modelo.largura_pagina || 210,
+        altura_pagina: modelo.altura_pagina || 297,
+        formato_pagina: modelo.formato_pagina || 'A4',
         padrao: false,
       };
       
@@ -265,7 +271,7 @@ export default function Modelos() {
       const { error } = await supabase
         .from('vv_b_modelos_boleto')
         .update({ 
-          deleted: 'S', 
+          deleted: '*', 
           data_delete: new Date().toISOString(),
           usuario_delete_id: user?.id 
         })
@@ -436,6 +442,9 @@ export default function Modelos() {
       template_pdf_id: null,
       pdf_storage_path: null,
       pdf_storage_bucket: null,
+      largura_pagina: result.dimensoes?.larguraMm || 210,
+      altura_pagina: result.dimensoes?.alturaMm || 297,
+      formato_pagina: result.dimensoes ? 'PDF' : 'A4',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -974,6 +983,8 @@ export default function Modelos() {
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
           pdfBase64={pdfUrlParaEditor || undefined}
+          larguraPagina={modeloParaEditor?.largura_pagina || 210}
+          alturaPagina={modeloParaEditor?.altura_pagina || 297}
           iniciarVazio={iniciarEditorVazio}
         />
 

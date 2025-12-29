@@ -19,12 +19,14 @@ import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useNavigate } from 'react-router-dom';
+import { analisarPDF, PDFDimensions } from '@/lib/pdfAnalyzer';
 
 export interface ImportarPDFResult {
   file: File;
   previewUrl: string;
   nomeModelo: string;
   bancosCompativeis: string[];
+  dimensoes?: PDFDimensions;
 }
 
 interface ImportarPDFModalProps {
@@ -44,6 +46,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const [nomeModelo, setNomeModelo] = useState('');
   const [bancosCompativeis, setBancosCompativeis] = useState<string[]>([]);
   const [processando, setProcessando] = useState(false);
+  const [dimensoes, setDimensoes] = useState<PDFDimensions | null>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -60,6 +63,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
 
     // Reset estado anterior
     setBancosCompativeis([]);
+    setDimensoes(null);
     event.target.value = '';
 
     setArquivo(file);
@@ -71,15 +75,24 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
 
     setProcessando(true);
     
-    // Simular pequeno delay para feedback visual
-    await new Promise(resolve => setTimeout(resolve, 300));
+    try {
+      // Analisar dimensões do PDF
+      const dims = await analisarPDF(file);
+      setDimensoes(dims);
+      
+      toast({
+        title: 'PDF analisado',
+        description: `Dimensões: ${dims.larguraMm} × ${dims.alturaMm} mm`,
+      });
+    } catch (err) {
+      console.error('[ImportarPDF] Erro ao analisar PDF:', err);
+      toast({
+        title: 'PDF carregado',
+        description: 'O PDF foi carregado, mas não foi possível detectar as dimensões automaticamente.',
+      });
+    }
     
     setProcessando(false);
-
-    toast({
-      title: 'PDF carregado',
-      description: 'O PDF foi carregado. Clique em "Importar Modelo" para abrir o editor de layout.',
-    });
   };
 
   const handleBancoToggle = (bancoId: string) => {
@@ -124,6 +137,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       previewUrl,
       nomeModelo,
       bancosCompativeis,
+      dimensoes: dimensoes || undefined,
     });
     
     handleClose();
@@ -137,6 +151,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     setPreviewUrl(null);
     setNomeModelo('');
     setBancosCompativeis([]);
+    setDimensoes(null);
     setProcessando(false);
     onOpenChange(false);
   };
