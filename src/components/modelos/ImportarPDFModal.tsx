@@ -16,18 +16,26 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
-import { TemplatePDF } from '@/types/boleto';
-import { TemplateBoletoCompleto, CampoTemplateBoleto } from '@/types/templateBoleto';
-import { salvarTemplate } from '@/lib/pdfTemplateGenerator';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
+
+export interface ImportarPDFResult {
+  file: File;
+  previewUrl: string;
+  nomeModelo: string;
+  bancosCompativeis: string[];
+}
 
 interface ImportarPDFModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImportar: (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => void;
+  onImportar: (result: ImportarPDFResult) => void;
 }
 
 export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDFModalProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { canEdit } = useUserRole();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -35,9 +43,6 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const [nomeModelo, setNomeModelo] = useState('');
   const [bancosCompativeis, setBancosCompativeis] = useState<string[]>([]);
   const [processando, setProcessando] = useState(false);
-  const [templateProcessado, setTemplateProcessado] = useState<TemplateBoletoCompleto | null>(null);
-  const [templatePDF, setTemplatePDF] = useState<TemplatePDF | null>(null);
-  const [camposDetectados, setCamposDetectados] = useState<CampoTemplateBoleto[]>([]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -52,108 +57,28 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       return;
     }
 
-    // reset do estado anterior para evitar "travamento" do botão
-    setTemplateProcessado(null);
-    setTemplatePDF(null);
-    setCamposDetectados([]);
+    // Reset estado anterior
     setBancosCompativeis([]);
+    event.target.value = '';
 
     setArquivo(file);
     setNomeModelo(file.name.replace('.pdf', ''));
-
-    // Permite selecionar o mesmo arquivo novamente (re-dispara o onChange)
-    event.target.value = '';
 
     // Criar preview URL
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
 
-    // Processar o PDF
     setProcessando(true);
+    
+    // Simular pequeno delay para feedback visual
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    setProcessando(false);
 
-    // Converter para base64
-    const reader = new FileReader();
-
-    reader.onerror = () => {
-      console.error('Erro ao ler PDF (FileReader.onerror)', reader.error);
-      setProcessando(false);
-      toast({
-        title: 'Falha ao ler o PDF',
-        description: 'Não foi possível ler o arquivo. Tente novamente.',
-        variant: 'destructive',
-      });
-    };
-
-    reader.onabort = () => {
-      console.warn('Leitura do PDF abortada (FileReader.onabort)');
-      setProcessando(false);
-      toast({
-        title: 'Leitura cancelada',
-        description: 'A leitura do arquivo foi cancelada. Tente novamente.',
-        variant: 'destructive',
-      });
-    };
-
-    reader.onload = async () => {
-      try {
-        const base64 = reader.result as string;
-
-        // Simular tempo de processamento rápido (sem criar template FEBRABAN)
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Criar template vazio - usuário irá editar manualmente
-        const novoTemplate: TemplateBoletoCompleto = {
-          id: `template_${Date.now()}`,
-          nome: file.name.replace('.pdf', ''),
-          largura_pagina: 210,
-          altura_pagina: 140,
-          margem_superior: 10,
-          margem_inferior: 10,
-          margem_esquerda: 10,
-          margem_direita: 10,
-          orientacao: 'portrait',
-          campos: [], // Sem campos pré-definidos - usuário adiciona manualmente
-          pdf_original_base64: base64,
-          bancos_compativeis: [],
-          criado_em: new Date().toISOString(),
-          atualizado_em: new Date().toISOString(),
-        };
-
-        // Criar TemplatePDF para compatibilidade
-        const pdfTemplate: TemplatePDF = {
-          id: novoTemplate.id,
-          nome: novoTemplate.nome,
-          arquivo_base64: base64,
-          preview_url: url,
-          layout_detectado: {
-            largura_pagina: novoTemplate.largura_pagina,
-            altura_pagina: novoTemplate.altura_pagina,
-            areas_texto: [], // Vazio - edição manual
-          },
-          criado_em: novoTemplate.criado_em,
-        };
-
-        setTemplateProcessado(novoTemplate);
-        setTemplatePDF(pdfTemplate);
-        setCamposDetectados([]);
-
-        toast({
-          title: 'PDF carregado',
-          description: 'O PDF foi carregado. Clique em "Importar Modelo" para abrir o editor de layout.',
-        });
-      } catch (err) {
-        console.error('Erro ao processar PDF', err);
-        toast({
-          title: 'Erro ao processar o PDF',
-          description: 'Ocorreu um erro ao carregar o arquivo. Tente novamente.',
-          variant: 'destructive',
-        });
-      } finally {
-        setProcessando(false);
-      }
-    };
-
-    reader.readAsDataURL(file);
+    toast({
+      title: 'PDF carregado',
+      description: 'O PDF foi carregado. Clique em "Importar Modelo" para abrir o editor de layout.',
+    });
   };
 
   const handleBancoToggle = (bancoId: string) => {
@@ -165,50 +90,57 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   };
 
   const handleImportar = () => {
-    if (!templateProcessado || !templatePDF) {
+    if (!arquivo || !previewUrl) {
       toast({
         title: 'Erro',
-        description: 'Nenhum template processado.',
+        description: 'Nenhum arquivo selecionado.',
         variant: 'destructive',
       });
       return;
     }
 
-    // Atualiza bancos compatíveis no template
-    const templateFinal: TemplateBoletoCompleto = {
-      ...templateProcessado,
-      nome: nomeModelo,
-      bancos_compativeis: bancosCompativeis,
-      atualizado_em: new Date().toISOString(),
-    };
+    if (!user) {
+      toast({
+        title: 'Autenticação necessária',
+        description: 'Faça login para importar modelos.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    // Salva o template completo no localStorage
-    salvarTemplate(templateFinal);
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você precisa de permissão de admin ou operador para importar modelos.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    // Chama callback com TemplatePDF para compatibilidade
-    onImportar(templatePDF, bancosCompativeis, nomeModelo);
-    
-    toast({
-      title: 'Template importado',
-      description: `O modelo "${nomeModelo}" foi salvo e será usado para gerar boletos idênticos ao PDF importado.`,
+    // Passa o arquivo e dados para o componente pai
+    onImportar({
+      file: arquivo,
+      previewUrl,
+      nomeModelo,
+      bancosCompativeis,
     });
     
     handleClose();
   };
 
   const handleClose = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setArquivo(null);
     setPreviewUrl(null);
     setNomeModelo('');
     setBancosCompativeis([]);
-    setTemplateProcessado(null);
-    setTemplatePDF(null);
-    setCamposDetectados([]);
     setProcessando(false);
     onOpenChange(false);
   };
 
-  // Não é mais necessário agrupar campos por categoria já que usamos edição manual
+  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -228,6 +160,19 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
             {/* Coluna Esquerda - Upload e Configuração */}
             <ScrollArea className="h-[60vh] pr-4">
               <div className="space-y-6">
+                {/* Aviso de login */}
+                {!user && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="font-medium">Login necessário</p>
+                      <p className="text-xs mt-1">
+                        Faça login para poder importar e salvar modelos.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Upload */}
                 <div>
                   <Label>Arquivo PDF do Boleto Modelo</Label>
@@ -280,7 +225,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 )}
 
                 {/* Seleção de Bancos */}
-                {templateProcessado && (
+                {arquivo && (
                   <div>
                     <Label className="flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
@@ -321,7 +266,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 )}
 
                 {/* Info sobre edição manual */}
-                {templateProcessado && (
+                {arquivo && (
                   <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-blue-700 dark:text-blue-300">
@@ -342,7 +287,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 <Eye className="h-4 w-4" />
                 Pré-visualização do PDF Modelo
               </Label>
-            <div className="flex-1 border rounded-lg bg-muted/30 flex items-center justify-center overflow-hidden">
+              <div className="flex-1 border rounded-lg bg-muted/30 flex items-center justify-center overflow-hidden">
                 {processando ? (
                   <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
@@ -390,7 +335,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
           </Button>
           <Button 
             onClick={handleImportar}
-            disabled={!templateProcessado || !nomeModelo}
+            disabled={!canImport}
           >
             <Check className="h-4 w-4 mr-2" />
             Importar Modelo

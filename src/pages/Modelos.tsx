@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw } from 'lucide-react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw, FileCheck, AlertCircle, LogIn } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,13 +41,17 @@ import {
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
-import { TIPOS_IMPRESSAO, TipoImpressao, TemplatePDF } from '@/types/boleto';
+import { TIPOS_IMPRESSAO, TipoImpressao } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
-import { ImportarPDFModal } from '@/components/modelos/ImportarPDFModal';
+import { ImportarPDFModal, ImportarPDFResult } from '@/components/modelos/ImportarPDFModal';
 import { EditorLayoutBoleto, ElementoLayout } from '@/components/modelos/EditorLayoutBoleto';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useBancos } from '@/hooks/useBancos';
+import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
+import { uploadPdfToStorage, getPdfUrl } from '@/lib/pdfStorage';
+import { useNavigate } from 'react-router-dom';
 
 interface CampoMapeado {
   id: string | number;
@@ -69,7 +73,8 @@ interface ModeloBoleto {
   campos_mapeados: CampoMapeado[];
   texto_instrucoes: string;
   template_pdf_id: string | null;
-  pdf_exemplo_base64: string | null;
+  pdf_storage_path: string | null;
+  pdf_storage_bucket: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,7 +94,10 @@ const VARIAVEIS_DISPONIVEIS = [
 export default function Modelos() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: bancos } = useBancos();
+  const { user } = useAuth();
+  const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
 
   // Estado do formulário
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
@@ -99,9 +107,10 @@ export default function Modelos() {
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
   const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
-  const [pdfParaEditor, setPdfParaEditor] = useState<string | null>(null);
+  const [pdfUrlParaEditor, setPdfUrlParaEditor] = useState<string | null>(null);
   const [iniciarEditorVazio, setIniciarEditorVazio] = useState(false);
   const [modeloParaReanexar, setModeloParaReanexar] = useState<ModeloBoleto | null>(null);
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   const reanexarInputRef = useRef<HTMLInputElement>(null);
 
   // Form state para edição/criação
@@ -132,7 +141,8 @@ export default function Modelos() {
         campos_mapeados: (m.campos_mapeados || []) as CampoMapeado[],
         texto_instrucoes: m.texto_instrucoes || '',
         template_pdf_id: m.template_pdf_id,
-        pdf_exemplo_base64: m.pdf_exemplo_base64 || null,
+        pdf_storage_path: m.pdf_storage_path || null,
+        pdf_storage_bucket: m.pdf_storage_bucket || null,
         created_at: m.created_at,
         updated_at: m.updated_at,
       })) as ModeloBoleto[];
@@ -141,8 +151,23 @@ export default function Modelos() {
 
   // Mutation para criar modelo
   const createModelo = useMutation({
-    mutationFn: async (modelo: Partial<ModeloBoleto>) => {
+    mutationFn: async (modelo: Partial<ModeloBoleto> & { pdfFile?: File }) => {
+      const modeloId = crypto.randomUUID();
+      let pdfPath: string | null = null;
+
+      // Upload do PDF para Storage se existir
+      if (modelo.pdfFile) {
+        console.log('[Modelos] Uploading PDF to storage...', { fileSize: modelo.pdfFile.size });
+        const uploadResult = await uploadPdfToStorage(modelo.pdfFile, modeloId);
+        if (!uploadResult.success) {
+          throw new Error(`Erro ao fazer upload do PDF: ${uploadResult.error}`);
+        }
+        pdfPath = uploadResult.path!;
+        console.log('[Modelos] PDF uploaded successfully:', pdfPath);
+      }
+
       const payload = {
+        id: modeloId,
         nome_modelo: modelo.nome_modelo!,
         banco_id: modelo.banco_id || null,
         bancos_compativeis: modelo.bancos_compativeis || [],
@@ -150,7 +175,8 @@ export default function Modelos() {
         texto_instrucoes: modelo.texto_instrucoes || '',
         campos_mapeados: JSON.parse(JSON.stringify(modelo.campos_mapeados || [])),
         template_pdf_id: modelo.template_pdf_id ?? null,
-        pdf_exemplo_base64: modelo.pdf_exemplo_base64 ?? null,
+        pdf_storage_path: pdfPath,
+        pdf_storage_bucket: pdfPath ? 'boleto_templates' : null,
         padrao: false,
       };
       
@@ -160,7 +186,10 @@ export default function Modelos() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('[Modelos] Create error:', error);
+        throw new Error(`Erro ao salvar modelo: ${error.message}`);
+      }
       return data;
     },
     onSuccess: () => {
@@ -168,16 +197,32 @@ export default function Modelos() {
       toast({ title: 'Modelo criado', description: 'O modelo foi salvo com sucesso.' });
       setCriarNovo(false);
       resetForm();
+      setPendingPdfFile(null);
     },
     onError: (error: any) => {
+      console.error('[Modelos] Create mutation error:', error);
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
     }
   });
 
   // Mutation para atualizar modelo
   const updateModelo = useMutation({
-    mutationFn: async ({ id, ...modelo }: { id: string } & Partial<ModeloBoleto>) => {
+    mutationFn: async ({ id, pdfFile, ...modelo }: { id: string; pdfFile?: File } & Partial<ModeloBoleto>) => {
       const payload: Record<string, any> = {};
+      let pdfPath: string | null = null;
+
+      // Upload do novo PDF se existir
+      if (pdfFile) {
+        console.log('[Modelos] Uploading new PDF to storage...', { fileSize: pdfFile.size, modeloId: id });
+        const uploadResult = await uploadPdfToStorage(pdfFile, id);
+        if (!uploadResult.success) {
+          throw new Error(`Erro ao fazer upload do PDF: ${uploadResult.error}`);
+        }
+        pdfPath = uploadResult.path!;
+        payload.pdf_storage_path = pdfPath;
+        payload.pdf_storage_bucket = 'boleto_templates';
+        console.log('[Modelos] New PDF uploaded successfully:', pdfPath);
+      }
 
       if (modelo.nome_modelo !== undefined) payload.nome_modelo = modelo.nome_modelo;
       if (modelo.banco_id !== undefined) payload.banco_id = modelo.banco_id || null;
@@ -188,7 +233,6 @@ export default function Modelos() {
         payload.campos_mapeados = JSON.parse(JSON.stringify(modelo.campos_mapeados || []));
       }
       if (modelo.template_pdf_id !== undefined) payload.template_pdf_id = modelo.template_pdf_id;
-      if (modelo.pdf_exemplo_base64 !== undefined) payload.pdf_exemplo_base64 = modelo.pdf_exemplo_base64;
       
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
@@ -197,7 +241,10 @@ export default function Modelos() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('[Modelos] Update error:', error);
+        throw new Error(`Erro ao atualizar modelo: ${error.message}`);
+      }
       return data;
     },
     onSuccess: () => {
@@ -207,6 +254,7 @@ export default function Modelos() {
       resetForm();
     },
     onError: (error: any) => {
+      console.error('[Modelos] Update mutation error:', error);
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
     }
   });
@@ -216,7 +264,11 @@ export default function Modelos() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('vv_b_modelos_boleto')
-        .update({ deleted: 'S', data_delete: new Date().toISOString() })
+        .update({ 
+          deleted: 'S', 
+          data_delete: new Date().toISOString(),
+          usuario_delete_id: user?.id 
+        })
         .eq('id', id);
       
       if (error) throw error;
@@ -268,6 +320,11 @@ export default function Modelos() {
       return;
     }
 
+    if (!canEdit) {
+      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador para salvar modelos.', variant: 'destructive' });
+      return;
+    }
+
     const payload = {
       nome_modelo: formNome,
       banco_id: formBancoId || null,
@@ -285,6 +342,10 @@ export default function Modelos() {
   };
 
   const handleDuplicar = async (modelo: ModeloBoleto) => {
+    if (!canEdit) {
+      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+      return;
+    }
     await createModelo.mutateAsync({
       ...modelo,
       nome_modelo: `${modelo.nome_modelo} (Cópia)`,
@@ -293,6 +354,10 @@ export default function Modelos() {
   };
 
   const handleDeletar = () => {
+    if (!canEdit) {
+      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+      return;
+    }
     if (modeloDeletando) {
       deleteModelo.mutate(modeloDeletando.id);
     }
@@ -300,8 +365,11 @@ export default function Modelos() {
 
   // Função para reanexar PDF a um modelo existente
   const handleReanexarPDF = (modelo: ModeloBoleto) => {
+    if (!canEdit) {
+      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+      return;
+    }
     setModeloParaReanexar(modelo);
-    // Disparar o file input
     setTimeout(() => {
       reanexarInputRef.current?.click();
     }, 100);
@@ -325,90 +393,85 @@ export default function Modelos() {
       return;
     }
 
-    // Ler o PDF como base64
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
+    // Atualizar o modelo existente com o novo PDF via Storage
+    updateModelo.mutate({
+      id: modeloParaReanexar.id,
+      pdfFile: file,
+    }, {
+      onSuccess: () => {
+        toast({
+          title: 'PDF reanexado',
+          description: `O PDF foi vinculado ao modelo "${modeloParaReanexar.nome_modelo}".`,
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: 'Erro',
+          description: error.message || 'Não foi possível reanexar o PDF.',
+          variant: 'destructive',
+        });
+      },
+      onSettled: () => {
+        setModeloParaReanexar(null);
+      },
+    });
 
-      // Atualizar o modelo existente com o novo PDF
-      updateModelo.mutate({
-        id: modeloParaReanexar.id,
-        pdf_exemplo_base64: base64,
-      }, {
-        onSuccess: () => {
-          toast({
-            title: 'PDF reanexado',
-            description: `O PDF foi vinculado ao modelo "${modeloParaReanexar.nome_modelo}".`,
-          });
-        },
-        onError: () => {
-          toast({
-            title: 'Erro',
-            description: 'Não foi possível reanexar o PDF.',
-            variant: 'destructive',
-          });
-        },
-        onSettled: () => {
-          setModeloParaReanexar(null);
-        },
-      });
-    };
-
-    reader.onerror = () => {
-      toast({
-        title: 'Erro ao ler arquivo',
-        description: 'Não foi possível ler o arquivo PDF.',
-        variant: 'destructive',
-      });
-      setModeloParaReanexar(null);
-    };
-
-    reader.readAsDataURL(file);
     event.target.value = '';
   };
 
-  const handleImportarPDF = (template: TemplatePDF, bancosCompativeis: string[], nomeModelo: string) => {
+  const handleImportarPDF = async (result: ImportarPDFResult) => {
+    // Guarda o arquivo para upload quando salvar
+    setPendingPdfFile(result.file);
+    
     // Cria modelo temporário e abre o editor de layout
     const novoModelo: ModeloBoleto = {
       id: `temp_${Date.now()}`,
-      nome_modelo: nomeModelo,
-      banco_id: bancosCompativeis[0] || null,
-      bancos_compativeis: bancosCompativeis,
+      nome_modelo: result.nomeModelo,
+      banco_id: result.bancosCompativeis[0] || null,
+      bancos_compativeis: result.bancosCompativeis,
       tipo_layout: 'CNAB_400',
       texto_instrucoes: '',
       padrao: false,
-      campos_mapeados: template.layout_detectado.areas_texto.map(area => ({
-        id: area.id,
-        nome: area.texto_original || '',
-        variavel: area.campo_mapeado || '',
-        posicao_x: area.x,
-        posicao_y: area.y,
-        largura: area.largura,
-        altura: area.altura,
-      })),
+      campos_mapeados: [],
       template_pdf_id: null,
-      pdf_exemplo_base64: template.arquivo_base64 || null,
+      pdf_storage_path: null,
+      pdf_storage_bucket: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     
-    setPdfParaEditor(template.arquivo_base64 || null);
-    setIniciarEditorVazio(true); // Importação de PDF = iniciar vazio
+    setPdfUrlParaEditor(result.previewUrl);
+    setIniciarEditorVazio(true);
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
   };
 
-  const handleAbrirEditor = (modelo: ModeloBoleto) => {
+  const handleAbrirEditor = async (modelo: ModeloBoleto) => {
     setModeloParaEditor(modelo);
-    setIniciarEditorVazio(false); // Modelo existente = não iniciar vazio
-    setPdfParaEditor(null); // Usa o pdf_exemplo_base64 do modelo
+    setIniciarEditorVazio(false);
+    setPendingPdfFile(null);
+    
+    // Carregar URL do PDF do Storage
+    if (modelo.pdf_storage_path) {
+      console.log('[Modelos] Loading PDF from storage:', modelo.pdf_storage_path);
+      const url = await getPdfUrl(modelo.pdf_storage_path);
+      setPdfUrlParaEditor(url);
+    } else {
+      setPdfUrlParaEditor(null);
+    }
+    
     setEditorLayoutOpen(true);
   };
 
   const handleSalvarLayout = (elementos: ElementoLayout[]) => {
     if (!modeloParaEditor) return;
 
-    const camposMapeados = elementos.map((el, idx) => ({
+    if (!canEdit) {
+      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+      return;
+    }
+
+    const camposMapeados = elementos.map((el) => ({
       id: el.id,
       nome: el.nome,
       variavel: el.variavel || '',
@@ -428,7 +491,7 @@ export default function Modelos() {
         texto_instrucoes: modeloParaEditor.texto_instrucoes,
         campos_mapeados: camposMapeados,
         template_pdf_id: modeloParaEditor.template_pdf_id,
-        pdf_exemplo_base64: modeloParaEditor.pdf_exemplo_base64,
+        pdfFile: pendingPdfFile || undefined,
       });
     } else {
       // Atualiza modelo existente
@@ -440,10 +503,15 @@ export default function Modelos() {
     
     setEditorLayoutOpen(false);
     setModeloParaEditor(null);
+    setPdfUrlParaEditor(null);
+    setPendingPdfFile(null);
   };
 
   const isFormDialogOpen = !!modeloEditando || criarNovo;
   const isSaving = createModelo.isPending || updateModelo.isPending;
+
+  // Mostrar aviso para primeiro admin
+  const showBootstrapAdmin = canBootstrapAdmin && user;
 
   return (
     <MainLayout>
@@ -466,16 +534,77 @@ export default function Modelos() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setImportarPDFOpen(true)}>
-              <Upload className="h-4 w-4 mr-2" />
-              Importar PDF Modelo
-            </Button>
-            <Button onClick={() => setCriarNovo(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Modelo
-            </Button>
+            {!user ? (
+              <Button onClick={() => navigate('/auth')}>
+                <LogIn className="h-4 w-4 mr-2" />
+                Fazer Login
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setImportarPDFOpen(true)}
+                  disabled={!canEdit}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar PDF Modelo
+                </Button>
+                <Button 
+                  onClick={() => setCriarNovo(true)}
+                  disabled={!canEdit}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Modelo
+                </Button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Aviso de bootstrap admin */}
+        {showBootstrapAdmin && (
+          <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">
+                    Você é o primeiro usuário do sistema
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    Clique no botão abaixo para se tornar administrador e poder criar/editar modelos.
+                  </p>
+                  <Button 
+                    size="sm" 
+                    className="mt-3"
+                    onClick={() => bootstrapAdmin.mutate()}
+                    disabled={bootstrapAdmin.isPending}
+                  >
+                    {bootstrapAdmin.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Tornar-me Administrador
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Aviso para usuário sem permissão */}
+        {user && !canEdit && !isLoadingRole && !canBootstrapAdmin && (
+          <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Modo Visualização</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    Você pode visualizar os modelos, mas precisa de permissão de admin ou operador para criar/editar.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Dica sobre importação de PDF */}
         <Card className="bg-primary/5 border-primary/20">
@@ -506,7 +635,9 @@ export default function Modelos() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-primary/10 rounded-lg">
-                        {modelo.template_pdf_id ? (
+                        {modelo.pdf_storage_path ? (
+                          <FileCheck className="h-5 w-5 text-primary" />
+                        ) : modelo.template_pdf_id ? (
                           <FileText className="h-5 w-5 text-primary" />
                         ) : (
                           <Palette className="h-5 w-5 text-primary" />
@@ -518,9 +649,9 @@ export default function Modelos() {
                           {modelo.padrao && (
                             <Badge variant="secondary">Padrão</Badge>
                           )}
-                          {modelo.template_pdf_id && (
-                            <Badge variant="outline" className="text-xs">
-                              <FileText className="h-3 w-3 mr-1" />
+                          {modelo.pdf_storage_path && (
+                            <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800">
+                              <FileCheck className="h-3 w-3 mr-1" />
                               PDF
                             </Badge>
                           )}
@@ -583,57 +714,61 @@ export default function Modelos() {
                       <Layers className="h-4 w-4 mr-1" />
                       Layout
                     </Button>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleReanexarPDF(modelo)}
-                            disabled={updateModelo.isPending && modeloParaReanexar?.id === modelo.id}
-                          >
-                            {updateModelo.isPending && modeloParaReanexar?.id === modelo.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Reanexar PDF ao modelo</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDuplicar(modelo)}
-                            disabled={createModelo.isPending}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Duplicar modelo</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setModeloDeletando(modelo)}
-                            disabled={modelo.padrao}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    {canEdit && (
+                      <>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReanexarPDF(modelo)}
+                                disabled={updateModelo.isPending && modeloParaReanexar?.id === modelo.id}
+                              >
+                                {updateModelo.isPending && modeloParaReanexar?.id === modelo.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Reanexar PDF ao modelo</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDuplicar(modelo)}
+                                disabled={createModelo.isPending}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Duplicar modelo</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setModeloDeletando(modelo)}
+                                disabled={modelo.padrao}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -644,10 +779,12 @@ export default function Modelos() {
                 <CardContent className="py-12 text-center">
                   <Palette className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">Nenhum modelo cadastrado.</p>
-                  <Button className="mt-4" onClick={() => setCriarNovo(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Criar Primeiro Modelo
-                  </Button>
+                  {canEdit && (
+                    <Button className="mt-4" onClick={() => setCriarNovo(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Primeiro Modelo
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -706,12 +843,12 @@ export default function Modelos() {
                   <Label>Tipo de Layout</Label>
                   <Select value={formTipoLayout} onValueChange={setFormTipoLayout}>
                     <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Selecione o tipo" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(TIPOS_IMPRESSAO).map(([key, value]) => (
+                      {Object.entries(TIPOS_IMPRESSAO).map(([key, tipo]) => (
                         <SelectItem key={key} value={key}>
-                          {value.label}
+                          {tipo.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -719,120 +856,73 @@ export default function Modelos() {
                 </div>
               </div>
 
-              {/* Texto de instruções */}
+              {/* Instruções */}
               <div>
-                <Label className="flex items-center gap-2">
-                  Texto de Instruções do Boleto
+                <div className="flex items-center gap-2 mb-1">
+                  <Label>Texto de Instruções</Label>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="h-4 w-4 text-muted-foreground" />
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>
-                          Este texto aparecerá nas instruções do boleto. Use as variáveis
-                          abaixo para inserir dados dinâmicos.
-                        </p>
+                      <TooltipContent className="max-w-sm">
+                        <p>Use variáveis para inserir dados dinâmicos:</p>
+                        <ul className="mt-1 space-y-1">
+                          {VARIAVEIS_DISPONIVEIS.slice(0, 5).map(v => (
+                            <li key={v.variavel} className="text-xs">
+                              <code>{v.variavel}</code> - {v.descricao}
+                            </li>
+                          ))}
+                        </ul>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </Label>
+                </div>
                 <Textarea
                   value={formTextoInstrucoes}
                   onChange={(e) => setFormTextoInstrucoes(e.target.value)}
-                  placeholder="Ex: Não receber após 30 dias do vencimento. Cobrar juros de {{taxa_juros}}% ao mês..."
-                  rows={4}
-                  className="mt-1"
+                  placeholder="Ex: Não receber após o vencimento. Juros de {{taxa_juros}}% ao mês."
+                  className="mt-1 min-h-[100px]"
                 />
               </div>
 
-              {/* Variáveis disponíveis */}
-              <div>
-                <Label className="text-sm text-muted-foreground">Variáveis Disponíveis</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {VARIAVEIS_DISPONIVEIS.map((v) => (
-                    <TooltipProvider key={v.variavel}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Badge
-                            variant="outline"
-                            className="cursor-pointer hover:bg-primary/10"
-                            onClick={() => {
-                              navigator.clipboard.writeText(v.variavel);
-                              toast({
-                                title: 'Copiado!',
-                                description: `${v.variavel} copiado para a área de transferência.`,
-                              });
-                            }}
-                          >
-                            {v.variavel}
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{v.descricao}</p>
-                          <p className="text-xs text-muted-foreground">Clique para copiar</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ))}
+              {/* Dica sobre editor visual */}
+              <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <Layers className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-700 dark:text-blue-300">
+                  <p className="font-medium">Edição Visual de Layout</p>
+                  <p className="text-xs mt-1">
+                    Após salvar o modelo básico, clique em "Layout" no card do modelo para abrir o editor visual 
+                    onde você pode posicionar campos arrastando e soltando.
+                  </p>
                 </div>
-              </div>
-
-              {/* Campos mapeados (info) */}
-              {modeloEditando && modeloEditando.campos_mapeados.length > 0 && (
-                <div>
-                  <Label className="text-sm font-medium">Campos Mapeados Atuais</Label>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {modeloEditando.campos_mapeados.map((campo, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-xs">
-                        {campo.nome || campo.variavel}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground text-center">
-                  O editor visual de posicionamento de campos estará disponível em breve.
-                  Por enquanto, os campos padrão serão utilizados.
-                </p>
               </div>
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setModeloEditando(null);
-                  setCriarNovo(false);
+              <Button 
+                variant="outline" 
+                onClick={() => { 
+                  setModeloEditando(null); 
+                  setCriarNovo(false); 
                 }}
-                disabled={isSaving}
               >
                 Cancelar
               </Button>
-              <Button onClick={handleSalvar} disabled={isSaving}>
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    {modeloEditando ? 'Salvar Alterações' : 'Criar Modelo'}
-                  </>
-                )}
+              <Button onClick={handleSalvar} disabled={isSaving || !canEdit}>
+                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Save className="h-4 w-4 mr-2" />
+                Salvar
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de confirmação de exclusão */}
+        {/* Dialog de Confirmação de Exclusão */}
         <AlertDialog open={!!modeloDeletando} onOpenChange={() => setModeloDeletando(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Excluir modelo?</AlertDialogTitle>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               <AlertDialogDescription>
                 Tem certeza que deseja excluir o modelo "{modeloDeletando?.nome_modelo}"?
                 Esta ação não pode ser desfeita.
@@ -841,11 +931,11 @@ export default function Modelos() {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction 
-                onClick={handleDeletar} 
-                className="bg-destructive text-destructive-foreground"
-                disabled={deleteModelo.isPending}
+                onClick={handleDeletar}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {deleteModelo.isPending ? 'Excluindo...' : 'Excluir'}
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -860,12 +950,14 @@ export default function Modelos() {
 
         {/* Editor de Layout Visual */}
         <EditorLayoutBoleto
+          key={modeloParaEditor?.id || 'new'}
           open={editorLayoutOpen}
           onOpenChange={(open) => {
             setEditorLayoutOpen(open);
             if (!open) {
-              setPdfParaEditor(null);
+              setPdfUrlParaEditor(null);
               setIniciarEditorVazio(false);
+              setPendingPdfFile(null);
             }
           }}
           elementos={modeloParaEditor?.campos_mapeados?.map(c => ({
@@ -881,7 +973,7 @@ export default function Modelos() {
           })) || []}
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
-          pdfBase64={pdfParaEditor || modeloParaEditor?.pdf_exemplo_base64 || undefined}
+          pdfBase64={pdfUrlParaEditor || undefined}
           iniciarVazio={iniciarEditorVazio}
         />
 
@@ -914,6 +1006,19 @@ export default function Modelos() {
                     <div>
                       <Label className="text-muted-foreground">Total de Campos</Label>
                       <p className="font-medium">{modeloVisualizando.campos_mapeados?.length || 0} campos</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">PDF Anexado</Label>
+                      <p className="font-medium flex items-center gap-1">
+                        {modeloVisualizando.pdf_storage_path ? (
+                          <>
+                            <FileCheck className="h-4 w-4 text-green-600" />
+                            <span className="text-green-600">Sim</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">Não</span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -1025,13 +1130,15 @@ export default function Modelos() {
               <Button variant="outline" onClick={() => setModeloVisualizando(null)}>
                 Fechar
               </Button>
-              <Button onClick={() => {
-                setModeloVisualizando(null);
-                setModeloEditando(modeloVisualizando);
-              }}>
-                <Edit className="h-4 w-4 mr-2" />
-                Editar Modelo
-              </Button>
+              {canEdit && (
+                <Button onClick={() => {
+                  setModeloVisualizando(null);
+                  setModeloEditando(modeloVisualizando);
+                }}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar Modelo
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
