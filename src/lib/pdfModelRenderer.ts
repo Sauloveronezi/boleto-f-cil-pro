@@ -43,12 +43,19 @@ export interface DadosBoleto {
   pagador_endereco?: string;
   pagador_cidade_uf?: string;
   pagador_cep?: string;
+  // Aliases para compatibilidade com variáveis comuns
+  cliente_razao_social?: string;
+  cliente_cnpj?: string;
+  cliente_endereco?: string;
   nosso_numero?: string;
   numero_documento?: string;
+  numero_nota?: string;
   data_documento?: string;
   data_vencimento?: string;
+  data_emissao?: string;
   data_processamento?: string;
   valor_documento?: string;
+  valor_titulo?: string;
   valor_cobrado?: string;
   especie_documento?: string;
   aceite?: string;

@@ -14,11 +14,11 @@ import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from 
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { renderizarBoleto, DadosBoleto, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
-import { listarTemplates } from '@/lib/pdfTemplateGenerator';
 import { useBancos } from '@/hooks/useBancos';
 import { supabase } from '@/integrations/supabase/client';
 import { getPdfUrl } from '@/lib/pdfStorage';
-import { DEFAULT_MODELOS } from '@/data/templates';
+import { useQuery } from '@tanstack/react-query';
+
 const WIZARD_STEPS: WizardStep[] = [{
   id: 1,
   title: 'Origem e Banco',
@@ -36,15 +36,11 @@ const WIZARD_STEPS: WizardStep[] = [{
   title: 'Gerar',
   description: 'Configure e gere os boletos'
 }];
+
 export default function GerarBoletos() {
   const navigate = useNavigate();
-  const {
-    toast
-  } = useToast();
-  const {
-    data: bancos = [],
-    isLoading: bancosLoading
-  } = useBancos();
+  const { toast } = useToast();
+  const { data: bancos = [], isLoading: bancosLoading } = useBancos();
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
@@ -55,7 +51,7 @@ export default function GerarBoletos() {
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
-  const [modelos, setModelos] = useState<ModeloBoleto[]>(DEFAULT_MODELOS);
+
   const banco = bancos.find(b => b.id === bancoSelecionado) || {
     id: 'unknown',
     nome_banco: 'Banco Desconhecido',
@@ -65,40 +61,46 @@ export default function GerarBoletos() {
   } as any;
 
   // Configuração bancária específica (agência, conta, juros) deve vir de um store real.
-  // Por enquanto, passamos undefined para usar os valores padrão do gerador ou inseridos manualmente no template.
   const configuracao = undefined;
 
-  // Carregar modelos salvos do localStorage (templates importados)
-  useEffect(() => {
-    const templatesImportados = listarTemplates();
-
-    // Converter templates para ModeloBoleto
-    const modelosImportados: ModeloBoleto[] = templatesImportados.map(template => ({
-      id: template.id,
-      nome_modelo: template.nome,
-      banco_id: template.bancos_compativeis[0] || '',
-      bancos_compativeis: template.bancos_compativeis,
-      tipo_layout: 'CNAB_400',
-      // Default, ajustado conforme necessidade
-      padrao: false,
-      campos_mapeados: template.campos.map(campo => ({
-        id: campo.tipo,
-        nome: campo.label,
-        variavel: `{{${campo.tipo}}}`,
-        posicao_x: campo.x,
-        posicao_y: campo.y,
-        largura: campo.largura,
-        altura: campo.altura
-      })),
-      texto_instrucoes: '',
-      criado_em: template.criado_em,
-      atualizado_em: template.atualizado_em,
-      template_pdf_id: template.id
-    }));
-
-    // Combinar com modelos padrão
-    setModelos([...DEFAULT_MODELOS, ...modelosImportados]);
-  }, []);
+  // Carregar modelos do Supabase
+  const { data: modelos = [] } = useQuery({
+    queryKey: ['modelos-boleto-geracao'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .select('*')
+        .is('deleted', null)
+        .order('padrao', { ascending: false });
+      
+      if (error) {
+        console.error('[GerarBoletos] Erro ao carregar modelos:', error);
+        return [];
+      }
+      
+      return (data || []).map((m: any): ModeloBoleto => ({
+        id: m.id,
+        nome_modelo: m.nome_modelo,
+        banco_id: m.banco_id || '',
+        bancos_compativeis: m.bancos_compativeis || [],
+        tipo_layout: m.tipo_layout || 'CNAB_400',
+        padrao: m.padrao || false,
+        campos_mapeados: (m.campos_mapeados || []).map((c: any) => ({
+          id: String(c.id),
+          nome: c.nome || '',
+          variavel: c.variavel || '',
+          posicao_x: c.posicao_x || 0,
+          posicao_y: c.posicao_y || 0,
+          largura: c.largura || 100,
+          altura: c.altura || 20,
+        })),
+        texto_instrucoes: m.texto_instrucoes || '',
+        template_pdf_id: m.template_pdf_id,
+        criado_em: m.created_at,
+        atualizado_em: m.updated_at,
+      }));
+    }
+  });
 
   // Dados a usar (apenas CNAB importado, sem mocks)
   const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
@@ -207,88 +209,125 @@ export default function GerarBoletos() {
     // Filtrar notas selecionadas
     const notasParaGerar = notas.filter(n => notasSelecionadas.includes(n.id));
     
-    // Buscar modelo selecionado e verificar se tem PDF base
+    // Buscar modelo selecionado
     const modelo = modelos.find(m => m.id === modeloSelecionado);
     
-    if (modelo?.template_pdf_id || modelo?.banco_id) {
-      // Tentar buscar modelo do banco de dados com PDF base
-      try {
-        const { data: modeloDB } = await supabase
-          .from('vv_b_modelos_boleto')
-          .select('*')
-          .eq('id', modeloSelecionado)
-          .is('deleted', null)
-          .single();
-        
-        if (modeloDB?.pdf_storage_path) {
-          // Usar o renderizador de cópia fiel
-          const pdfUrl = await getPdfUrl(modeloDB.pdf_storage_path);
-          if (pdfUrl) {
-            const response = await fetch(pdfUrl);
-            const basePdfBytes = await response.arrayBuffer();
-            
-            // Converter elementos para o formato esperado pelo renderizador
-            const elementos: ElementoParaRender[] = (Array.isArray(modeloDB.campos_mapeados) ? modeloDB.campos_mapeados : []).map((campo: any) => ({
-              id: String(campo.id),
-              tipo: 'campo' as const,
-              nome: campo.nome,
-              x: campo.posicao_x,
-              y: campo.posicao_y,
-              largura: campo.largura,
-              altura: campo.altura,
-              variavel: campo.variavel,
-              corTexto: '#000000',
-              tamanhoFonte: 10,
-            }));
-            
-            // Gerar PDF para cada nota
-            for (let i = 0; i < notasParaGerar.length; i++) {
-              const nota = notasParaGerar[i];
-              const cliente = clientes.find(c => c.id === nota.codigo_cliente);
-              
-              const dadosBoleto: DadosBoleto = {
-                pagador_nome: cliente?.razao_social || '',
-                pagador_cnpj: cliente?.cnpj || '',
-                pagador_endereco: cliente?.endereco || '',
-                valor_documento: nota.valor_titulo.toFixed(2),
-                data_vencimento: nota.data_vencimento,
-                nosso_numero: nota.numero_nota,
-                numero_documento: nota.numero_nota,
-                linha_digitavel: '00000.00000 00000.000000 00000.000000 0 00000000000000',
-                codigo_barras: '00000000000000000000000000000000000000000000',
-              };
-              
-              const pdfBytes = await renderizarBoleto(
-                basePdfBytes,
-                elementos,
-                dadosBoleto,
-              );
-              
-              // Download do PDF
-              const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = tipoSaida === 'arquivo_unico' 
-                ? `boletos_${Date.now()}.pdf`
-                : `boleto_${nota.numero_nota}.pdf`;
-              a.click();
-              URL.revokeObjectURL(url);
-              
-              // Se arquivo único, gerar só uma vez com todos
-              if (tipoSaida === 'arquivo_unico') break;
-            }
-            
-            toast({
-              title: 'Boletos gerados com sucesso!',
-              description: `${notasSelecionadas.length} boleto(s) foram gerados usando o modelo fiel.`
-            });
-            return;
+    console.log('[GerarBoletos] Modelo selecionado:', modelo?.nome_modelo);
+    console.log('[GerarBoletos] Campos mapeados:', modelo?.campos_mapeados?.length || 0);
+    
+    // Tentar buscar modelo do banco de dados com PDF base
+    try {
+      const { data: modeloDB } = await supabase
+        .from('vv_b_modelos_boleto')
+        .select('*')
+        .eq('id', modeloSelecionado)
+        .is('deleted', null)
+        .maybeSingle();
+      
+      if (modeloDB?.pdf_storage_path) {
+        // Usar o renderizador de cópia fiel
+        const pdfUrl = await getPdfUrl(modeloDB.pdf_storage_path);
+        if (pdfUrl) {
+          const response = await fetch(pdfUrl);
+          if (!response.ok) {
+            throw new Error('Falha ao baixar PDF base');
           }
+          const basePdfBytes = await response.arrayBuffer();
+          
+          const camposMapeados = Array.isArray(modeloDB.campos_mapeados) 
+            ? modeloDB.campos_mapeados 
+            : [];
+          
+          console.log('[GerarBoletos] Campos do modelo DB:', camposMapeados.length);
+          
+          // Converter elementos para o formato esperado pelo renderizador
+          const elementos: ElementoParaRender[] = camposMapeados.map((campo: any) => ({
+            id: String(campo.id),
+            tipo: 'campo' as const,
+            nome: campo.nome || '',
+            x: campo.posicao_x || 0,
+            y: campo.posicao_y || 0,
+            largura: campo.largura || 100,
+            altura: campo.altura || 20,
+            variavel: campo.variavel || '',
+            corTexto: campo.corTexto || '#000000',
+            tamanhoFonte: campo.tamanhoFonte || 10,
+            alinhamento: campo.alinhamento || 'left',
+            visivel: true, // Garantir que o elemento seja visível
+          }));
+          
+          console.log('[GerarBoletos] Elementos para render:', elementos.length);
+          
+          // Gerar PDF para cada nota
+          for (let i = 0; i < notasParaGerar.length; i++) {
+            const nota = notasParaGerar[i];
+            const cliente = clientes.find(c => c.id === nota.codigo_cliente);
+            
+            // Mapear dados para as variáveis usadas nos campos
+            const dadosBoleto: DadosBoleto = {
+              // Dados do pagador/cliente
+              pagador_nome: cliente?.razao_social || '',
+              pagador_cnpj: cliente?.cnpj || '',
+              pagador_endereco: cliente?.endereco || '',
+              pagador_cidade_uf: cliente?.cidade ? `${cliente.cidade}/${cliente.estado}` : '',
+              pagador_cep: cliente?.cep || '',
+              
+              // Aliases para variáveis comuns
+              cliente_razao_social: cliente?.razao_social || '',
+              cliente_cnpj: cliente?.cnpj || '',
+              cliente_endereco: cliente?.endereco || '',
+              
+              // Dados do título/boleto
+              valor_documento: nota.valor_titulo.toFixed(2),
+              valor_titulo: nota.valor_titulo.toFixed(2),
+              data_vencimento: nota.data_vencimento,
+              data_emissao: nota.data_emissao,
+              nosso_numero: nota.numero_nota,
+              numero_documento: nota.numero_nota,
+              numero_nota: nota.numero_nota,
+              
+              // Dados do banco
+              banco_nome: banco.nome_banco,
+              banco_codigo: banco.codigo_banco,
+              
+              // Linha digitável e código de barras (placeholder)
+              linha_digitavel: '00000.00000 00000.000000 00000.000000 0 00000000000000',
+              codigo_barras: '00000000000000000000000000000000000000000000',
+              
+              // Local de pagamento padrão
+              local_pagamento: 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO',
+            };
+            
+            const pdfBytes = await renderizarBoleto(
+              basePdfBytes,
+              elementos,
+              dadosBoleto,
+            );
+            
+            // Download do PDF
+            const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = tipoSaida === 'arquivo_unico' 
+              ? `boletos_${Date.now()}.pdf`
+              : `boleto_${nota.numero_nota}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            // Se arquivo único, gerar só uma vez com todos
+            if (tipoSaida === 'arquivo_unico') break;
+          }
+          
+          toast({
+            title: 'Boletos gerados com sucesso!',
+            description: `${notasSelecionadas.length} boleto(s) foram gerados usando o modelo "${modeloDB.nome_modelo}".`
+          });
+          return;
         }
-      } catch (err) {
-        console.error('[GerarBoletos] Erro ao buscar modelo:', err);
       }
+    } catch (err) {
+      console.error('[GerarBoletos] Erro ao buscar modelo:', err);
     }
 
     // Fallback para geração com jsPDF
