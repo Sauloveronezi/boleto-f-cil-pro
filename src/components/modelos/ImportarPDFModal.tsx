@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useNavigate } from 'react-router-dom';
 
 export interface ImportarPDFResult {
   file: File;
@@ -34,10 +35,10 @@ interface ImportarPDFModalProps {
 
 export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDFModalProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { canEdit } = useUserRole();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [nomeModelo, setNomeModelo] = useState('');
@@ -164,12 +165,22 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                 {!user && (
                   <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-amber-700 dark:text-amber-300">
+                    <div className="text-sm text-amber-700 dark:text-amber-300 flex-1">
                       <p className="font-medium">Login necessário</p>
                       <p className="text-xs mt-1">
                         Faça login para poder importar e salvar modelos.
                       </p>
                     </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        handleClose();
+                        navigate('/auth');
+                      }}
+                    >
+                      Fazer login
+                    </Button>
                   </div>
                 )}
 
