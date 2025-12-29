@@ -240,20 +240,30 @@ export default function GerarBoletos() {
           
           console.log('[GerarBoletos] Campos do modelo DB:', camposMapeados.length);
           
-          // Converter elementos para o formato esperado pelo renderizador
+          // Converter elementos para o formato esperado pelo renderizador, mantendo todas as propriedades de estilo
           const elementos: ElementoParaRender[] = camposMapeados.map((campo: any) => ({
             id: String(campo.id),
-            tipo: 'campo' as const,
+            tipo: campo.tipo || 'campo',
             nome: campo.nome || '',
             x: campo.posicao_x || 0,
             y: campo.posicao_y || 0,
             largura: campo.largura || 100,
             altura: campo.altura || 20,
             variavel: campo.variavel || '',
+            textoFixo: campo.textoFixo || '',
             corTexto: campo.corTexto || '#000000',
             tamanhoFonte: campo.tamanhoFonte || 10,
             alinhamento: campo.alinhamento || 'left',
-            visivel: true, // Garantir que o elemento seja visível
+            corFundo: campo.corFundo || 'transparent',
+            negrito: campo.negrito || false,
+            italico: campo.italico || false,
+            bordaSuperior: campo.bordaSuperior || false,
+            bordaInferior: campo.bordaInferior || false,
+            bordaEsquerda: campo.bordaEsquerda || false,
+            bordaDireita: campo.bordaDireita || false,
+            espessuraBorda: campo.espessuraBorda || 1,
+            corBorda: campo.corBorda || '#000000',
+            visivel: campo.visivel !== false, // default true
           }));
           
           console.log('[GerarBoletos] Elementos para render:', elementos.length);
