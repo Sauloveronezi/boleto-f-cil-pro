@@ -97,7 +97,11 @@ export default function Modelos() {
   const navigate = useNavigate();
   const { data: bancos } = useBancos();
   const { user } = useAuth();
-  const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
+  // TODO: Restaurar useUserRole quando auth estiver pronto
+  // const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
+  const canEdit = true; // Temporariamente habilitado
+  const isLoadingRole = false;
+  const canBootstrapAdmin = false;
 
   // Estado do formulário
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
@@ -561,33 +565,7 @@ export default function Modelos() {
           </div>
         </div>
 
-        {/* Aviso de bootstrap admin */}
-        {showBootstrapAdmin && (
-          <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-            <CardContent className="py-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">
-                    Você é o primeiro usuário do sistema
-                  </p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                    Clique no botão abaixo para se tornar administrador e poder criar/editar modelos.
-                  </p>
-                  <Button 
-                    size="sm" 
-                    className="mt-3"
-                    onClick={() => bootstrapAdmin.mutate()}
-                    disabled={bootstrapAdmin.isPending}
-                  >
-                    {bootstrapAdmin.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Tornar-me Administrador
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* TODO: Restaurar aviso de bootstrap admin quando auth estiver pronto */}
 
         {/* Aviso para usuário sem permissão */}
         {user && !canEdit && !isLoadingRole && !canBootstrapAdmin && (
