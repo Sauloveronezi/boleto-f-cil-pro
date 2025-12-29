@@ -27,6 +27,8 @@ export interface ImportarPDFResult {
   nomeModelo: string;
   bancosCompativeis: string[];
   dimensoes?: PDFDimensions;
+  /** Se true, tenta copiar os campos_mapeados do modelo padrão do banco selecionado */
+  copiarCamposPadrao?: boolean;
 }
 
 interface ImportarPDFModalProps {
@@ -47,6 +49,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const [bancosCompativeis, setBancosCompativeis] = useState<string[]>([]);
   const [processando, setProcessando] = useState(false);
   const [dimensoes, setDimensoes] = useState<PDFDimensions | null>(null);
+  const [copiarCamposPadrao, setCopiarCamposPadrao] = useState(true);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -138,6 +141,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       nomeModelo,
       bancosCompativeis,
       dimensoes: dimensoes || undefined,
+      copiarCamposPadrao,
     });
     
     handleClose();
@@ -156,7 +160,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     onOpenChange(false);
   };
 
-  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit;
+  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit && (!copiarCamposPadrao || bancosCompativeis.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -258,9 +262,24 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                       Bancos Compatíveis
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1 mb-3">
-                      O mesmo layout visual será usado para todos os bancos selecionados. 
+                      O mesmo layout visual será usado para todos os bancos selecionados.
                       Apenas os dados específicos mudam (agência, conta, código).
                     </p>
+
+                    <div className="flex items-start gap-3 p-3 bg-muted/30 border rounded-lg mb-3">
+                      <Checkbox
+                        checked={copiarCamposPadrao}
+                        onCheckedChange={(v) => setCopiarCamposPadrao(!!v)}
+                        className="mt-0.5"
+                      />
+                      <div className="text-sm">
+                        <p className="font-medium">Copiar campos do modelo padrão</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Pré-carrega os campos (posições) do modelo padrão do banco selecionado.
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
                       {BANCOS_SUPORTADOS.filter(b => b.ativo).map((banco) => (
                         <div 
@@ -276,6 +295,13 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                         </div>
                       ))}
                     </div>
+
+                    {copiarCamposPadrao && bancosCompativeis.length === 0 && (
+                      <p className="text-xs text-destructive mt-2">
+                        Selecione pelo menos 1 banco para copiar os campos do modelo padrão.
+                      </p>
+                    )}
+
                     {bancosCompativeis.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {bancosCompativeis.map(id => {
@@ -291,15 +317,14 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                   </div>
                 )}
 
-                {/* Info sobre edição manual */}
+                {/* Info */}
                 {arquivo && (
                   <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="text-sm text-blue-700 dark:text-blue-300">
-                      <p className="font-medium">Edição Manual</p>
+                      <p className="font-medium">Editor Visual</p>
                       <p className="text-xs mt-1">
-                        Clique em "Importar Modelo" para abrir o editor visual. 
-                        Você poderá adicionar campos, textos e linhas manualmente para replicar o layout do PDF.
+                        Após importar, o editor abrirá com o PDF como fundo. Se você ativar “Copiar campos do modelo padrão”, os campos já serão pré-carregados.
                       </p>
                     </div>
                   </div>
