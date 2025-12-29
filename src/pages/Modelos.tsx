@@ -97,11 +97,7 @@ export default function Modelos() {
   const navigate = useNavigate();
   const { data: bancos } = useBancos();
   const { user } = useAuth();
-  // TODO: Restaurar useUserRole quando auth estiver pronto
-  // const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
-  const canEdit = true; // Temporariamente habilitado
-  const isLoadingRole = false;
-  const canBootstrapAdmin = false;
+  const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
 
   // Estado do formulário
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
@@ -538,23 +534,60 @@ export default function Modelos() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => setImportarPDFOpen(true)}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Importar PDF Modelo
-            </Button>
-            <Button 
-              onClick={() => setCriarNovo(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Modelo
-            </Button>
+            {!user ? (
+              <Button onClick={() => navigate('/auth')}>
+                <LogIn className="h-4 w-4 mr-2" />
+                Fazer Login
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setImportarPDFOpen(true)}
+                  disabled={!canEdit}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar PDF Modelo
+                </Button>
+                <Button 
+                  onClick={() => setCriarNovo(true)}
+                  disabled={!canEdit}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Modelo
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* TODO: Restaurar aviso de bootstrap admin quando auth estiver pronto */}
+        {/* Aviso de bootstrap admin */}
+        {showBootstrapAdmin && (
+          <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-sm text-amber-800 dark:text-amber-200">
+                    Você é o primeiro usuário do sistema
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    Clique no botão abaixo para se tornar administrador e poder criar/editar modelos.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => bootstrapAdmin.mutate()}
+                    disabled={bootstrapAdmin.isPending}
+                  >
+                    {bootstrapAdmin.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Tornar-me Administrador
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Aviso para usuário sem permissão */}
         {user && !canEdit && !isLoadingRole && !canBootstrapAdmin && (
