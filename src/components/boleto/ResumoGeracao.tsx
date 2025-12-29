@@ -53,12 +53,16 @@ export function ResumoGeracao({
   const notasSelecionadasData = notas.filter((n) => notasSelecionadas.includes(n.id));
   const valorTotal = notasSelecionadasData.reduce((acc, n) => acc + n.valor_titulo, 0);
 
-  // Modelos do banco OU modelos genéricos (caso não haja específico para o banco)
-  // Inclui modelos que têm o banco em bancos_compativeis
-  const modelosDoBanco = modelos.filter(
-    (m) => m.banco_id === banco?.id || m.bancos_compativeis?.includes(banco?.id || '')
+  // Inclui modelos que:
+  // 1. Têm o banco_id igual ao banco selecionado
+  // 2. Têm o banco em bancos_compativeis
+  // 3. Não têm banco associado (modelo genérico)
+  const modelosDisponiveis = modelos.filter(
+    (m) =>
+      m.banco_id === banco?.id ||
+      m.bancos_compativeis?.includes(banco?.id || '') ||
+      !m.banco_id // Modelos sem banco definido são universais
   );
-  const modelosDisponiveis = modelosDoBanco.length > 0 ? modelosDoBanco : modelos;
 
   return (
     <div className="space-y-6 animate-fade-in">

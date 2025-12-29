@@ -551,21 +551,30 @@ export default function Modelos() {
     setIniciarEditorVazio(false);
     setPendingPdfFile(null);
     
-    // Converter campos_mapeados para ElementoLayout
-    const elementos: ElementoLayout[] = (modelo.campos_mapeados || []).map((c, i) => ({
+    // Converter campos_mapeados para ElementoLayout, preservando todas as propriedades
+    const elementos: ElementoLayout[] = (modelo.campos_mapeados || []).map((c: any, i: number) => ({
       id: String(c.id) || `field_${Date.now()}_${i}`,
-      tipo: 'campo' as const,
+      tipo: (c.tipo as 'campo' | 'texto' | 'linha' | 'retangulo') || 'campo',
       nome: c.nome || '',
       variavel: c.variavel || '',
+      textoFixo: c.textoFixo || '',
       x: c.posicao_x || 0,
       y: c.posicao_y || 0,
       largura: c.largura || 120,
       altura: c.altura || 20,
-      tamanhoFonte: 10,
-      alinhamento: 'left' as const,
-      corTexto: '#000000',
-      corFundo: 'transparent',
-      visivel: true,
+      tamanhoFonte: c.tamanhoFonte || 10,
+      alinhamento: (c.alinhamento as 'left' | 'center' | 'right') || 'left',
+      corTexto: c.corTexto || '#000000',
+      corFundo: c.corFundo || 'transparent',
+      negrito: c.negrito || false,
+      italico: c.italico || false,
+      bordaSuperior: c.bordaSuperior || false,
+      bordaInferior: c.bordaInferior || false,
+      bordaEsquerda: c.bordaEsquerda || false,
+      bordaDireita: c.bordaDireita || false,
+      espessuraBorda: c.espessuraBorda || 1,
+      corBorda: c.corBorda || '#000000',
+      visivel: c.visivel !== false,
       ordem: i,
     }));
     
@@ -591,14 +600,30 @@ export default function Modelos() {
       return;
     }
 
+    // Incluir todas as propriedades de estilo dos elementos
     const camposMapeados = elementos.map((el) => ({
       id: el.id,
+      tipo: el.tipo || 'campo',
       nome: el.nome,
       variavel: el.variavel || '',
+      textoFixo: el.textoFixo || '',
       posicao_x: el.x,
       posicao_y: el.y,
       largura: el.largura,
       altura: el.altura,
+      tamanhoFonte: el.tamanhoFonte || 10,
+      alinhamento: el.alinhamento || 'left',
+      corTexto: el.corTexto || '#000000',
+      corFundo: el.corFundo || 'transparent',
+      negrito: el.negrito || false,
+      italico: el.italico || false,
+      bordaSuperior: el.bordaSuperior || false,
+      bordaInferior: el.bordaInferior || false,
+      bordaEsquerda: el.bordaEsquerda || false,
+      bordaDireita: el.bordaDireita || false,
+      espessuraBorda: el.espessuraBorda || 1,
+      corBorda: el.corBorda || '#000000',
+      visivel: el.visivel !== false,
     }));
 
     // Se é um modelo novo (temp_), cria
