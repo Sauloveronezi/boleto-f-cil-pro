@@ -75,7 +75,7 @@ interface EditorLayoutBoletoProps {
   nomeModelo: string;
   larguraPagina?: number;
   alturaPagina?: number;
-  pdfBase64?: string;
+  pdfSource?: File | string; // File object or URL string
   iniciarVazio?: boolean;
 }
 
@@ -142,7 +142,7 @@ export function EditorLayoutBoleto({
   nomeModelo,
   larguraPagina: larguraPaginaInicial,
   alturaPagina: alturaPaginaInicial,
-  pdfBase64,
+  pdfSource,
   iniciarVazio = false,
 }: EditorLayoutBoletoProps) {
   const { toast } = useToast();
@@ -178,16 +178,18 @@ export function EditorLayoutBoleto({
   const larguraCanvas = larguraPagina * ESCALA;
   const alturaCanvas = alturaPagina * ESCALA;
 
-  // Load PDF as image when pdfBase64 changes
+  // Load PDF as image when pdfSource changes
   useEffect(() => {
-    if (pdfBase64 && open) {
+    if (pdfSource && open) {
       setLoadingPdf(true);
-      renderPDFToImage(pdfBase64, 2)
+      console.log('[Editor] Loading PDF source:', typeof pdfSource === 'string' ? pdfSource : 'File object');
+      renderPDFToImage(pdfSource, 2)
         .then(({ dataUrl }) => {
+          console.log('[Editor] PDF rendered successfully');
           setPdfImageUrl(dataUrl);
         })
         .catch((err) => {
-          console.error('Error rendering PDF:', err);
+          console.error('[Editor] Error rendering PDF:', err);
           setPdfImageUrl(null);
         })
         .finally(() => {
@@ -196,7 +198,7 @@ export function EditorLayoutBoleto({
     } else {
       setPdfImageUrl(null);
     }
-  }, [pdfBase64, open]);
+  }, [pdfSource, open]);
 
   // Initialize elements when dialog opens
   useEffect(() => {

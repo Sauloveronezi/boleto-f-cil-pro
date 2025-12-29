@@ -110,7 +110,7 @@ export default function Modelos() {
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
   const [modeloParaEditor, setModeloParaEditor] = useState<ModeloBoleto | null>(null);
-  const [pdfUrlParaEditor, setPdfUrlParaEditor] = useState<string | null>(null);
+  const [pdfSourceParaEditor, setPdfSourceParaEditor] = useState<File | string | null>(null);
   const [iniciarEditorVazio, setIniciarEditorVazio] = useState(false);
   const [modeloParaReanexar, setModeloParaReanexar] = useState<ModeloBoleto | null>(null);
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
@@ -449,7 +449,8 @@ export default function Modelos() {
       updated_at: new Date().toISOString(),
     };
     
-    setPdfUrlParaEditor(result.previewUrl);
+    // Passa o arquivo diretamente para o editor (não usa blob URL que é revogada)
+    setPdfSourceParaEditor(result.file);
     setIniciarEditorVazio(true);
     setModeloParaEditor(novoModelo);
     setEditorLayoutOpen(true);
@@ -464,9 +465,9 @@ export default function Modelos() {
     if (modelo.pdf_storage_path) {
       console.log('[Modelos] Loading PDF from storage:', modelo.pdf_storage_path);
       const url = await getPdfUrl(modelo.pdf_storage_path);
-      setPdfUrlParaEditor(url);
+      setPdfSourceParaEditor(url);
     } else {
-      setPdfUrlParaEditor(null);
+      setPdfSourceParaEditor(null);
     }
     
     setEditorLayoutOpen(true);
@@ -512,7 +513,7 @@ export default function Modelos() {
     
     setEditorLayoutOpen(false);
     setModeloParaEditor(null);
-    setPdfUrlParaEditor(null);
+    setPdfSourceParaEditor(null);
     setPendingPdfFile(null);
   };
 
@@ -964,7 +965,7 @@ export default function Modelos() {
           onOpenChange={(open) => {
             setEditorLayoutOpen(open);
             if (!open) {
-              setPdfUrlParaEditor(null);
+              setPdfSourceParaEditor(null);
               setIniciarEditorVazio(false);
               setPendingPdfFile(null);
             }
@@ -982,7 +983,7 @@ export default function Modelos() {
           })) || []}
           onSave={handleSalvarLayout}
           nomeModelo={modeloParaEditor?.nome_modelo || 'Novo Modelo'}
-          pdfBase64={pdfUrlParaEditor || undefined}
+          pdfSource={pdfSourceParaEditor || undefined}
           larguraPagina={modeloParaEditor?.largura_pagina || 210}
           alturaPagina={modeloParaEditor?.altura_pagina || 297}
           iniciarVazio={iniciarEditorVazio}
