@@ -538,30 +538,19 @@ export default function Modelos() {
             </p>
           </div>
           <div className="flex gap-2">
-            {!user ? (
-              <Button onClick={() => navigate('/auth')}>
-                <LogIn className="h-4 w-4 mr-2" />
-                Fazer Login
-              </Button>
-            ) : (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setImportarPDFOpen(true)}
-                  disabled={!canEdit}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar PDF Modelo
-                </Button>
-                <Button 
-                  onClick={() => setCriarNovo(true)}
-                  disabled={!canEdit}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Modelo
-                </Button>
-              </>
-            )}
+            <Button 
+              variant="outline" 
+              onClick={() => setImportarPDFOpen(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Importar PDF Modelo
+            </Button>
+            <Button 
+              onClick={() => setCriarNovo(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Modelo
+            </Button>
           </div>
         </div>
 

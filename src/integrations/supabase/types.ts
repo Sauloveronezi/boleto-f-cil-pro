@@ -2157,6 +2157,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      vv_b_any_admin_exists: { Args: never; Returns: boolean }
       vv_b_has_role: {
         Args: {
           _role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
