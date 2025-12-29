@@ -160,7 +160,8 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
     onOpenChange(false);
   };
 
-  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit && (!copiarCamposPadrao || bancosCompativeis.length > 0);
+  // Permitir importar sem banco selecionado - o modelo pode ser usado para qualquer banco
+  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -297,8 +298,8 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                     </div>
 
                     {copiarCamposPadrao && bancosCompativeis.length === 0 && (
-                      <p className="text-xs text-destructive mt-2">
-                        Selecione pelo menos 1 banco para copiar os campos do modelo padrão.
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Opcional: selecione bancos para copiar campos de um modelo padrão existente.
                       </p>
                     )}
 

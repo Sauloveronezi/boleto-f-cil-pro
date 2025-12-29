@@ -878,7 +878,7 @@ export default function Modelos() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setModeloDeletando(modelo)}
-                                disabled={modelo.padrao}
+                                disabled={modelo.padrao || deleteModelo.isPending}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
