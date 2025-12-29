@@ -12,9 +12,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from '@/types/boleto';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
+import { renderizarBoleto, DadosBoleto, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
 import { listarTemplates } from '@/lib/pdfTemplateGenerator';
 import { useBancos } from '@/hooks/useBancos';
+import { supabase } from '@/integrations/supabase/client';
+import { getPdfUrl } from '@/lib/pdfStorage';
 import { DEFAULT_MODELOS } from '@/data/templates';
 const WIZARD_STEPS: WizardStep[] = [{
   id: 1,
@@ -198,13 +201,97 @@ export default function GerarBoletos() {
       setCurrentStep(currentStep - 1);
     }
   };
-  const handleGerar = () => {
+  const handleGerar = async () => {
     if (!banco || !tipoOrigem) return;
 
     // Filtrar notas selecionadas
     const notasParaGerar = notas.filter(n => notasSelecionadas.includes(n.id));
+    
+    // Buscar modelo selecionado e verificar se tem PDF base
+    const modelo = modelos.find(m => m.id === modeloSelecionado);
+    
+    if (modelo?.template_pdf_id || modelo?.banco_id) {
+      // Tentar buscar modelo do banco de dados com PDF base
+      try {
+        const { data: modeloDB } = await supabase
+          .from('vv_b_modelos_boleto')
+          .select('*')
+          .eq('id', modeloSelecionado)
+          .is('deleted', null)
+          .single();
+        
+        if (modeloDB?.pdf_storage_path) {
+          // Usar o renderizador de cópia fiel
+          const pdfUrl = await getPdfUrl(modeloDB.pdf_storage_path);
+          if (pdfUrl) {
+            const response = await fetch(pdfUrl);
+            const basePdfBytes = await response.arrayBuffer();
+            
+            // Converter elementos para o formato esperado pelo renderizador
+            const elementos: ElementoParaRender[] = (Array.isArray(modeloDB.campos_mapeados) ? modeloDB.campos_mapeados : []).map((campo: any) => ({
+              id: String(campo.id),
+              tipo: 'campo' as const,
+              nome: campo.nome,
+              x: campo.posicao_x,
+              y: campo.posicao_y,
+              largura: campo.largura,
+              altura: campo.altura,
+              variavel: campo.variavel,
+              corTexto: '#000000',
+              tamanhoFonte: 10,
+            }));
+            
+            // Gerar PDF para cada nota
+            for (let i = 0; i < notasParaGerar.length; i++) {
+              const nota = notasParaGerar[i];
+              const cliente = clientes.find(c => c.id === nota.codigo_cliente);
+              
+              const dadosBoleto: DadosBoleto = {
+                pagador_nome: cliente?.razao_social || '',
+                pagador_cnpj: cliente?.cnpj || '',
+                pagador_endereco: cliente?.endereco || '',
+                valor_documento: nota.valor_titulo.toFixed(2),
+                data_vencimento: nota.data_vencimento,
+                nosso_numero: nota.numero_nota,
+                numero_documento: nota.numero_nota,
+                linha_digitavel: '00000.00000 00000.000000 00000.000000 0 00000000000000',
+                codigo_barras: '00000000000000000000000000000000000000000000',
+              };
+              
+              const pdfBytes = await renderizarBoleto(
+                basePdfBytes,
+                elementos,
+                dadosBoleto,
+              );
+              
+              // Download do PDF
+              const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = tipoSaida === 'arquivo_unico' 
+                ? `boletos_${Date.now()}.pdf`
+                : `boleto_${nota.numero_nota}.pdf`;
+              a.click();
+              URL.revokeObjectURL(url);
+              
+              // Se arquivo único, gerar só uma vez com todos
+              if (tipoSaida === 'arquivo_unico') break;
+            }
+            
+            toast({
+              title: 'Boletos gerados com sucesso!',
+              description: `${notasSelecionadas.length} boleto(s) foram gerados usando o modelo fiel.`
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('[GerarBoletos] Erro ao buscar modelo:', err);
+      }
+    }
 
-    // Gerar o PDF com o modelo do banco
+    // Fallback para geração com jsPDF
     gerarPDFBoletos(notasParaGerar, clientes, banco, configuracao, tipoOrigem, tipoSaida);
     toast({
       title: 'Boletos gerados com sucesso!',
