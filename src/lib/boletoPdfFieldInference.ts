@@ -167,8 +167,11 @@ export async function inferirCamposDoBoletoPDF(
       }
     }
 
+    // Adicionar linhas de separação padrão de boleto (estrutura FEBRABAN)
+    const linhasPadrao = gerarLinhasPadraoBoleto(pageWidthMm, pageHeightMm);
+    
     // Converter para ElementoLayout
-    const elementos: ElementoLayout[] = detectedFields.map((field, index) => ({
+    const elementosCampos: ElementoLayout[] = detectedFields.map((field, index) => ({
       id: `field_${Date.now()}_${index}`,
       tipo: 'campo' as const,
       nome: field.label,
@@ -185,13 +188,103 @@ export async function inferirCamposDoBoletoPDF(
       ordem: index,
     }));
 
-    console.log('[FieldInference] Total fields detected:', elementos.length);
-    return elementos;
+    const todosElementos = [...linhasPadrao, ...elementosCampos];
+
+    console.log('[FieldInference] Total fields detected:', elementosCampos.length);
+    console.log('[FieldInference] Total lines added:', linhasPadrao.length);
+    console.log('[FieldInference] Total elements:', todosElementos.length);
+    
+    return todosElementos;
 
   } catch (error) {
     console.error('[FieldInference] Error analyzing PDF:', error);
     return [];
   }
+}
+
+/**
+ * Gera linhas e caixas padrão de boleto (estrutura FEBRABAN)
+ */
+function gerarLinhasPadraoBoleto(pageWidthMm: number, pageHeightMm: number): ElementoLayout[] {
+  const ESCALA = 2;
+  const linhas: ElementoLayout[] = [];
+  const marginX = 10 * ESCALA; // 10mm de margem
+  const larguraUtil = (pageWidthMm - 20) * ESCALA; // largura - margens
+  const timestamp = Date.now();
+  
+  // Estrutura típica de boleto bancário (alturas em mm convertidas para px)
+  const estrutura = [
+    // Cabeçalho do banco (logo + código + linha digitável)
+    { y: 15, altura: 2, nome: 'Linha Cabeçalho' },
+    // Dados do cedente
+    { y: 30, altura: 1, nome: 'Linha Cedente' },
+    // Vencimento / Agência / Nosso Número
+    { y: 45, altura: 1, nome: 'Linha Dados Título 1' },
+    // Valor / Documento / Espécie
+    { y: 60, altura: 1, nome: 'Linha Dados Título 2' },
+    // Instruções
+    { y: 75, altura: 1, nome: 'Linha Instruções' },
+    // Sacado
+    { y: 100, altura: 1, nome: 'Linha Sacado' },
+    // Autenticação mecânica
+    { y: 115, altura: 2, nome: 'Linha Autenticação' },
+    // Linha de corte (mais espessa)
+    { y: 125, altura: 3, nome: 'Linha de Corte (destacar)' },
+    // Recibo do sacado (parte inferior do boleto)
+    { y: 140, altura: 2, nome: 'Linha Recibo Cabeçalho' },
+    { y: 155, altura: 1, nome: 'Linha Recibo Dados' },
+    { y: 170, altura: 1, nome: 'Linha Recibo Valor' },
+  ];
+  
+  estrutura.forEach((item, index) => {
+    linhas.push({
+      id: `line_${timestamp}_${index}`,
+      tipo: 'linha',
+      nome: item.nome,
+      x: marginX,
+      y: item.y * ESCALA,
+      largura: larguraUtil,
+      altura: item.altura,
+      corFundo: '#000000',
+      visivel: true,
+      ordem: index,
+    });
+  });
+  
+  // Adicionar caixas/retângulos para as áreas principais
+  const caixas = [
+    // Caixa do logo do banco
+    { x: 10, y: 5, largura: 40, altura: 10, nome: 'Caixa Logo Banco' },
+    // Caixa código do banco
+    { x: 52, y: 5, largura: 20, altura: 10, nome: 'Caixa Código Banco' },
+    // Caixa linha digitável
+    { x: 74, y: 5, largura: 116, altura: 10, nome: 'Caixa Linha Digitável' },
+    // Caixa código de barras
+    { x: 10, y: 105, largura: 180, altura: 15, nome: 'Caixa Código de Barras' },
+  ];
+  
+  caixas.forEach((item, index) => {
+    linhas.push({
+      id: `box_${timestamp}_${index}`,
+      tipo: 'retangulo',
+      nome: item.nome,
+      x: item.x * ESCALA,
+      y: item.y * ESCALA,
+      largura: item.largura * ESCALA,
+      altura: item.altura * ESCALA,
+      corFundo: 'transparent',
+      bordaSuperior: true,
+      bordaInferior: true,
+      bordaEsquerda: true,
+      bordaDireita: true,
+      espessuraBorda: 1,
+      corBorda: '#000000',
+      visivel: true,
+      ordem: estrutura.length + index,
+    });
+  });
+  
+  return linhas;
 }
 
 /**
