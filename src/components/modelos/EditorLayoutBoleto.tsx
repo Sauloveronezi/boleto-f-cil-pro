@@ -148,6 +148,10 @@ export function EditorLayoutBoleto({
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
   
+  // Track initialization to prevent re-init on every render
+  const initializedRef = useRef(false);
+  const lastModeloIdRef = useRef<string | null>(null);
+  
   // Page format state
   const [formatoPagina, setFormatoPagina] = useState<PageFormatKey>('A4');
   const [larguraPagina, setLarguraPagina] = useState(larguraPaginaInicial || PAGE_FORMATS.A4.larguraMm);
@@ -195,37 +199,57 @@ export function EditorLayoutBoleto({
         .finally(() => {
           setLoadingPdf(false);
         });
-    } else {
+    } else if (!open) {
       setPdfImageUrl(null);
     }
   }, [pdfSource, open]);
 
-  // Initialize elements when dialog opens
+  // Initialize elements ONLY when dialog opens or model changes
+  // Use ref to track if we've already initialized for this session
   useEffect(() => {
-    if (open) {
-      if (elementosIniciais.length > 0) {
-        setElementos(elementosIniciais.map((e, i) => ({ 
-          ...e, 
-          ordem: e.ordem ?? i, 
-          visivel: e.visivel ?? true 
-        })));
-      } else if (iniciarVazio) {
-        // When importing PDF, start empty
-        setElementos([]);
-      } else {
-        // New model without PDF - start empty (no default layout)
-        setElementos([]);
-      }
-      setElementoSelecionado(null);
-      
-      // Set page dimensions
-      if (larguraPaginaInicial && alturaPaginaInicial) {
-        setLarguraPagina(larguraPaginaInicial);
-        setAlturaPagina(alturaPaginaInicial);
-        setFormatoPagina('CUSTOM');
-      }
+    if (!open) {
+      // Reset initialization flag when dialog closes
+      initializedRef.current = false;
+      lastModeloIdRef.current = null;
+      return;
     }
-  }, [open, elementosIniciais, iniciarVazio, larguraPaginaInicial, alturaPaginaInicial]);
+    
+    // Only initialize once per dialog open
+    if (initializedRef.current) {
+      console.log('[Editor] Already initialized, skipping re-init');
+      return;
+    }
+    
+    console.log('[Editor] Initializing with', elementosIniciais.length, 'elements, iniciarVazio:', iniciarVazio);
+    
+    if (elementosIniciais.length > 0) {
+      const mapped = elementosIniciais.map((e, i) => ({ 
+        ...e, 
+        ordem: e.ordem ?? i, 
+        visivel: e.visivel ?? true 
+      }));
+      setElementos(mapped);
+      console.log('[Editor] Set', mapped.length, 'elements from elementosIniciais');
+    } else if (iniciarVazio) {
+      setElementos([]);
+      console.log('[Editor] Starting empty as requested');
+    } else {
+      setElementos([]);
+      console.log('[Editor] Starting empty (default)');
+    }
+    
+    setElementoSelecionado(null);
+    
+    // Set page dimensions
+    if (larguraPaginaInicial && alturaPaginaInicial) {
+      setLarguraPagina(larguraPaginaInicial);
+      setAlturaPagina(alturaPaginaInicial);
+      setFormatoPagina('CUSTOM');
+    }
+    
+    // Mark as initialized
+    initializedRef.current = true;
+  }, [open]); // Only depend on open - elementosIniciais is read once
 
   // Keep ref in sync with state
   useEffect(() => {
