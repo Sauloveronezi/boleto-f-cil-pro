@@ -2181,6 +2181,10 @@ export type Database = {
           similarity: number
         }[]
       }
+      vv_b_add_dynamic_column: {
+        Args: { p_column_name: string; p_column_type?: string }
+        Returns: boolean
+      }
       vv_b_any_admin_exists: { Args: never; Returns: boolean }
       vv_b_has_role: {
         Args: {
@@ -2188,6 +2192,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      vv_b_list_dynamic_columns: {
+        Args: never
+        Returns: {
+          column_name: string
+          data_type: string
+        }[]
       }
     }
     Enums: {

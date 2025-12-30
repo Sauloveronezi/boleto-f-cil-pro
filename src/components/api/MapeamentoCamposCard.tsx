@@ -60,8 +60,8 @@ const CAMPOS_DESTINO_PADRAO = [
   { value: 'cliente', label: 'Nome Cliente', tipo_sugerido: 'string', obrigatorio: false },
 ];
 
-// Separador para campos dinâmicos
-const CAMPO_DINAMICO_PREFIX = 'dados_extras.';
+// Prefixo para campos dinâmicos que serão criados como colunas reais
+const CAMPO_DINAMICO_PREFIX = 'dyn_';
 
 const TIPOS_DADO = [
   { value: 'string', label: 'Texto' },
@@ -69,6 +69,14 @@ const TIPOS_DADO = [
   { value: 'date', label: 'Data' },
   { value: 'boolean', label: 'Booleano' },
 ];
+
+// Tipo de coluna para a função RPC
+const TIPO_COLUNA_MAP: Record<string, string> = {
+  'string': 'TEXT',
+  'number': 'NUMERIC',
+  'date': 'DATE',
+  'boolean': 'BOOLEAN',
+};
 
 export function MapeamentoCamposCard({ 
   integracaoId, 
@@ -184,8 +192,45 @@ export function MapeamentoCamposCard({
       return;
     }
 
+    if (!novoCampo.campo_destino) {
+      toast({
+        title: 'Erro',
+        description: 'Selecione ou crie um campo de destino.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
+      // Se é um campo dinâmico (prefixo dyn_), criar a coluna real na tabela
+      if (novoCampo.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX)) {
+        const tipoColuna = TIPO_COLUNA_MAP[novoCampo.tipo_dado] || 'TEXT';
+        
+        const { data: resultadoColuna, error: erroColuna } = await supabase.rpc(
+          'vv_b_add_dynamic_column',
+          { 
+            p_column_name: novoCampo.campo_destino, 
+            p_column_type: tipoColuna 
+          }
+        );
+
+        if (erroColuna) {
+          console.error('Erro ao criar coluna:', erroColuna);
+          throw new Error(`Erro ao criar coluna na tabela: ${erroColuna.message}`);
+        }
+
+        if (!resultadoColuna) {
+          throw new Error('Não foi possível criar a coluna na tabela.');
+        }
+
+        toast({ 
+          title: 'Coluna criada', 
+          description: `A coluna "${novoCampo.campo_destino}" foi criada na tabela.` 
+        });
+      }
+
+      // Inserir o mapeamento
       const { error } = await supabase
         .from('vv_b_api_mapeamento_campos')
         .insert({
@@ -199,15 +244,18 @@ export function MapeamentoCamposCard({
 
       if (error) throw error;
 
-      toast({ title: 'Campo adicionado' });
+      toast({ title: 'Mapeamento adicionado' });
       setNovoCampo({
         campo_api: '',
-        campo_destino: 'dados_extras',
+        campo_destino: 'numero_nota',
         tipo_dado: 'string',
         obrigatorio: false,
       });
       setNovoCampoApi('');
+      setModoCampoDinamico(false);
+      setNovoCampoDinamico('');
       queryClient.invalidateQueries({ queryKey: ['mapeamento-campos', integracaoId] });
+      queryClient.invalidateQueries({ queryKey: ['colunas-dinamicas'] });
     } catch (error: any) {
       toast({
         title: 'Erro ao adicionar',
@@ -284,23 +332,45 @@ export function MapeamentoCamposCard({
 
   const handleConfirmarCampoDinamico = () => {
     if (!novoCampoDinamico.trim()) return;
-    const nomeCampo = novoCampoDinamico.trim().toLowerCase().replace(/\s+/g, '_');
+    // Sanitizar: apenas letras, números e underscore
+    const nomeCampo = novoCampoDinamico.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
     setNovoCampo({
       ...novoCampo,
       campo_destino: `${CAMPO_DINAMICO_PREFIX}${nomeCampo}`,
     });
+    setModoCampoDinamico(false);
   };
 
-  // Extrair campos dinâmicos já mapeados para exibir no select de destino
+  // Query para buscar colunas dinâmicas já criadas na tabela
+  const { data: colunasDinamicas } = useQuery({
+    queryKey: ['colunas-dinamicas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vv_b_list_dynamic_columns');
+      if (error) throw error;
+      return (data || []) as { column_name: string; data_type: string }[];
+    },
+  });
+
+  // Campos dinâmicos já mapeados ou existentes na tabela
   const camposDinamicosMapeados = useMemo(() => {
-    if (!mapeamentos) return [];
-    return mapeamentos
+    const doColunas = (colunasDinamicas || []).map(c => ({
+      value: c.column_name,
+      label: c.column_name.replace(/^dyn_/, '').replace(/_/g, ' '),
+      tipo: c.data_type,
+    }));
+    
+    // Adicionar também os mapeados que talvez ainda não apareçam na lista de colunas
+    const dosMapeamentos = (mapeamentos || [])
       .filter(m => m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX))
+      .filter(m => !doColunas.some(c => c.value === m.campo_destino))
       .map(m => ({
         value: m.campo_destino,
         label: m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '').replace(/_/g, ' '),
+        tipo: 'text',
       }));
-  }, [mapeamentos]);
+    
+    return [...doColunas, ...dosMapeamentos];
+  }, [mapeamentos, colunasDinamicas]);
 
   return (
     <Card>
