@@ -2221,7 +2221,7 @@ export type Database = {
       perfil_usuario: "administrativo" | "transportadora"
       rl_ticket_status: "available" | "reserved" | "confirmed"
       status_geral: "ativo" | "inativo"
-      vv_b_perfil_usuario: "admin" | "operador" | "visualizador"
+      vv_b_perfil_usuario: "master" | "admin" | "operador" | "visualizador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2352,7 +2352,7 @@ export const Constants = {
       perfil_usuario: ["administrativo", "transportadora"],
       rl_ticket_status: ["available", "reserved", "confirmed"],
       status_geral: ["ativo", "inativo"],
-      vv_b_perfil_usuario: ["admin", "operador", "visualizador"],
+      vv_b_perfil_usuario: ["master", "admin", "operador", "visualizador"],
     },
   },
 } as const
