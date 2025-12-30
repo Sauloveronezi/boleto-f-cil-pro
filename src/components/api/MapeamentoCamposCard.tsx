@@ -53,7 +53,15 @@ const CAMPOS_DESTINO_PADRAO = [
   { value: 'valor', label: 'Valor', tipo_sugerido: 'number', obrigatorio: false },
   { value: 'data_emissao', label: 'Data Emissão', tipo_sugerido: 'date', obrigatorio: false },
   { value: 'data_vencimento', label: 'Data Vencimento', tipo_sugerido: 'date', obrigatorio: false },
+  { value: 'data_desconto', label: 'Data Desconto', tipo_sugerido: 'date', obrigatorio: false },
+  { value: 'valor_desconto', label: 'Valor Desconto', tipo_sugerido: 'number', obrigatorio: false },
+  { value: 'banco', label: 'Banco', tipo_sugerido: 'string', obrigatorio: false },
+  { value: 'empresa', label: 'Empresa (Código)', tipo_sugerido: 'number', obrigatorio: false },
+  { value: 'cliente', label: 'Nome Cliente', tipo_sugerido: 'string', obrigatorio: false },
 ];
+
+// Separador para campos dinâmicos
+const CAMPO_DINAMICO_PREFIX = 'dados_extras.';
 
 const TIPOS_DADO = [
   { value: 'string', label: 'Texto' },
@@ -91,6 +99,9 @@ export function MapeamentoCamposCard({
     tipo_dado: 'string',
     obrigatorio: false,
   });
+
+  const [novoCampoDinamico, setNovoCampoDinamico] = useState('');
+  const [modoCampoDinamico, setModoCampoDinamico] = useState(false);
 
   // Função para rodar teste e mostrar preview
   const handleTestarMapeamento = async () => {
@@ -252,6 +263,17 @@ export function MapeamentoCamposCard({
   };
 
   const handleSelectCampoDestino = (campoDestino: string) => {
+    if (campoDestino === '__novo_campo__') {
+      setModoCampoDinamico(true);
+      setNovoCampoDinamico('');
+      setNovoCampo({
+        ...novoCampo,
+        campo_destino: '',
+        tipo_dado: 'string'
+      });
+      return;
+    }
+    setModoCampoDinamico(false);
     const destino = CAMPOS_DESTINO_PADRAO.find(c => c.value === campoDestino);
     setNovoCampo({
       ...novoCampo,
@@ -259,6 +281,26 @@ export function MapeamentoCamposCard({
       tipo_dado: destino?.tipo_sugerido || 'string'
     });
   };
+
+  const handleConfirmarCampoDinamico = () => {
+    if (!novoCampoDinamico.trim()) return;
+    const nomeCampo = novoCampoDinamico.trim().toLowerCase().replace(/\s+/g, '_');
+    setNovoCampo({
+      ...novoCampo,
+      campo_destino: `${CAMPO_DINAMICO_PREFIX}${nomeCampo}`,
+    });
+  };
+
+  // Extrair campos dinâmicos já mapeados para exibir no select de destino
+  const camposDinamicosMapeados = useMemo(() => {
+    if (!mapeamentos) return [];
+    return mapeamentos
+      .filter(m => m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX))
+      .map(m => ({
+        value: m.campo_destino,
+        label: m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '').replace(/_/g, ' '),
+      }));
+  }, [mapeamentos]);
 
   return (
     <Card>
@@ -439,23 +481,62 @@ export function MapeamentoCamposCard({
                 />
               )}
             </div>
-            <div>
+            <div className="md:col-span-1">
               <Label className="text-xs">Campo Destino</Label>
-              <Select
-                value={novoCampo.campo_destino}
-                onValueChange={handleSelectCampoDestino}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CAMPOS_DESTINO_PADRAO.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label} {c.obrigatorio && <span className="text-destructive">*</span>}
+              {modoCampoDinamico ? (
+                <div className="flex gap-1 mt-1">
+                  <Input
+                    value={novoCampoDinamico}
+                    onChange={(e) => setNovoCampoDinamico(e.target.value)}
+                    placeholder="nome_do_campo"
+                    className="font-mono text-xs"
+                    onBlur={handleConfirmarCampoDinamico}
+                    onKeyDown={(e) => e.key === 'Enter' && handleConfirmarCampoDinamico()}
+                  />
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      setModoCampoDinamico(false);
+                      setNovoCampo({ ...novoCampo, campo_destino: 'numero_nota' });
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Select
+                  value={novoCampo.campo_destino}
+                  onValueChange={handleSelectCampoDestino}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder={novoCampo.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) 
+                      ? novoCampo.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '📦 ')
+                      : undefined
+                    } />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__novo_campo__">
+                      <span className="text-primary font-medium">+ Criar nova coluna (dados_extras)</span>
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {camposDinamicosMapeados.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        <span className="font-mono text-xs">📦 {c.label}</span>
+                      </SelectItem>
+                    ))}
+                    {CAMPOS_DESTINO_PADRAO.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label} {c.obrigatorio && <span className="text-destructive">*</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {novoCampo.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) && !modoCampoDinamico && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  → dados_extras.{novoCampo.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '')}
+                </p>
+              )}
             </div>
             <div>
               <Label className="text-xs">Tipo</Label>
@@ -521,21 +602,32 @@ export function MapeamentoCamposCard({
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value={m.campo_destino}
-                      onValueChange={(v) => handleUpdateCampo(m.id, 'campo_destino', v)}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CAMPOS_DESTINO_PADRAO.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) ? (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        📦 {m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '')}
+                      </Badge>
+                    ) : (
+                      <Select
+                        value={m.campo_destino}
+                        onValueChange={(v) => handleUpdateCampo(m.id, 'campo_destino', v)}
+                      >
+                        <SelectTrigger className="h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {camposDinamicosMapeados.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              <span className="font-mono text-xs">📦 {c.label}</span>
+                            </SelectItem>
+                          ))}
+                          {CAMPOS_DESTINO_PADRAO.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">

@@ -249,19 +249,45 @@ serve(async (req) => {
         let dataEmissao: string | undefined = item?.data_emissao ?? item?.PostingDate;
         let dataVencimento: string | undefined = item?.data_vencimento ?? item?.PaymentDueDate;
         let valor: number | undefined = item?.valor ?? item?.PaymentAmountInPaytCurrency;
+        let dataDesconto: string | undefined = item?.data_desconto;
+        let valorDesconto: number | undefined = item?.valor_desconto;
+        let banco: string | undefined = item?.banco;
+        let empresa: number | undefined = item?.empresa;
+        let cliente: string | undefined = item?.cliente ?? item?.CustomerName;
+        
+        // Campos dinâmicos para dados_extras
+        const dadosExtras: Record<string, any> = {};
 
         // Aplicar mapeamentos personalizados
         if (mapeamentos && mapeamentos.length > 0) {
           for (const map of mapeamentos) {
             const valorApi = getValueByPath(item, map.campo_api);
             if (valorApi !== undefined) {
-              switch (map.campo_destino) {
-                case 'numero_nota': numeroNota = String(valorApi); break;
-                case 'numero_cobranca': numeroCobranca = String(valorApi); break;
-                case 'cliente_cnpj': cnpjCliente = String(valorApi); break;
-                case 'data_emissao': dataEmissao = String(valorApi); break;
-                case 'data_vencimento': dataVencimento = String(valorApi); break;
-                case 'valor': valor = Number(valorApi); break;
+              // Verificar se é campo dinâmico (dados_extras.*)
+              if (map.campo_destino.startsWith('dados_extras.')) {
+                const nomeCampo = map.campo_destino.replace('dados_extras.', '');
+                // Aplicar conversão de tipo
+                switch (map.tipo_dado) {
+                  case 'number': dadosExtras[nomeCampo] = Number(valorApi); break;
+                  case 'date': dadosExtras[nomeCampo] = parseODataDate(valorApi); break;
+                  case 'boolean': dadosExtras[nomeCampo] = Boolean(valorApi); break;
+                  default: dadosExtras[nomeCampo] = String(valorApi); break;
+                }
+              } else {
+                // Campos fixos da tabela
+                switch (map.campo_destino) {
+                  case 'numero_nota': numeroNota = String(valorApi); break;
+                  case 'numero_cobranca': numeroCobranca = String(valorApi); break;
+                  case 'cliente_cnpj': cnpjCliente = String(valorApi); break;
+                  case 'data_emissao': dataEmissao = String(valorApi); break;
+                  case 'data_vencimento': dataVencimento = String(valorApi); break;
+                  case 'valor': valor = Number(valorApi); break;
+                  case 'data_desconto': dataDesconto = String(valorApi); break;
+                  case 'valor_desconto': valorDesconto = Number(valorApi); break;
+                  case 'banco': banco = String(valorApi); break;
+                  case 'empresa': empresa = Number(valorApi); break;
+                  case 'cliente': cliente = String(valorApi); break;
+                }
               }
             }
           }
@@ -311,6 +337,12 @@ serve(async (req) => {
           dataEmissao: parseODataDate(dataEmissao),
           dataVencimento: parseODataDate(dataVencimento),
           valor,
+          dataDesconto: parseODataDate(dataDesconto),
+          valorDesconto,
+          banco,
+          empresa,
+          cliente,
+          dadosExtras: Object.keys(dadosExtras).length > 0 ? dadosExtras : null,
           jsonOriginal: item // Guardar JSON original
         });
 
@@ -411,6 +443,12 @@ serve(async (req) => {
         data_emissao: reg.dataEmissao,
         data_vencimento: reg.dataVencimento,
         valor: reg.valor,
+        data_desconto: reg.dataDesconto,
+        valor_desconto: reg.valorDesconto,
+        banco: reg.banco,
+        empresa: reg.empresa,
+        cliente: reg.cliente,
+        dados_extras: reg.dadosExtras,
         json_original: reg.jsonOriginal, // Salvar JSON original
         sincronizado_em: new Date().toISOString()
       });

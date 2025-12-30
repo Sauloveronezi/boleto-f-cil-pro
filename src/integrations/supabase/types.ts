@@ -1284,13 +1284,17 @@ export type Database = {
       }
       vv_b_boletos_api: {
         Row: {
+          banco: string | null
+          cliente: string | null
           cliente_id: string | null
           created_at: string
           dados_extras: Json | null
           data_delete: string | null
+          data_desconto: string | null
           data_emissao: string | null
           data_vencimento: string | null
           deleted: string | null
+          empresa: number | null
           id: string
           integracao_id: string | null
           json_original: Json | null
@@ -1300,15 +1304,20 @@ export type Database = {
           updated_at: string
           usuario_delete_id: string | null
           valor: number | null
+          valor_desconto: number | null
         }
         Insert: {
+          banco?: string | null
+          cliente?: string | null
           cliente_id?: string | null
           created_at?: string
           dados_extras?: Json | null
           data_delete?: string | null
+          data_desconto?: string | null
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          empresa?: number | null
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
@@ -1318,15 +1327,20 @@ export type Database = {
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
+          valor_desconto?: number | null
         }
         Update: {
+          banco?: string | null
+          cliente?: string | null
           cliente_id?: string | null
           created_at?: string
           dados_extras?: Json | null
           data_delete?: string | null
+          data_desconto?: string | null
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          empresa?: number | null
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
@@ -1336,6 +1350,7 @@ export type Database = {
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
+          valor_desconto?: number | null
         }
         Relationships: [
           {
