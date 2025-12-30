@@ -2212,6 +2212,10 @@ export type Database = {
           data_type: string
         }[]
       }
+      vv_b_soft_delete_mapeamento_campo: {
+        Args: { p_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       perfil_usuario: "administrativo" | "transportadora"

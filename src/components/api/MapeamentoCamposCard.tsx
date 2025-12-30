@@ -283,15 +283,18 @@ export function MapeamentoCamposCard({
         });
         return;
       }
-      
-      const usuarioId = userData.user.id;
 
-      const { error } = await supabase
-        .from('vv_b_api_mapeamento_campos')
-        .update({ deleted: '*', data_delete: new Date().toISOString(), usuario_delete_id: usuarioId })
-        .eq('id', id);
+      // Usar RPC com SECURITY DEFINER para contornar RLS
+      const { data: result, error } = await supabase.rpc(
+        'vv_b_soft_delete_mapeamento_campo',
+        { p_id: id }
+      );
 
       if (error) throw error;
+
+      if (!result) {
+        throw new Error('Não foi possível excluir o mapeamento.');
+      }
 
       toast({ title: 'Campo removido' });
       queryClient.invalidateQueries({ queryKey: ['mapeamento-campos', integracaoId] });
@@ -523,9 +526,10 @@ export function MapeamentoCamposCard({
               </Button>
             </div>
 
-            <div className="max-h-64 overflow-auto">
+            {/* Container com altura fixa e overflow-x visível */}
+            <div className="max-h-64 overflow-x-auto overflow-y-auto">
               <Table className="min-w-max">
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     {previewColumns.map((key) => (
