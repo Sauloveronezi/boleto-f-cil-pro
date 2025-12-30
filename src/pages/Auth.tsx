@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { Loader2, Mail, Lock, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,19 +8,46 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useUsuarioAtual } from '@/hooks/useUsuarioAtual';
 
 export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading: authLoading, signIn, signUp } = useAuth();
+  const { usuarioAtual, isLoading: usuarioLoading, isAtivo, isPendente } = useUsuarioAtual();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already logged in
-  if (!loading && user) {
+  // Redirect based on user status
+  useEffect(() => {
+    if (!authLoading && !usuarioLoading && user) {
+      if (isPendente) {
+        navigate('/aguardando-aprovacao', { replace: true });
+      } else if (isAtivo) {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [user, authLoading, usuarioLoading, isAtivo, isPendente, navigate]);
+
+  // Show loading while checking user status
+  if (authLoading || (user && usuarioLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Already logged in and active
+  if (user && isAtivo) {
     return <Navigate to="/" replace />;
+  }
+
+  // Already logged in but pending
+  if (user && isPendente) {
+    return <Navigate to="/aguardando-aprovacao" replace />;
   }
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -47,8 +74,6 @@ export default function Auth() {
           : error.message,
         variant: 'destructive',
       });
-    } else {
-      navigate('/');
     }
   };
 
@@ -92,14 +117,6 @@ export default function Auth() {
       });
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/50 p-4">
