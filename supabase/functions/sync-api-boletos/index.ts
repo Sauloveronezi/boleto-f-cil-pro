@@ -255,15 +255,18 @@ serve(async (req) => {
         let empresa: number | undefined = item?.empresa;
         let cliente: string | undefined = item?.cliente ?? item?.CustomerName;
         
-        // Campos dinâmicos para dados_extras
+        // Campos dinâmicos para dados_extras (campos que começam com dados_extras.)
         const dadosExtras: Record<string, any> = {};
+        
+        // Colunas dinâmicas reais (prefixo dyn_)
+        const colunasDinamicas: Record<string, any> = {};
 
         // Aplicar mapeamentos personalizados
         if (mapeamentos && mapeamentos.length > 0) {
           for (const map of mapeamentos) {
             const valorApi = getValueByPath(item, map.campo_api);
             if (valorApi !== undefined) {
-              // Verificar se é campo dinâmico (dados_extras.*)
+              // Verificar se é campo dinâmico antigo (dados_extras.*)
               if (map.campo_destino.startsWith('dados_extras.')) {
                 const nomeCampo = map.campo_destino.replace('dados_extras.', '');
                 // Aplicar conversão de tipo
@@ -273,7 +276,17 @@ serve(async (req) => {
                   case 'boolean': dadosExtras[nomeCampo] = Boolean(valorApi); break;
                   default: dadosExtras[nomeCampo] = String(valorApi); break;
                 }
-              } else {
+              } 
+              // Coluna dinâmica real (prefixo dyn_)
+              else if (map.campo_destino.startsWith('dyn_')) {
+                switch (map.tipo_dado) {
+                  case 'number': colunasDinamicas[map.campo_destino] = Number(valorApi); break;
+                  case 'date': colunasDinamicas[map.campo_destino] = parseODataDate(valorApi); break;
+                  case 'boolean': colunasDinamicas[map.campo_destino] = Boolean(valorApi); break;
+                  default: colunasDinamicas[map.campo_destino] = String(valorApi); break;
+                }
+              } 
+              else {
                 // Campos fixos da tabela
                 switch (map.campo_destino) {
                   case 'numero_nota': numeroNota = String(valorApi); break;
@@ -343,6 +356,7 @@ serve(async (req) => {
           empresa,
           cliente,
           dadosExtras: Object.keys(dadosExtras).length > 0 ? dadosExtras : null,
+          colunasDinamicas, // Colunas reais criadas dinamicamente
           jsonOriginal: item // Guardar JSON original
         });
 
@@ -435,7 +449,8 @@ serve(async (req) => {
       }
       chavesDuplicadas.add(chaveUnica);
 
-      registrosParaUpsert.push({
+      // Construir registro base
+      const registroBase: Record<string, any> = {
         integracao_id,
         numero_nota: reg.numeroNota,
         cliente_id: clienteId,
@@ -449,9 +464,18 @@ serve(async (req) => {
         empresa: reg.empresa,
         cliente: reg.cliente,
         dados_extras: reg.dadosExtras,
-        json_original: reg.jsonOriginal, // Salvar JSON original
+        json_original: reg.jsonOriginal,
         sincronizado_em: new Date().toISOString()
-      });
+      };
+      
+      // Adicionar colunas dinâmicas (prefixo dyn_)
+      if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
+        for (const [coluna, valor] of Object.entries(reg.colunasDinamicas)) {
+          registroBase[coluna] = valor;
+        }
+      }
+
+      registrosParaUpsert.push(registroBase);
     }
 
     console.log(`[sync-api-boletos] Registros únicos para upsert: ${registrosParaUpsert.length}`);
