@@ -306,11 +306,10 @@ serve(async (req) => {
           }
         }
 
-        // Validar campos obrigatórios e registrar erro se faltando
+        // Validar campos obrigatórios MÍNIMOS (apenas numero_nota e numero_cobranca)
         const camposFaltando: string[] = [];
         if (!numeroNota) camposFaltando.push('numero_nota');
         if (!numeroCobranca) camposFaltando.push('numero_cobranca');
-        if (!cnpjCliente) camposFaltando.push('cliente_cnpj');
 
         if (camposFaltando.length > 0) {
           registrosComErro.push({
@@ -324,11 +323,12 @@ serve(async (req) => {
           continue;
         }
 
-        const cnpjNormalizado = normalizeCnpj(cnpjCliente);
-        let clienteId = cnpjToId.get(cnpjNormalizado) ?? null;
+        // CNPJ é opcional - se vier, tentaremos vincular ao cliente
+        const cnpjNormalizado = cnpjCliente ? normalizeCnpj(cnpjCliente) : null;
+        let clienteId = cnpjNormalizado ? (cnpjToId.get(cnpjNormalizado) ?? null) : null;
 
-        // Marcar cliente para criação se não existir
-        if (!clienteId && !clientesParaCriar.has(cnpjNormalizado)) {
+        // Marcar cliente para criação apenas se tiver CNPJ e não existir
+        if (cnpjNormalizado && !clienteId && !clientesParaCriar.has(cnpjNormalizado)) {
           clientesParaCriar.set(cnpjNormalizado, {
             cnpj: cnpjCliente,
             razao_social: item?.CustomerName ?? item?.nome_cliente ?? item?.razao_social ?? 
@@ -418,23 +418,11 @@ serve(async (req) => {
     const chavesDuplicadas = new Set<string>();
 
     for (const reg of registrosPreparados) {
-      const clienteId = cnpjToId.get(reg.cnpjNormalizado) ?? null;
+      // Tentar buscar cliente_id se tiver CNPJ, mas NÃO é obrigatório
+      const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Se cliente não foi encontrado/criado, registrar erro
-      if (!clienteId) {
-        registrosComErro.push({
-          integracao_id,
-          json_original: reg.jsonOriginal,
-          tipo_erro: 'cliente_nao_encontrado',
-          mensagem_erro: `Cliente com CNPJ ${reg.cnpjNormalizado} não encontrado ou não pôde ser criado`,
-          campo_erro: 'cliente_cnpj',
-          valor_erro: reg.cnpjNormalizado
-        });
-        continue;
-      }
-      
-      // Criar chave única para evitar duplicatas no batch
-      const chaveUnica = `${reg.numeroNota}|${clienteId}|${reg.numeroCobranca}`;
+      // Criar chave única para evitar duplicatas no batch (sem depender de cliente_id)
+      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}`;
       
       if (chavesDuplicadas.has(chaveUnica)) {
         registrosComErro.push({
@@ -493,7 +481,7 @@ serve(async (req) => {
         const { data, error: upsertError } = await supabase
           .from('vv_b_boletos_api')
           .upsert(batch, {
-            onConflict: 'numero_nota,cliente_id,numero_cobranca',
+            onConflict: 'numero_nota,numero_cobranca',
             ignoreDuplicates: false
           })
           .select('id');
