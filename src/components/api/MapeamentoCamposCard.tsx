@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle, Play, X } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, GripVertical, RefreshCw, Loader2, AlertTriangle, Play, X, Pencil, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,6 +110,10 @@ export function MapeamentoCamposCard({
 
   const [novoCampoDinamico, setNovoCampoDinamico] = useState('');
   const [modoCampoDinamico, setModoCampoDinamico] = useState(false);
+  
+  // Estado para edição inline de mapeamentos existentes
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoCampo, setEditandoCampo] = useState<Partial<MapeamentoCampo>>({});
 
   // Função para rodar teste e mostrar preview
   const handleTestarMapeamento = async () => {
@@ -270,7 +274,17 @@ export function MapeamentoCamposCard({
   const handleRemoveCampo = async (id: string) => {
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const usuarioId = userData.user?.id ?? null;
+      
+      if (!userData.user) {
+        toast({
+          title: 'Erro de autenticação',
+          description: 'Você precisa estar logado para excluir mapeamentos.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      const usuarioId = userData.user.id;
 
       const { error } = await supabase
         .from('vv_b_api_mapeamento_campos')
@@ -293,6 +307,17 @@ export function MapeamentoCamposCard({
 
   const handleUpdateCampo = async (id: string, field: string, value: any) => {
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      if (!userData.user) {
+        toast({
+          title: 'Erro de autenticação',
+          description: 'Você precisa estar logado para atualizar mapeamentos.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('vv_b_api_mapeamento_campos')
         .update({ [field]: value })
@@ -304,6 +329,85 @@ export function MapeamentoCamposCard({
     } catch (error: any) {
       toast({
         title: 'Erro ao atualizar',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Iniciar edição de um mapeamento
+  const handleStartEdit = (mapeamento: MapeamentoCampo) => {
+    setEditandoId(mapeamento.id);
+    setEditandoCampo({
+      campo_api: mapeamento.campo_api,
+      campo_destino: mapeamento.campo_destino,
+      tipo_dado: mapeamento.tipo_dado,
+      obrigatorio: mapeamento.obrigatorio,
+    });
+  };
+
+  // Cancelar edição
+  const handleCancelEdit = () => {
+    setEditandoId(null);
+    setEditandoCampo({});
+  };
+
+  // Salvar edição
+  const handleSaveEdit = async () => {
+    if (!editandoId) return;
+
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      
+      if (!userData.user) {
+        toast({
+          title: 'Erro de autenticação',
+          description: 'Você precisa estar logado para editar mapeamentos.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Se mudou para um novo campo dyn_*, criar a coluna
+      const campoDestinoNovo = editandoCampo.campo_destino || '';
+      const mapeamentoOriginal = mapeamentos?.find(m => m.id === editandoId);
+      
+      if (campoDestinoNovo.startsWith(CAMPO_DINAMICO_PREFIX) && 
+          campoDestinoNovo !== mapeamentoOriginal?.campo_destino) {
+        const tipoColuna = TIPO_COLUNA_MAP[editandoCampo.tipo_dado || 'string'] || 'TEXT';
+        
+        const { data: resultadoColuna, error: erroColuna } = await supabase.rpc(
+          'vv_b_add_dynamic_column',
+          { 
+            p_column_name: campoDestinoNovo, 
+            p_column_type: tipoColuna 
+          }
+        );
+
+        if (erroColuna) {
+          throw new Error(`Erro ao criar coluna na tabela: ${erroColuna.message}`);
+        }
+      }
+
+      const { error } = await supabase
+        .from('vv_b_api_mapeamento_campos')
+        .update({
+          campo_api: editandoCampo.campo_api,
+          campo_destino: editandoCampo.campo_destino,
+          tipo_dado: editandoCampo.tipo_dado,
+          obrigatorio: editandoCampo.obrigatorio,
+        })
+        .eq('id', editandoId);
+
+      if (error) throw error;
+
+      toast({ title: 'Mapeamento atualizado' });
+      setEditandoId(null);
+      setEditandoCampo({});
+      queryClient.invalidateQueries({ queryKey: ['mapeamento-campos', integracaoId] });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao salvar',
         description: error.message,
         variant: 'destructive',
       });
@@ -656,71 +760,156 @@ export function MapeamentoCamposCard({
                 <TableHead>Campo Destino</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead className="text-center">Obrigatório</TableHead>
-                <TableHead className="w-10"></TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mapeamentos.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell>
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                  </TableCell>
-                  <TableCell className="font-mono text-sm max-w-[200px] truncate" title={m.campo_api}>
-                    {m.campo_api}
-                  </TableCell>
-                  <TableCell>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </TableCell>
-                  <TableCell>
-                    {m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) ? (
-                      <Badge variant="outline" className="font-mono text-xs">
-                        📦 {m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '')}
-                      </Badge>
-                    ) : (
-                      <Select
-                        value={m.campo_destino}
-                        onValueChange={(v) => handleUpdateCampo(m.id, 'campo_destino', v)}
-                      >
-                        <SelectTrigger className="h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {camposDinamicosMapeados.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              <span className="font-mono text-xs">📦 {c.label}</span>
-                            </SelectItem>
-                          ))}
-                          {CAMPOS_DESTINO_PADRAO.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {TIPOS_DADO.find(t => t.value === m.tipo_dado)?.label || m.tipo_dado}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={m.obrigatorio}
-                      onCheckedChange={(v) => handleUpdateCampo(m.id, 'obrigatorio', v)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveCampo(m.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {mapeamentos.map((m) => {
+                const isEditing = editandoId === m.id;
+                
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    </TableCell>
+                    
+                    {/* Campo API */}
+                    <TableCell className="font-mono text-sm max-w-[200px]">
+                      {isEditing ? (
+                        <Input
+                          value={editandoCampo.campo_api || ''}
+                          onChange={(e) => setEditandoCampo({ ...editandoCampo, campo_api: e.target.value })}
+                          className="h-8 font-mono text-xs"
+                        />
+                      ) : (
+                        <span className="truncate" title={m.campo_api}>{m.campo_api}</span>
+                      )}
+                    </TableCell>
+                    
+                    <TableCell>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </TableCell>
+                    
+                    {/* Campo Destino */}
+                    <TableCell>
+                      {isEditing ? (
+                        <Select
+                          value={editandoCampo.campo_destino || ''}
+                          onValueChange={(v) => setEditandoCampo({ ...editandoCampo, campo_destino: v })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {camposDinamicosMapeados.map((c) => (
+                              <SelectItem key={c.value} value={c.value}>
+                                <span className="font-mono text-xs">📦 {c.label}</span>
+                              </SelectItem>
+                            ))}
+                            {CAMPOS_DESTINO_PADRAO.map((c) => (
+                              <SelectItem key={c.value} value={c.value}>
+                                {c.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          📦 {m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '')}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          {CAMPOS_DESTINO_PADRAO.find(c => c.value === m.campo_destino)?.label || m.campo_destino}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    
+                    {/* Tipo */}
+                    <TableCell>
+                      {isEditing ? (
+                        <Select
+                          value={editandoCampo.tipo_dado || 'string'}
+                          onValueChange={(v) => setEditandoCampo({ ...editandoCampo, tipo_dado: v })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIPOS_DADO.map((t) => (
+                              <SelectItem key={t.value} value={t.value}>
+                                {t.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="secondary">
+                          {TIPOS_DADO.find(t => t.value === m.tipo_dado)?.label || m.tipo_dado}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    
+                    {/* Obrigatório */}
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={isEditing ? editandoCampo.obrigatorio : m.obrigatorio}
+                        onCheckedChange={(v) => {
+                          if (isEditing) {
+                            setEditandoCampo({ ...editandoCampo, obrigatorio: v });
+                          } else {
+                            handleUpdateCampo(m.id, 'obrigatorio', v);
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    
+                    {/* Ações */}
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleSaveEdit}
+                              title="Salvar"
+                            >
+                              <Check className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleCancelEdit}
+                              title="Cancelar"
+                            >
+                              <X className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEdit(m)}
+                              title="Editar"
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveCampo(m.id)}
+                              title="Excluir"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         ) : (
