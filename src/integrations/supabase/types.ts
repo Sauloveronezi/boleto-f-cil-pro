@@ -1296,6 +1296,7 @@ export type Database = {
           deleted: string | null
           dyn_cidade: string | null
           dyn_conta: number | null
+          dyn_desconto_data: string | null
           dyn_nome_do_cliente: string | null
           empresa: number | null
           id: string
@@ -1322,6 +1323,7 @@ export type Database = {
           deleted?: string | null
           dyn_cidade?: string | null
           dyn_conta?: number | null
+          dyn_desconto_data?: string | null
           dyn_nome_do_cliente?: string | null
           empresa?: number | null
           id?: string
@@ -1348,6 +1350,7 @@ export type Database = {
           deleted?: string | null
           dyn_cidade?: string | null
           dyn_conta?: number | null
+          dyn_desconto_data?: string | null
           dyn_nome_do_cliente?: string | null
           empresa?: number | null
           id?: string
