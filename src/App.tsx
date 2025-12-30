@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import GerarBoletos from "./pages/GerarBoletos";
 import Clientes from "./pages/Clientes";
@@ -28,16 +29,16 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/gerar-boletos" element={<GerarBoletos />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/notas" element={<NotasFiscais />} />
-            <Route path="/bancos" element={<Bancos />} />
-            <Route path="/modelos" element={<Modelos />} />
-            <Route path="/importar-layout" element={<ImportarLayout />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
-            <Route path="/configuracao-cnab" element={<ConfiguracaoCNAB />} />
-            <Route path="/boletos-api" element={<BoletosApi />} />
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/gerar-boletos" element={<ProtectedRoute><GerarBoletos /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+            <Route path="/notas" element={<ProtectedRoute><NotasFiscais /></ProtectedRoute>} />
+            <Route path="/bancos" element={<ProtectedRoute><Bancos /></ProtectedRoute>} />
+            <Route path="/modelos" element={<ProtectedRoute><Modelos /></ProtectedRoute>} />
+            <Route path="/importar-layout" element={<ProtectedRoute><ImportarLayout /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="/configuracao-cnab" element={<ProtectedRoute><ConfiguracaoCNAB /></ProtectedRoute>} />
+            <Route path="/boletos-api" element={<ProtectedRoute><BoletosApi /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
