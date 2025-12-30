@@ -9,40 +9,51 @@ import {
   Building2,
   Upload,
   FileCode,
-  CloudDownload
+  CloudDownload,
+  UserCog,
+  Shield
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const menuItems = [
-  {
-    title: 'Principal',
-    items: [
-      { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-      { icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' },
-      { icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' },
-    ]
-  },
-  {
-    title: 'Cadastros',
-    items: [
-      { icon: Users, label: 'Clientes', href: '/clientes' },
-      { icon: Receipt, label: 'Notas Fiscais', href: '/notas' },
-      { icon: Building2, label: 'Bancos', href: '/bancos' },
-    ]
-  },
-  {
-    title: 'Configurações',
-    items: [
-      { icon: Palette, label: 'Modelos de Layout', href: '/modelos' },
-      { icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' },
-      { icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' },
-      { icon: Settings, label: 'Configurações', href: '/configuracoes' },
-    ]
-  }
-];
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 export function Sidebar() {
   const location = useLocation();
+  const { canAccess } = usePermissoes();
+
+  const menuItems = [
+    {
+      title: 'Principal',
+      items: [
+        { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
+        { icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' },
+        { icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' },
+      ]
+    },
+    {
+      title: 'Cadastros',
+      items: [
+        { icon: Users, label: 'Clientes', href: '/clientes' },
+        { icon: Receipt, label: 'Notas Fiscais', href: '/notas' },
+        { icon: Building2, label: 'Bancos', href: '/bancos' },
+      ]
+    },
+    {
+      title: 'Configurações',
+      items: [
+        { icon: Palette, label: 'Modelos de Layout', href: '/modelos' },
+        { icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' },
+        { icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' },
+        { icon: Settings, label: 'Configurações', href: '/configuracoes' },
+      ]
+    },
+    {
+      title: 'Administração',
+      items: [
+        ...(canAccess('usuarios') ? [{ icon: UserCog, label: 'Usuários', href: '/usuarios' }] : []),
+        ...(canAccess('perfis') ? [{ icon: Shield, label: 'Perfis de Acesso', href: '/perfis-acesso' }] : []),
+      ].filter(Boolean)
+    }
+  ].filter(section => section.items.length > 0);
 
   return (
     <aside className="w-64 bg-sidebar border-r border-sidebar-border min-h-[calc(100vh-60px)]">
