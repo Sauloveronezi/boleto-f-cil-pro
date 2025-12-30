@@ -1294,6 +1294,9 @@ export type Database = {
           data_emissao: string | null
           data_vencimento: string | null
           deleted: string | null
+          dyn_cidade: string | null
+          dyn_conta: number | null
+          dyn_nome_do_cliente: string | null
           empresa: number | null
           id: string
           integracao_id: string | null
@@ -1317,6 +1320,9 @@ export type Database = {
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          dyn_cidade?: string | null
+          dyn_conta?: number | null
+          dyn_nome_do_cliente?: string | null
           empresa?: number | null
           id?: string
           integracao_id?: string | null
@@ -1340,6 +1346,9 @@ export type Database = {
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          dyn_cidade?: string | null
+          dyn_conta?: number | null
+          dyn_nome_do_cliente?: string | null
           empresa?: number | null
           id?: string
           integracao_id?: string | null
