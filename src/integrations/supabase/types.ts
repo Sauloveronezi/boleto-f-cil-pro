@@ -1930,6 +1930,45 @@ export type Database = {
           },
         ]
       }
+      vv_b_perfis_acesso: {
+        Row: {
+          created_at: string | null
+          data_delete: string | null
+          deleted: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          permissoes: Json | null
+          sistema: boolean | null
+          updated_at: string | null
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          permissoes?: Json | null
+          sistema?: boolean | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          permissoes?: Json | null
+          sistema?: boolean | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
       vv_b_templates_pdf: {
         Row: {
           altura_pagina: number | null
@@ -1981,6 +2020,7 @@ export type Database = {
           data_delete: string | null
           deleted: string | null
           id: string
+          perfil_acesso_id: string | null
           role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
           user_id: string
           usuario_delete_id: string | null
@@ -1990,6 +2030,7 @@ export type Database = {
           data_delete?: string | null
           deleted?: string | null
           id?: string
+          perfil_acesso_id?: string | null
           role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
           user_id: string
           usuario_delete_id?: string | null
@@ -1999,11 +2040,76 @@ export type Database = {
           data_delete?: string | null
           deleted?: string | null
           id?: string
+          perfil_acesso_id?: string | null
           role?: Database["public"]["Enums"]["vv_b_perfil_usuario"]
           user_id?: string
           usuario_delete_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_user_roles_perfil_acesso_id_fkey"
+            columns: ["perfil_acesso_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_perfis_acesso"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_usuarios: {
+        Row: {
+          aprovado_por: string | null
+          ativo: boolean | null
+          created_at: string | null
+          data_aprovacao: string | null
+          data_delete: string | null
+          deleted: string | null
+          email: string
+          id: string
+          nome: string | null
+          perfil_acesso_id: string | null
+          updated_at: string | null
+          user_id: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          aprovado_por?: string | null
+          ativo?: boolean | null
+          created_at?: string | null
+          data_aprovacao?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          email: string
+          id?: string
+          nome?: string | null
+          perfil_acesso_id?: string | null
+          updated_at?: string | null
+          user_id: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          aprovado_por?: string | null
+          ativo?: boolean | null
+          created_at?: string | null
+          data_aprovacao?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          email?: string
+          id?: string
+          nome?: string | null
+          perfil_acesso_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_usuarios_perfil_acesso_id_fkey"
+            columns: ["perfil_acesso_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_perfis_acesso"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vv_imagens: {
         Row: {
@@ -2198,6 +2304,25 @@ export type Database = {
         Returns: boolean
       }
       vv_b_any_admin_exists: { Args: never; Returns: boolean }
+      vv_b_aprovar_usuario: {
+        Args: {
+          p_perfil_acesso_id: string
+          p_role?: Database["public"]["Enums"]["vv_b_perfil_usuario"]
+          p_usuario_id: string
+        }
+        Returns: boolean
+      }
+      vv_b_get_admin_emails: {
+        Args: never
+        Returns: {
+          email: string
+        }[]
+      }
+      vv_b_get_user_permissions: { Args: { _user_id: string }; Returns: Json }
+      vv_b_has_permission: {
+        Args: { _acao: string; _modulo: string; _user_id: string }
+        Returns: boolean
+      }
       vv_b_has_role: {
         Args: {
           _role: Database["public"]["Enums"]["vv_b_perfil_usuario"]
@@ -2205,6 +2330,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      vv_b_is_master_or_admin: { Args: { _user_id: string }; Returns: boolean }
       vv_b_list_dynamic_columns: {
         Args: never
         Returns: {
@@ -2216,6 +2342,7 @@ export type Database = {
         Args: { p_id: string }
         Returns: boolean
       }
+      vv_b_user_is_active: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       perfil_usuario: "administrativo" | "transportadora"

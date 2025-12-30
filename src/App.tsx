@@ -16,6 +16,9 @@ import Configuracoes from "./pages/Configuracoes";
 import ConfiguracaoCNAB from "./pages/ConfiguracaoCNAB";
 import BoletosApi from "./pages/BoletosApi";
 import Auth from "./pages/Auth";
+import Usuarios from "./pages/Usuarios";
+import PerfisAcesso from "./pages/PerfisAcesso";
+import AguardandoAprovacao from "./pages/AguardandoAprovacao";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +32,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/gerar-boletos" element={<ProtectedRoute><GerarBoletos /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
@@ -39,6 +43,8 @@ const App = () => (
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/configuracao-cnab" element={<ProtectedRoute><ConfiguracaoCNAB /></ProtectedRoute>} />
             <Route path="/boletos-api" element={<ProtectedRoute><BoletosApi /></ProtectedRoute>} />
+            <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
+            <Route path="/perfis-acesso" element={<ProtectedRoute><PerfisAcesso /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
