@@ -7,10 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { useUsuarios, Usuario } from '@/hooks/useUsuarios';
 import { usePerfisAcesso } from '@/hooks/usePerfisAcesso';
 import { usePermissoes, UserRole } from '@/hooks/usePermissoes';
-import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { useManageUsers } from '@/hooks/useManageUsers';
+import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -18,12 +20,15 @@ export default function Usuarios() {
   const { usuarios, isLoading, aprovarUsuario, desativarUsuario, excluirUsuario, atualizarPerfil } = useUsuarios();
   const { perfis } = usePerfisAcesso();
   const { hasPermission, isMaster } = usePermissoes();
+  const { criarUsuario, alterarSenha } = useManageUsers();
   
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir'>('aprovar');
+  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
   const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
+  const [novoEmail, setNovoEmail] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
 
   const canEdit = hasPermission('usuarios', 'editar');
   const canDelete = hasPermission('usuarios', 'excluir');
@@ -49,7 +54,40 @@ export default function Usuarios() {
     setDialogOpen(true);
   };
 
+  const handleCriarUsuario = () => {
+    setSelectedUsuario(null);
+    setDialogMode('criar');
+    setNovoEmail('');
+    setNovaSenha('');
+    setSelectedPerfilId('');
+    setSelectedRole('operador');
+    setDialogOpen(true);
+  };
+
+  const handleAlterarSenha = (usuario: Usuario) => {
+    setSelectedUsuario(usuario);
+    setDialogMode('senha');
+    setNovaSenha('');
+    setDialogOpen(true);
+  };
+
   const handleConfirmar = async () => {
+    if (dialogMode === 'criar') {
+      await criarUsuario.mutateAsync({ email: novoEmail, password: novaSenha });
+      setDialogOpen(false);
+      setNovoEmail('');
+      setNovaSenha('');
+      return;
+    }
+
+    if (dialogMode === 'senha') {
+      if (!selectedUsuario) return;
+      await alterarSenha.mutateAsync({ userId: selectedUsuario.user_id, password: novaSenha });
+      setDialogOpen(false);
+      setNovaSenha('');
+      return;
+    }
+
     if (!selectedUsuario) return;
 
     if (dialogMode === 'aprovar') {
@@ -98,11 +136,19 @@ export default function Usuarios() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gerenciamento de Usuários</h1>
-          <p className="text-muted-foreground">
-            Aprove, edite ou exclua usuários do sistema
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Gerenciamento de Usuários</h1>
+            <p className="text-muted-foreground">
+              Aprove, edite ou exclua usuários do sistema
+            </p>
+          </div>
+          {isMaster && (
+            <Button onClick={handleCriarUsuario} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Novo Usuário
+            </Button>
+          )}
         </div>
 
         {usuariosPendentes.length > 0 && (
@@ -200,6 +246,16 @@ export default function Usuarios() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        {isMaster && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleAlterarSenha(usuario)}
+                            title="Alterar senha"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         {canEdit && (
                           <Button
                             size="sm"
@@ -243,13 +299,54 @@ export default function Usuarios() {
                 {dialogMode === 'aprovar' && 'Aprovar Usuário'}
                 {dialogMode === 'editar' && 'Editar Usuário'}
                 {dialogMode === 'excluir' && 'Excluir Usuário'}
+                {dialogMode === 'criar' && 'Novo Usuário'}
+                {dialogMode === 'senha' && 'Alterar Senha'}
               </DialogTitle>
               <DialogDescription>
                 {dialogMode === 'aprovar' && `Defina o perfil de acesso para ${selectedUsuario?.email}`}
                 {dialogMode === 'editar' && `Altere o perfil de acesso de ${selectedUsuario?.email}`}
                 {dialogMode === 'excluir' && `Tem certeza que deseja excluir ${selectedUsuario?.email}?`}
+                {dialogMode === 'criar' && 'Preencha os dados do novo usuário'}
+                {dialogMode === 'senha' && `Altere a senha de ${selectedUsuario?.email}`}
               </DialogDescription>
             </DialogHeader>
+
+            {dialogMode === 'criar' && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    placeholder="email@exemplo.com"
+                    value={novoEmail}
+                    onChange={(e) => setNovoEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Senha</Label>
+                  <Input
+                    type="password"
+                    placeholder="Digite a senha"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {dialogMode === 'senha' && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nova Senha</Label>
+                  <Input
+                    type="password"
+                    placeholder="Digite a nova senha"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
 
             {(dialogMode === 'aprovar' || dialogMode === 'editar') && (
               <div className="space-y-4 py-4">
@@ -296,18 +393,24 @@ export default function Usuarios() {
                 onClick={handleConfirmar}
                 variant={dialogMode === 'excluir' ? 'destructive' : 'default'}
                 disabled={
-                  (dialogMode !== 'excluir' && !selectedPerfilId) ||
+                  (dialogMode === 'criar' && (!novoEmail || !novaSenha)) ||
+                  (dialogMode === 'senha' && !novaSenha) ||
+                  ((dialogMode === 'aprovar' || dialogMode === 'editar') && !selectedPerfilId) ||
                   aprovarUsuario.isPending ||
                   atualizarPerfil.isPending ||
-                  excluirUsuario.isPending
+                  excluirUsuario.isPending ||
+                  criarUsuario.isPending ||
+                  alterarSenha.isPending
                 }
               >
-                {(aprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending) && (
+                {(aprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending || criarUsuario.isPending || alterarSenha.isPending) && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 {dialogMode === 'aprovar' && 'Aprovar'}
                 {dialogMode === 'editar' && 'Salvar'}
                 {dialogMode === 'excluir' && 'Excluir'}
+                {dialogMode === 'criar' && 'Criar'}
+                {dialogMode === 'senha' && 'Alterar Senha'}
               </Button>
             </DialogFooter>
           </DialogContent>
