@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsuarioAtual } from '@/hooks/useUsuarioAtual';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -19,6 +20,9 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   // Redirect based on user status
   useEffect(() => {
@@ -74,6 +78,44 @@ export default function Auth() {
           : error.message,
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!forgotEmail) {
+      toast({
+        title: 'Campo obrigatório',
+        description: 'Preencha o e-mail.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSendingReset(true);
+    
+    const redirectUrl = `${window.location.origin}/reset-password`;
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: redirectUrl,
+    });
+    
+    setIsSendingReset(false);
+
+    if (error) {
+      toast({
+        title: 'Erro ao enviar',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'E-mail enviado!',
+        description: 'Verifique sua caixa de entrada para redefinir a senha.',
+      });
+      setShowForgotPassword(false);
+      setForgotEmail('');
     }
   };
 
@@ -170,7 +212,53 @@ export default function Auth() {
                   )}
                   Entrar
                 </Button>
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="w-full text-sm"
+                  onClick={() => setShowForgotPassword(true)}
+                >
+                  Esqueci minha senha
+                </Button>
               </form>
+              
+              {showForgotPassword && (
+                <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                  <h4 className="font-medium mb-2">Recuperar senha</h4>
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="forgot-email">E-mail</Label>
+                      <Input
+                        id="forgot-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => {
+                          setShowForgotPassword(false);
+                          setForgotEmail('');
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button type="submit" className="flex-1" disabled={isSendingReset}>
+                        {isSendingReset ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Enviar'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="signup">
