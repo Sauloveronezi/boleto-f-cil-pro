@@ -51,7 +51,7 @@ export function useUsuarioAtual() {
   });
 
   const isAtivo = usuarioAtual?.ativo ?? false;
-  const isPendente = usuarioAtual !== null && !usuarioAtual.ativo;
+  const isPendente = usuarioAtual != null && usuarioAtual.ativo === false;
   const perfilNome = usuarioAtual?.perfil_acesso?.nome ?? null;
 
   return {
