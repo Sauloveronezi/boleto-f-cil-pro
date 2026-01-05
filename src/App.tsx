@@ -16,6 +16,7 @@ import Configuracoes from "./pages/Configuracoes";
 import ConfiguracaoCNAB from "./pages/ConfiguracaoCNAB";
 import BoletosApi from "./pages/BoletosApi";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Usuarios from "./pages/Usuarios";
 import PerfisAcesso from "./pages/PerfisAcesso";
 import AguardandoAprovacao from "./pages/AguardandoAprovacao";
@@ -32,6 +33,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/gerar-boletos" element={<ProtectedRoute><GerarBoletos /></ProtectedRoute>} />
