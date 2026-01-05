@@ -37,7 +37,7 @@ export function useUsuarioAtual() {
         `)
         .eq('user_id', user.id)
         .or('deleted.is.null,deleted.eq.')
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         console.error('Erro ao buscar usuário atual:', error);
