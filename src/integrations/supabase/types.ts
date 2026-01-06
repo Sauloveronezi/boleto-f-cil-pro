@@ -1297,7 +1297,9 @@ export type Database = {
           dyn_cidade: string | null
           dyn_conta: number | null
           dyn_desconto_data: string | null
+          dyn_desconto1: string | null
           dyn_nome_do_cliente: string | null
+          dyn_zonatransporte: string | null
           empresa: number | null
           id: string
           integracao_id: string | null
@@ -1324,7 +1326,9 @@ export type Database = {
           dyn_cidade?: string | null
           dyn_conta?: number | null
           dyn_desconto_data?: string | null
+          dyn_desconto1?: string | null
           dyn_nome_do_cliente?: string | null
+          dyn_zonatransporte?: string | null
           empresa?: number | null
           id?: string
           integracao_id?: string | null
@@ -1351,7 +1355,9 @@ export type Database = {
           dyn_cidade?: string | null
           dyn_conta?: number | null
           dyn_desconto_data?: string | null
+          dyn_desconto1?: string | null
           dyn_nome_do_cliente?: string | null
+          dyn_zonatransporte?: string | null
           empresa?: number | null
           id?: string
           integracao_id?: string | null
