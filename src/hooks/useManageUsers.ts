@@ -7,9 +7,21 @@ export function useManageUsers() {
   const queryClient = useQueryClient();
 
   const criarUsuario = useMutation({
-    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+    mutationFn: async ({ 
+      email, 
+      password, 
+      perfilAcessoId, 
+      role,
+      nome 
+    }: { 
+      email: string; 
+      password: string; 
+      perfilAcessoId: string;
+      role: string;
+      nome?: string;
+    }) => {
       const response = await supabase.functions.invoke('manage-users', {
-        body: { action: 'create', email, password }
+        body: { action: 'create', email, password, perfilAcessoId, role, nome }
       });
 
       // Verificar erro da resposta (inclui erros 4xx/5xx)

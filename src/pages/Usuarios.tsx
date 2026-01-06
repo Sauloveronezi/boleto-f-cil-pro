@@ -29,6 +29,7 @@ export default function Usuarios() {
   const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
   const [novoEmail, setNovoEmail] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
+  const [novoNome, setNovoNome] = useState('');
 
   const canEdit = hasPermission('usuarios', 'editar');
   const canDelete = hasPermission('usuarios', 'excluir');
@@ -59,6 +60,7 @@ export default function Usuarios() {
     setDialogMode('criar');
     setNovoEmail('');
     setNovaSenha('');
+    setNovoNome('');
     setSelectedPerfilId('');
     setSelectedRole('operador');
     setDialogOpen(true);
@@ -73,10 +75,17 @@ export default function Usuarios() {
 
   const handleConfirmar = async () => {
     if (dialogMode === 'criar') {
-      await criarUsuario.mutateAsync({ email: novoEmail, password: novaSenha });
+      await criarUsuario.mutateAsync({ 
+        email: novoEmail, 
+        password: novaSenha,
+        perfilAcessoId: selectedPerfilId,
+        role: selectedRole,
+        nome: novoNome || undefined
+      });
       setDialogOpen(false);
       setNovoEmail('');
       setNovaSenha('');
+      setNovoNome('');
       return;
     }
 
@@ -314,6 +323,15 @@ export default function Usuarios() {
             {dialogMode === 'criar' && (
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
+                  <Label>Nome</Label>
+                  <Input
+                    type="text"
+                    placeholder="Nome do usuário"
+                    value={novoNome}
+                    onChange={(e) => setNovoNome(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Email</Label>
                   <Input
                     type="email"
@@ -326,10 +344,39 @@ export default function Usuarios() {
                   <Label>Senha</Label>
                   <Input
                     type="password"
-                    placeholder="Digite a senha"
+                    placeholder="Digite a senha (mínimo 6 caracteres)"
                     value={novaSenha}
                     onChange={(e) => setNovaSenha(e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Perfil de Acesso</Label>
+                  <Select value={selectedPerfilId} onValueChange={setSelectedPerfilId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um perfil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {perfis.map((perfil) => (
+                        <SelectItem key={perfil.id} value={perfil.id}>
+                          {perfil.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Role do Sistema</Label>
+                  <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isMaster && <SelectItem value="master">Master</SelectItem>}
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="operador">Operador</SelectItem>
+                      <SelectItem value="visualizador">Visualizador</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
@@ -393,8 +440,8 @@ export default function Usuarios() {
                 onClick={handleConfirmar}
                 variant={dialogMode === 'excluir' ? 'destructive' : 'default'}
                 disabled={
-                  (dialogMode === 'criar' && (!novoEmail || !novaSenha)) ||
-                  (dialogMode === 'senha' && !novaSenha) ||
+                  (dialogMode === 'criar' && (!novoEmail || !novaSenha || novaSenha.length < 6 || !selectedPerfilId || !selectedRole)) ||
+                  (dialogMode === 'senha' && (!novaSenha || novaSenha.length < 6)) ||
                   ((dialogMode === 'aprovar' || dialogMode === 'editar') && !selectedPerfilId) ||
                   aprovarUsuario.isPending ||
                   atualizarPerfil.isPending ||

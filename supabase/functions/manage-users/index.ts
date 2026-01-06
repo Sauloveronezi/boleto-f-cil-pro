@@ -55,7 +55,7 @@ serve(async (req) => {
     }
 
     const body = await req.json()
-    const { action, email, password, userId } = body
+    const { action, email, password, userId, perfilAcessoId, role, nome } = body
 
     if (action === 'create') {
       // Criar novo usuário
@@ -63,6 +63,11 @@ serve(async (req) => {
         throw new Error('Email e senha são obrigatórios')
       }
 
+      if (!perfilAcessoId || !role) {
+        throw new Error('Perfil de acesso e role são obrigatórios')
+      }
+
+      // 1. Criar usuário no auth
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -71,6 +76,43 @@ serve(async (req) => {
 
       if (createError) {
         throw new Error(createError.message)
+      }
+
+      const newUserId = newUser.user.id
+
+      // 2. Criar registro em vv_b_usuarios
+      const { error: usuarioError } = await supabaseAdmin
+        .from('vv_b_usuarios')
+        .insert({
+          user_id: newUserId,
+          email: email,
+          nome: nome || email.split('@')[0],
+          ativo: true,
+          perfil_acesso_id: perfilAcessoId,
+          data_aprovacao: new Date().toISOString(),
+          aprovado_por: user.id
+        })
+
+      if (usuarioError) {
+        // Rollback: excluir usuário do auth se falhar a inserção
+        await supabaseAdmin.auth.admin.deleteUser(newUserId)
+        throw new Error('Erro ao criar registro do usuário: ' + usuarioError.message)
+      }
+
+      // 3. Criar registro em vv_b_user_roles
+      const { error: roleError } = await supabaseAdmin
+        .from('vv_b_user_roles')
+        .insert({
+          user_id: newUserId,
+          role: role,
+          perfil_acesso_id: perfilAcessoId
+        })
+
+      if (roleError) {
+        // Rollback: excluir registros criados
+        await supabaseAdmin.from('vv_b_usuarios').delete().eq('user_id', newUserId)
+        await supabaseAdmin.auth.admin.deleteUser(newUserId)
+        throw new Error('Erro ao criar role do usuário: ' + roleError.message)
       }
 
       return new Response(
