@@ -8,14 +8,18 @@ export function useManageUsers() {
 
   const criarUsuario = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
       const response = await supabase.functions.invoke('manage-users', {
         body: { action: 'create', email, password }
       });
 
+      // Verificar erro da resposta (inclui erros 4xx/5xx)
       if (response.error) {
-        throw new Error(response.error.message);
+        // Tentar extrair mensagem do corpo da resposta
+        const errorBody = response.data;
+        if (errorBody?.error) {
+          throw new Error(errorBody.error);
+        }
+        throw new Error(response.error.message || 'Erro ao criar usuário');
       }
 
       if (response.data?.error) {
