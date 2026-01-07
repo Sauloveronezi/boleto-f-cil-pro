@@ -3,45 +3,55 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
-type UserRole = 'admin' | 'operador' | 'visualizador';
+type UserRole = 'master' | 'admin' | 'operador' | 'visualizador';
 
 export function useUserRole() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Buscar role do usuário atual
-  const { data: userRole, isLoading } = useQuery({
-    queryKey: ['user-role', user?.id],
+  // Buscar todas as roles do usuário atual (suporta múltiplas roles)
+  const { data: userRoles, isLoading } = useQuery({
+    queryKey: ['user-roles', user?.id],
     queryFn: async () => {
-      if (!user?.id) return null;
+      if (!user?.id) return [];
 
       const { data, error } = await supabase
         .from('vv_b_user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .is('deleted', null)
-        .single();
+        .or('deleted.is.null,deleted.eq.');
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao buscar role:', error);
-        return null;
+      if (error) {
+        console.error('Erro ao buscar roles:', error);
+        return [];
       }
 
-      return data?.role as UserRole | null;
+      return (data?.map(r => r.role) ?? []) as UserRole[];
     },
     enabled: !!user?.id,
   });
 
-  // Verificar se existe algum admin no sistema
+  // Determinar role principal por prioridade: master > admin > operador > visualizador
+  const getPrimaryRole = (roles: UserRole[]): UserRole | null => {
+    if (roles.includes('master')) return 'master';
+    if (roles.includes('admin')) return 'admin';
+    if (roles.includes('operador')) return 'operador';
+    if (roles.includes('visualizador')) return 'visualizador';
+    return null;
+  };
+
+  const userRole = getPrimaryRole(userRoles ?? []);
+
+  // Verificar se existe algum admin ou master no sistema
   const { data: hasAnyAdmin } = useQuery({
     queryKey: ['has-any-admin'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vv_b_user_roles')
         .select('id')
-        .eq('role', 'admin')
-        .is('deleted', null)
+        .in('role', ['admin', 'master'])
+        .or('deleted.is.null,deleted.eq.')
         .limit(1);
 
       if (error) {
@@ -59,12 +69,12 @@ export function useUserRole() {
     mutationFn: async () => {
       if (!user?.id) throw new Error('Usuário não autenticado');
 
-      // Verificar novamente se já existe admin
+      // Verificar novamente se já existe admin ou master
       const { data: existingAdmin } = await supabase
         .from('vv_b_user_roles')
         .select('id')
-        .eq('role', 'admin')
-        .is('deleted', null)
+        .in('role', ['admin', 'master'])
+        .or('deleted.is.null,deleted.eq.')
         .limit(1);
 
       if (existingAdmin && existingAdmin.length > 0) {
@@ -81,7 +91,7 @@ export function useUserRole() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-role'] });
+      queryClient.invalidateQueries({ queryKey: ['user-roles'] });
       queryClient.invalidateQueries({ queryKey: ['has-any-admin'] });
       toast({
         title: 'Permissão concedida',
@@ -97,15 +107,18 @@ export function useUserRole() {
     },
   });
 
-  const canEdit = userRole === 'admin' || userRole === 'operador';
-  const isAdmin = userRole === 'admin';
-  const canBootstrapAdmin = !!user && !hasAnyAdmin && !userRole;
+  const isMaster = (userRoles ?? []).includes('master');
+  const isAdmin = (userRoles ?? []).includes('admin');
+  const canEdit = isMaster || isAdmin || (userRoles ?? []).includes('operador');
+  const canBootstrapAdmin = !!user && !hasAnyAdmin && (!userRoles || userRoles.length === 0);
 
   return {
     userRole,
+    userRoles,
     isLoading,
     canEdit,
     isAdmin,
+    isMaster,
     hasAnyAdmin,
     canBootstrapAdmin,
     bootstrapAdmin,
