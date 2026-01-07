@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Search, Filter, Printer, FileText, RefreshCw } from 'lucide-react';
+import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers } from 'lucide-react';
 import { useBoletosApi, useSyncApi, useApiIntegracoes } from '@/hooks/useApiIntegracao';
 import { useClientes } from '@/hooks/useClientes';
 import { useBancos } from '@/hooks/useBancos';
@@ -30,6 +30,10 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
+import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 
 const ESTADOS_BRASIL = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -51,6 +55,7 @@ export default function BoletosApi() {
   const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
+  const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
@@ -63,6 +68,21 @@ export default function BoletosApi() {
     cnpj: filtros.cnpj || undefined,
     estado: filtros.estado || undefined,
     cidade: filtros.cidade || undefined
+  });
+
+  // Buscar modelos de layout disponíveis
+  const { data: modelos } = useQuery({
+    queryKey: ['modelos-boleto-select'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_modelos_boleto')
+        .select('id, nome_modelo, banco_id, pdf_storage_path')
+        .or('deleted.is.null,deleted.eq.')
+        .order('nome_modelo');
+      
+      if (error) throw error;
+      return data || [];
+    }
   });
 
   const syncApi = useSyncApi();
@@ -145,7 +165,7 @@ export default function BoletosApi() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const handleImprimirSelecionados = () => {
+  const handleImprimirSelecionados = async () => {
     if (selecionados.size === 0) {
       toast({
         title: 'Nenhum boleto selecionado',
@@ -175,10 +195,151 @@ export default function BoletosApi() {
     }
 
     const configuracao = configuracoes?.find(c => c.banco_id === bancoSelecionado);
-
-    // Converter boletos da API para formato de NotaFiscal
     const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
-    
+
+    // Se tiver modelo selecionado, usar o renderizador com modelo
+    if (modeloSelecionado) {
+      const modelo = modelos?.find(m => m.id === modeloSelecionado);
+      
+      if (!modelo) {
+        toast({
+          title: 'Modelo não encontrado',
+          description: 'Selecione um modelo válido',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (!modelo.pdf_storage_path) {
+        toast({
+          title: 'Modelo sem PDF',
+          description: 'Este modelo não possui PDF base. Selecione outro modelo ou reanexe o PDF.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      try {
+        toast({
+          title: 'Gerando boletos...',
+          description: 'Aguarde enquanto os boletos são processados.',
+        });
+
+        // Buscar campos mapeados do modelo
+        const { data: modeloCompleto, error: modeloError } = await supabase
+          .from('vv_b_modelos_boleto')
+          .select('campos_mapeados')
+          .eq('id', modeloSelecionado)
+          .single();
+
+        if (modeloError) throw new Error('Erro ao carregar modelo');
+
+        const elementos: ElementoParaRender[] = (modeloCompleto?.campos_mapeados as any[])?.map((c: any) => ({
+          id: c.id || `field_${Date.now()}`,
+          tipo: c.tipo || 'campo',
+          nome: c.nome || '',
+          x: c.posicao_x ?? c.x ?? 0,
+          y: c.posicao_y ?? c.y ?? 0,
+          largura: c.largura || 100,
+          altura: c.altura || 20,
+          variavel: c.variavel || '',
+          textoFixo: c.textoFixo,
+          fonte: c.fonte,
+          tamanhoFonte: c.tamanhoFonte,
+          negrito: c.negrito,
+          italico: c.italico,
+          alinhamento: c.alinhamento,
+          corTexto: c.corTexto,
+          corFundo: c.corFundo,
+          bordaSuperior: c.bordaSuperior,
+          bordaInferior: c.bordaInferior,
+          bordaEsquerda: c.bordaEsquerda,
+          bordaDireita: c.bordaDireita,
+          espessuraBorda: c.espessuraBorda,
+          corBorda: c.corBorda,
+          visivel: c.visivel ?? true,
+        })) || [];
+
+        // Mapear dados dos boletos para o formato do renderizador
+        const dadosBoletos: DadosBoletoModelo[] = boletosSelecionados.map((boleto: any) => {
+          const cliente = boleto.cliente;
+          const nota = {
+            id: boleto.id,
+            numero_nota: boleto.numero_nota,
+            cliente_id: boleto.cliente_id || '',
+            data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
+            data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
+            valor_titulo: boleto.valor || 0,
+            moeda: 'BRL',
+          };
+
+          // Calcular código de barras
+          const dadosCodigoBarras = gerarCodigoBarras(banco as any, nota as any, configuracao as any);
+
+          return {
+            banco_nome: banco.nome_banco,
+            banco_codigo: banco.codigo_banco,
+            agencia: configuracao?.agencia || '',
+            conta: configuracao?.conta || '',
+            beneficiario_nome: '', // Pode ser preenchido com dados da empresa
+            beneficiario_cnpj: '',
+            pagador_nome: cliente?.razao_social || boleto.dyn_nome_do_cliente || '',
+            pagador_cnpj: cliente?.cnpj || '',
+            pagador_endereco: cliente?.endereco || '',
+            pagador_cidade_uf: cliente ? `${cliente.cidade || ''} - ${cliente.estado || ''}` : boleto.dyn_cidade || '',
+            pagador_cep: cliente?.cep || '',
+            cliente_razao_social: cliente?.razao_social || boleto.dyn_nome_do_cliente || '',
+            cliente_cnpj: cliente?.cnpj || '',
+            cliente_endereco: cliente?.endereco || '',
+            nosso_numero: dadosCodigoBarras.nossoNumero,
+            numero_documento: boleto.numero_cobranca || boleto.numero_nota,
+            numero_nota: boleto.numero_nota,
+            data_documento: boleto.data_emissao ? new Date(boleto.data_emissao).toLocaleDateString('pt-BR') : '',
+            data_vencimento: boleto.data_vencimento ? new Date(boleto.data_vencimento).toLocaleDateString('pt-BR') : '',
+            data_emissao: boleto.data_emissao ? new Date(boleto.data_emissao).toLocaleDateString('pt-BR') : '',
+            data_processamento: new Date().toLocaleDateString('pt-BR'),
+            valor_documento: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor || 0),
+            valor_titulo: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor || 0),
+            carteira: configuracao?.carteira || '',
+            linha_digitavel: dadosCodigoBarras.linhaDigitavel,
+            codigo_barras: dadosCodigoBarras.codigoBarras,
+            local_pagamento: 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO',
+            instrucoes: configuracao?.texto_instrucao_padrao || '',
+            // Campos dinâmicos da API
+            dyn_cidade: boleto.dyn_cidade || '',
+            dyn_conta: boleto.dyn_conta?.toString() || '',
+            dyn_desconto_data: boleto.dyn_desconto_data || '',
+            dyn_desconto1: boleto.dyn_desconto1 || '',
+            dyn_nome_do_cliente: boleto.dyn_nome_do_cliente || '',
+            dyn_zonatransporte: boleto.dyn_zonatransporte || '',
+          };
+        });
+
+        const pdfBytes = await gerarBoletosComModelo(
+          modelo.pdf_storage_path,
+          elementos,
+          dadosBoletos
+        );
+
+        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
+
+        toast({
+          title: 'PDF gerado com sucesso',
+          description: `${selecionados.size} boleto(s) gerado(s) com o modelo "${modelo.nome_modelo}"`,
+        });
+      } catch (error: any) {
+        console.error('[BoletosApi] Erro ao gerar boletos com modelo:', error);
+        toast({
+          title: 'Erro ao gerar PDF',
+          description: error.message,
+          variant: 'destructive'
+        });
+      }
+      return;
+    }
+
+    // Fallback: usar gerador padrão sem modelo
     const notasParaImprimir = boletosSelecionados.map((boleto: any) => ({
       id: boleto.id,
       numero_nota: boleto.numero_nota,
@@ -277,14 +438,30 @@ export default function BoletosApi() {
                 ))}
               </SelectContent>
             </Select>
+            <Select 
+              value={modeloSelecionado} 
+              onValueChange={setModeloSelecionado}
+            >
+              <SelectTrigger className="w-[200px]">
+                <Layers className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Modelo de layout" />
+              </SelectTrigger>
+              <SelectContent>
+                {modelos?.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nome_modelo}
+                    {m.pdf_storage_path && ' (PDF)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button 
               className="gap-2"
               onClick={handleImprimirSelecionados}
               disabled={selecionados.size === 0}
             >
               <Printer className="h-4 w-4" />
-              Imprimir Selecionados ({selecionados.size})
-            </Button>
+              Imprimir ({selecionados.size})</Button>
           </div>
         </div>
 
