@@ -52,31 +52,41 @@ export function usePermissoes() {
     enabled: !!user?.id
   });
 
-  const { data: userRole, isLoading: isLoadingRole } = useQuery({
-    queryKey: ['user-role', user?.id],
+  const { data: userRoles, isLoading: isLoadingRole } = useQuery({
+    queryKey: ['user-roles', user?.id],
     queryFn: async () => {
-      if (!user?.id) return null;
+      if (!user?.id) return [];
       
       const { data, error } = await supabase
         .from('vv_b_user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .or('deleted.is.null,deleted.eq.')
-        .single();
+        .or('deleted.is.null,deleted.eq.');
       
       if (error) {
-        console.error('Erro ao buscar role do usuário:', error);
-        return null;
+        console.error('Erro ao buscar roles do usuário:', error);
+        return [];
       }
       
-      return data?.role as UserRole | null;
+      return (data?.map(r => r.role) ?? []) as UserRole[];
     },
     enabled: !!user?.id
   });
 
+  // Determine primary role by priority: master > admin > operador > visualizador
+  const getPrimaryRole = (roles: UserRole[]): UserRole | null => {
+    if (roles.includes('master')) return 'master';
+    if (roles.includes('admin')) return 'admin';
+    if (roles.includes('operador')) return 'operador';
+    if (roles.includes('visualizador')) return 'visualizador';
+    return null;
+  };
+
+  const userRole = getPrimaryRole(userRoles ?? []);
+
   const isAtivo = usuarioInfo?.ativo ?? false;
-  const isMaster = userRole === 'master';
-  const isAdmin = userRole === 'admin';
+  const isMaster = (userRoles ?? []).includes('master');
+  const isAdmin = (userRoles ?? []).includes('admin');
   const isMasterOrAdmin = isMaster || isAdmin;
   
   const permissoes: Permissoes = (usuarioInfo?.perfil_acesso?.permissoes as unknown as Permissoes) || defaultPermissoes;
