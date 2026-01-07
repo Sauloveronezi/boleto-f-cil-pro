@@ -42,15 +42,16 @@ serve(async (req) => {
       throw new Error('Não autorizado')
     }
 
-    // Verificar se o usuário é Master
-    const { data: roleData, error: roleError } = await supabaseAdmin
+    // Verificar se o usuário é Master (suporta múltiplas roles)
+    const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('vv_b_user_roles')
       .select('role')
       .eq('user_id', user.id)
       .or('deleted.is.null,deleted.eq.')
-      .single()
 
-    if (roleError || roleData?.role !== 'master') {
+    const roles = rolesData?.map(r => r.role) ?? []
+    
+    if (roleError || !roles.includes('master')) {
       throw new Error('Apenas usuários Master podem gerenciar usuários')
     }
 
