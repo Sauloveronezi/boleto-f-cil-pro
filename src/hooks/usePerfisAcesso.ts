@@ -169,10 +169,12 @@ export function usePerfisAcesso() {
       }
 
       const { error } = await supabase
-        .rpc('vv_b_soft_delete', {
-          p_table_name: 'vv_b_perfis_acesso',
-          p_id: perfilId
-        });
+        .from('vv_b_perfis_acesso')
+        .update({
+          deleted: 'X',
+          data_delete: new Date().toISOString()
+        })
+        .eq('id', perfilId);
       
       if (error) throw error;
     },

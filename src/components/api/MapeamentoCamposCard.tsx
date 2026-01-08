@@ -90,17 +90,21 @@ export function MapeamentoCamposCard({
   const { hasPermission } = usePermissoes();
   const canEdit = hasPermission('integracoes', 'editar');
 
-  // Buscar todas as colunas da tabela real para validação
-  const { data: todasColunasTabela } = useQuery({
-    queryKey: ['todas-colunas-tabela'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('vv_b_get_table_columns', { 
-        p_table_name: 'vv_b_boletos_api' 
-      });
-      if (error) return [];
-      return data as { column_name: string; data_type: string }[];
-    },
-  });
+  // Colunas conhecidas da tabela vv_b_boletos_api
+  const todasColunasTabela = [
+    { column_name: 'id', data_type: 'uuid' },
+    { column_name: 'numero_nota', data_type: 'text' },
+    { column_name: 'numero_cobranca', data_type: 'text' },
+    { column_name: 'cliente', data_type: 'text' },
+    { column_name: 'valor', data_type: 'numeric' },
+    { column_name: 'data_vencimento', data_type: 'timestamp' },
+    { column_name: 'data_emissao', data_type: 'timestamp' },
+    { column_name: 'banco', data_type: 'text' },
+    { column_name: 'endereco', data_type: 'text' },
+    { column_name: 'cep', data_type: 'text' },
+    { column_name: 'bairro', data_type: 'text' },
+    { column_name: 'uf', data_type: 'text' },
+  ];
 
   const [loading, setLoading] = useState(false);
   const [testando, setTestando] = useState(false);
@@ -337,17 +341,7 @@ export function MapeamentoCamposCard({
         .eq('id', id);
 
       if (updateError) {
-        // Se der erro de permissão, tentar via RPC (caso RLS bloqueie update direto mas permita RPC)
-        console.warn('Erro no update direto, tentando RPC:', updateError);
-        const { data: result, error: rpcError } = await supabase.rpc(
-          'vv_b_soft_delete',
-          { 
-            p_table_name: 'vv_b_api_mapeamento_campos',
-            p_id: id 
-          }
-        );
-        
-        if (rpcError) throw rpcError;
+        throw updateError;
       } else {
         // Se update direto funcionou, tentar registrar auditoria (best effort)
         try {

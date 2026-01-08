@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { usePerfisAcesso, PerfilAcesso, Permissoes, MODULOS, ACOES } from '@/hooks/usePerfisAcesso';
+import { usePerfisAcesso, PerfilAcesso, Permissoes, MODULOS, ACOES, defaultPermissoes } from '@/hooks/usePerfisAcesso';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { Plus, Pencil, Trash2, Loader2, Lock } from 'lucide-react';
 

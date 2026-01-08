@@ -330,23 +330,8 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
       if (updateError) {
         // 2. Tentar RPC se update direto falhar (por RLS)
         console.warn('Update direto falhou, tentando RPC:', updateError);
-        const { error: rpcError } = await supabase
-          .rpc('vv_b_soft_delete', {
-            p_table_name: 'vv_b_api_integracoes',
-            p_id: integracao.id
-          });
-
-        if (rpcError) throw rpcError;
-      } else {
-        // 3. Audit Log (Best Effort)
-        if (userId) {
-          await supabase.from('vv_b_audit_log' as any).insert({
-            table_name: 'vv_b_api_integracoes',
-            record_id: integracao.id,
-            action: 'SOFT_DELETE',
-            user_id: userId
-          }).catch(console.warn);
-        }
+        // Se update direto falhar, tratar como erro
+        throw updateError;
       }
 
       toast({ title: 'Integração removida' });

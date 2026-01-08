@@ -316,25 +316,7 @@ export default function Modelos() {
         .eq('id', id);
 
       if (updateError) {
-        // 2. Tentar RPC se update direto falhar (por RLS)
-        console.warn('Update direto falhou, tentando RPC:', updateError);
-        const { error: rpcError } = await supabase
-          .rpc('vv_b_soft_delete', {
-            p_table_name: 'vv_b_modelos_boleto',
-            p_id: id
-          });
-        
-        if (rpcError) throw rpcError;
-      } else {
-        // 3. Audit Log (Best Effort)
-        if (userId) {
-          await supabase.from('vv_b_audit_log' as any).insert({
-            table_name: 'vv_b_modelos_boleto',
-            record_id: id,
-            action: 'SOFT_DELETE',
-            user_id: userId
-          }).catch(console.warn);
-        }
+        throw updateError;
       }
     },
     onSuccess: () => {
