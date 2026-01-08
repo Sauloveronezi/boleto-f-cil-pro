@@ -19,6 +19,11 @@ Sistema profissional para gestão e emissão de boletos, com suporte a múltiplo
 - **Importar Layout (IA)**: Ferramenta inteligente para importação de layouts.
 - **Configurações Gerais**: Ajustes do sistema.
 
+### Segurança e Auditoria
+- **Soft Delete**: Sistema de exclusão lógica para proteção de dados (clientes, boletos, modelos, etc.).
+- **Audit Log**: Registro detalhado de operações críticas (quem excluiu, quando e qual registro).
+- **Triggers de Proteção**: Mecanismos de banco de dados para garantir integridade e consistência.
+
 ## 🛠️ Tecnologias Utilizadas
 
 - **Frontend**: React, Vite, TypeScript

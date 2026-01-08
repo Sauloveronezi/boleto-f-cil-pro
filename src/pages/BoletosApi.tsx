@@ -26,6 +26,7 @@ import { useBoletosApi, useSyncApi, useApiIntegracoes } from '@/hooks/useApiInte
 import { useClientes } from '@/hooks/useClientes';
 import { useBancos } from '@/hooks/useBancos';
 import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -61,6 +62,9 @@ export default function BoletosApi() {
   const { data: integracoes } = useApiIntegracoes();
   const { data: bancos } = useBancos();
   const { data: configuracoes } = useConfiguracoesBanco();
+  const { hasPermission } = usePermissoes();
+  const canPrint = hasPermission('boletos', 'criar');
+
   const { data: boletos, isLoading, refetch } = useBoletosApi({
     dataEmissaoInicio: filtros.dataEmissaoInicio || undefined,
     dataEmissaoFim: filtros.dataEmissaoFim || undefined,
@@ -77,7 +81,7 @@ export default function BoletosApi() {
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
         .select('id, nome_modelo, banco_id, pdf_storage_path')
-        .or('deleted.is.null,deleted.eq.')
+        .is('deleted', null)
         .order('nome_modelo');
       
       if (error) throw error;
@@ -306,12 +310,12 @@ export default function BoletosApi() {
             local_pagamento: 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO',
             instrucoes: configuracao?.texto_instrucao_padrao || '',
             // Campos dinâmicos da API
-            dyn_cidade: boleto.dyn_cidade || '',
-            dyn_conta: boleto.dyn_conta?.toString() || '',
-            dyn_desconto_data: boleto.dyn_desconto_data || '',
-            dyn_desconto1: boleto.dyn_desconto1 || '',
-            dyn_nome_do_cliente: boleto.dyn_nome_do_cliente || '',
-            dyn_zonatransporte: boleto.dyn_zonatransporte || '',
+            dyn_cidade: boleto.dyn_cidade || boleto.dados_extras?.dyn_cidade || '',
+            dyn_conta: boleto.dyn_conta?.toString() || boleto.dados_extras?.dyn_conta?.toString() || '',
+            dyn_desconto_data: boleto.dyn_desconto_data || boleto.dados_extras?.dyn_desconto_data || '',
+            dyn_desconto1: boleto.dyn_desconto1 || boleto.dados_extras?.dyn_desconto1 || '',
+            dyn_nome_do_cliente: boleto.dyn_nome_do_cliente || boleto.dados_extras?.dyn_nome_do_cliente || '',
+            dyn_zonatransporte: boleto.dyn_zonatransporte || boleto.dados_extras?.dyn_zonatransporte || '',
           };
         });
 
@@ -458,7 +462,8 @@ export default function BoletosApi() {
             <Button 
               className="gap-2"
               onClick={handleImprimirSelecionados}
-              disabled={selecionados.size === 0}
+              disabled={selecionados.size === 0 || !canPrint}
+              title={!canPrint ? "Sem permissão para gerar boletos" : "Imprimir boletos selecionados"}
             >
               <Printer className="h-4 w-4" />
               Imprimir ({selecionados.size})</Button>

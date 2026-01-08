@@ -19,9 +19,13 @@ import { HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DadosEmpresa, EMPRESA_PADRAO, salvarDadosEmpresa, carregarDadosEmpresa } from '@/types/empresa';
 import { ApiConfigCard } from '@/components/api/ApiConfigCard';
+import { usePermissoes } from '@/hooks/usePermissoes';
+import { Protected } from '@/components/auth/Protected';
+import { Loader2 } from 'lucide-react';
 
 export default function Configuracoes() {
   const { toast } = useToast();
+  const { isLoading: isLoadingPermissoes } = usePermissoes();
   const [modoDemo, setModoDemo] = useState(true);
   const [apiEndpoint, setApiEndpoint] = useState('');
   const [apiToken, setApiToken] = useState('');
@@ -44,6 +48,16 @@ export default function Configuracoes() {
     setEmpresa(prev => ({ ...prev, [campo]: valor }));
   };
 
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout modoDemo={modoDemo}>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout modoDemo={modoDemo}>
       <div className="space-y-6 max-w-4xl">
@@ -57,47 +71,56 @@ export default function Configuracoes() {
 
         <Tabs defaultValue="empresa" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="empresa">Empresa</TabsTrigger>
-            <TabsTrigger value="operacao">Operação</TabsTrigger>
-            <TabsTrigger value="api">API</TabsTrigger>
-            <TabsTrigger value="seguranca">Segurança</TabsTrigger>
+            <Protected modulo="configuracoes">
+              <TabsTrigger value="empresa">Empresa</TabsTrigger>
+            </Protected>
+            <Protected modulo="configuracoes">
+              <TabsTrigger value="operacao">Operação</TabsTrigger>
+            </Protected>
+            <Protected modulo="integracoes">
+              <TabsTrigger value="api">API</TabsTrigger>
+            </Protected>
+            <Protected modulo="configuracoes">
+              <TabsTrigger value="seguranca">Segurança</TabsTrigger>
+            </Protected>
           </TabsList>
 
           {/* Dados da Empresa */}
-          <TabsContent value="empresa" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Building2 className="h-5 w-5" />
-                  Dados da Empresa (Beneficiário)
-                </CardTitle>
-                <CardDescription>
-                  Configure os dados da empresa que aparecerão nos boletos como beneficiário
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Razão Social *</Label>
-                    <Input
-                      value={empresa.razaoSocial}
-                      onChange={(e) => atualizarEmpresa('razaoSocial', e.target.value)}
-                      placeholder="Razão Social da Empresa"
-                      className="mt-1"
-                    />
+          <Protected modulo="configuracoes">
+            <TabsContent value="empresa" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Building2 className="h-5 w-5" />
+                    Dados da Empresa (Beneficiário)
+                  </CardTitle>
+                  <CardDescription>
+                    Configure os dados da empresa que aparecerão nos boletos como beneficiário
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Razão Social *</Label>
+                      <Input
+                        value={empresa.razaoSocial}
+                        onChange={(e) => atualizarEmpresa('razaoSocial', e.target.value)}
+                        placeholder="Razão Social da Empresa"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label>Nome Fantasia</Label>
+                      <Input
+                        value={empresa.nomeFantasia}
+                        onChange={(e) => atualizarEmpresa('nomeFantasia', e.target.value)}
+                        placeholder="Nome Fantasia"
+                        className="mt-1"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>Nome Fantasia</Label>
-                    <Input
-                      value={empresa.nomeFantasia}
-                      onChange={(e) => atualizarEmpresa('nomeFantasia', e.target.value)}
-                      placeholder="Nome Fantasia"
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label>CNPJ *</Label>
                     <Input
@@ -381,6 +404,7 @@ export default function Configuracoes() {
               </CardContent>
             </Card>
           </TabsContent>
+          </Protected>
         </Tabs>
 
         {/* Botão Salvar */}

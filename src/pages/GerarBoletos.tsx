@@ -18,6 +18,7 @@ import { useBancos } from '@/hooks/useBancos';
 import { supabase } from '@/integrations/supabase/client';
 import { getPdfUrl } from '@/lib/pdfStorage';
 import { useQuery } from '@tanstack/react-query';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 const WIZARD_STEPS: WizardStep[] = [{
   id: 1,
@@ -41,6 +42,10 @@ export default function GerarBoletos() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { data: bancos = [], isLoading: bancosLoading } = useBancos();
+  const { hasPermission } = usePermissoes();
+
+  const canCreate = hasPermission('boletos', 'criar');
+
   const [currentStep, setCurrentStep] = useState(1);
   const [tipoOrigem, setTipoOrigem] = useState<TipoOrigem | null>(null);
   const [bancoSelecionado, setBancoSelecionado] = useState<string | null>(null);
@@ -204,6 +209,15 @@ export default function GerarBoletos() {
     }
   };
   const handleGerar = async () => {
+    if (!canCreate) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você precisa de permissão de criação para gerar boletos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!banco || !tipoOrigem) return;
 
     // Filtrar notas selecionadas

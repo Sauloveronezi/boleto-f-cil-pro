@@ -12,6 +12,7 @@ import { IntegracaoForm } from './IntegracaoForm';
 import { MapeamentoCamposCard } from './MapeamentoCamposCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 interface ApiIntegracao {
   id: string;
@@ -43,10 +44,22 @@ interface SyncLog {
 export function ApiConfigCard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissoes();
   const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
   const [syncingIntegracaoId, setSyncingIntegracaoId] = useState<string | null>(null);
 
+  const canCreate = hasPermission('integracoes', 'criar');
+  const canEdit = hasPermission('integracoes', 'editar');
+
   const handleAtualizarCampos = async (integracaoId: string) => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para editar integrações.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke('test-api-connection', {
         body: { integracao_id: integracaoId, limit: 1 }
@@ -72,7 +85,7 @@ export function ApiConfigCard() {
       const { data, error } = await supabase
         .from('vv_b_api_integracoes')
         .select('*')
-        .or('deleted.is.null,deleted.eq.""')
+        .is('deleted', null)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as ApiIntegracao[];
@@ -107,6 +120,14 @@ export function ApiConfigCard() {
   });
 
   const handleSyncronizar = async (integracaoId: string, modoDemo: boolean) => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para sincronizar integrações.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (syncApi.isPending) return;
 
     try {
@@ -267,7 +288,7 @@ export function ApiConfigCard() {
             <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-medium mb-2">Nenhuma integração configurada</h3>
             <p className="text-sm text-muted-foreground mb-4">Adicione uma integração para conectar a APIs externas.</p>
-            <IntegracaoForm onSave={refetch} />
+            {canCreate && <IntegracaoForm onSave={refetch} />}
           </CardContent>
         </Card>
       )}

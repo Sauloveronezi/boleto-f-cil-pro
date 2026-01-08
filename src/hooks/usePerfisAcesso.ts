@@ -39,7 +39,7 @@ const defaultPermissao: Permissao = {
   excluir: false
 };
 
-const defaultPermissoes: Permissoes = {
+export const defaultPermissoes: Permissoes = {
   usuarios: { ...defaultPermissao },
   perfis: { ...defaultPermissao },
   clientes: { ...defaultPermissao },
@@ -157,17 +157,22 @@ export function usePerfisAcesso() {
 
   const excluirPerfil = useMutation({
     mutationFn: async (perfilId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
+      // Validar se é sistema antes de chamar RPC (embora deva ter trigger no banco também)
+      const { data: perfil } = await supabase
         .from('vv_b_perfis_acesso')
-        .update({ 
-          deleted: '*',
-          usuario_delete_id: user?.id,
-          data_delete: new Date().toISOString()
-        })
+        .select('sistema')
         .eq('id', perfilId)
-        .eq('sistema', false); // Não permite excluir perfis do sistema
+        .single();
+        
+      if (perfil?.sistema) {
+        throw new Error('Não é possível excluir um perfil de sistema.');
+      }
+
+      const { error } = await supabase
+        .rpc('vv_b_soft_delete', {
+          p_table_name: 'vv_b_perfis_acesso',
+          p_id: perfilId
+        });
       
       if (error) throw error;
     },

@@ -25,20 +25,56 @@ import { Banco, ConfiguracaoBanco, TIPOS_IMPRESSAO } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { useBancos } from '@/hooks/useBancos';
 import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 export default function Bancos() {
   const { toast } = useToast();
   const { data: bancos = [], isLoading: bancosLoading } = useBancos();
   const { data: configuracoes = [] } = useConfiguracoesBanco();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
+  
+  const canEdit = hasPermission('bancos', 'editar');
+  const canView = hasPermission('bancos', 'visualizar');
   
   const [bancoEditando, setBancoEditando] = useState<Banco | null>(null);
   const [configEditando, setConfigEditando] = useState<ConfiguracaoBanco | null>(null);
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar bancos.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const getConfiguracao = (bancoId: string) => {
     return configuracoes.find(c => c.banco_id === bancoId);
   };
 
   const handleSalvar = () => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para editar bancos.',
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
       title: 'Configurações salvas',
       description: 'As configurações do banco foram atualizadas com sucesso.',
@@ -48,6 +84,14 @@ export default function Bancos() {
   };
 
   const handleEditar = (banco: Banco) => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para editar bancos.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setBancoEditando(banco);
     const config = getConfiguracao(banco.id);
     setConfigEditando(config || null);
@@ -130,14 +174,19 @@ export default function Bancos() {
                     </div>
                   )}
 
-                  <Button
-                    variant="outline"
-                    className="w-full mt-2"
-                    onClick={() => handleEditar(banco)}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Configurar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {canEdit && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={() => handleEditar(banco)}
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configurar
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );

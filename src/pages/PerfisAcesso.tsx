@@ -14,21 +14,49 @@ import { usePermissoes } from '@/hooks/usePermissoes';
 import { Plus, Pencil, Trash2, Loader2, Lock } from 'lucide-react';
 
 export default function PerfisAcesso() {
-  const { perfis, isLoading, criarPerfil, atualizarPerfil, excluirPerfil, defaultPermissoes } = usePerfisAcesso();
-  const { hasPermission } = usePermissoes();
+  const { perfis, isLoading, criarPerfil, atualizarPerfil, excluirPerfil } = usePerfisAcesso();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
+  
+  const canCreate = hasPermission('perfis', 'criar');
+  const canEdit = hasPermission('perfis', 'editar');
+  const canDelete = hasPermission('perfis', 'excluir');
+  const canView = hasPermission('perfis', 'visualizar');
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar perfis de acesso.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
   
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'criar' | 'editar' | 'excluir'>('criar');
   const [selectedPerfil, setSelectedPerfil] = useState<PerfilAcesso | null>(null);
-  const [formData, setFormData] = useState({
+  const [dialogMode, setDialogMode] = useState<'criar' | 'editar' | 'excluir'>('criar');
+  const [formData, setFormData] = useState<{
+    nome: string;
+    descricao: string;
+    permissoes: Permissoes;
+  }>({
     nome: '',
     descricao: '',
     permissoes: defaultPermissoes
   });
-
-  const canCreate = hasPermission('perfis', 'criar');
-  const canEdit = hasPermission('perfis', 'editar');
-  const canDelete = hasPermission('perfis', 'excluir');
 
   const handleNovo = () => {
     setSelectedPerfil(null);

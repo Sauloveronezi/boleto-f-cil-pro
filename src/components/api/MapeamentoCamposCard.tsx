@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 interface MapeamentoCampo {
   id: string;
@@ -86,6 +87,21 @@ export function MapeamentoCamposCard({
 }: MapeamentoCamposCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissoes();
+  const canEdit = hasPermission('integracoes', 'editar');
+
+  // Buscar todas as colunas da tabela real para validação
+  const { data: todasColunasTabela } = useQuery({
+    queryKey: ['todas-colunas-tabela'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vv_b_get_table_columns', { 
+        p_table_name: 'vv_b_boletos_api' 
+      });
+      if (error) return [];
+      return data as { column_name: string; data_type: string }[];
+    },
+  });
+
   const [loading, setLoading] = useState(false);
   const [testando, setTestando] = useState(false);
   const [previewData, setPreviewData] = useState<any[] | null>(null);
@@ -154,7 +170,7 @@ export function MapeamentoCamposCard({
         .from('vv_b_api_mapeamento_campos')
         .select('*')
         .eq('integracao_id', integracaoId)
-        .or('deleted.is.null,deleted.eq.""')
+        .is('deleted', null)
         .order('ordem', { ascending: true });
 
       if (error) throw error;
@@ -185,6 +201,15 @@ export function MapeamentoCamposCard({
   }, [novoCampo.campo_api]);
 
   const handleAddCampo = async () => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para editar mapeamentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const campoApi = novoCampo.campo_api || novoCampoApi;
     
     if (!campoApi) {
@@ -207,8 +232,13 @@ export function MapeamentoCamposCard({
 
     setLoading(true);
     try {
-      // Se é um campo dinâmico (prefixo dyn_), criar a coluna real na tabela
-      if (novoCampo.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX)) {
+      // Verificar se a coluna precisa ser criada na tabela (se não existe e não é virtual)
+      // cliente_cnpj é virtual (usa cliente_id), então ignoramos
+      const colunaExiste = todasColunasTabela?.some(c => c.column_name === novoCampo.campo_destino);
+      const campoVirtual = novoCampo.campo_destino === 'cliente_cnpj';
+      
+      if (!colunaExiste && !campoVirtual) {
+        console.log(`Criando coluna faltante na tabela: ${novoCampo.campo_destino}`);
         const tipoColuna = TIPO_COLUNA_MAP[novoCampo.tipo_dado] || 'TEXT';
         
         const { data: resultadoColuna, error: erroColuna } = await supabase.rpc(
@@ -224,14 +254,17 @@ export function MapeamentoCamposCard({
           throw new Error(`Erro ao criar coluna na tabela: ${erroColuna.message}`);
         }
 
-        if (!resultadoColuna) {
-          throw new Error('Não foi possível criar a coluna na tabela.');
+        // Se criou, invalidar cache de colunas
+        if (resultadoColuna) {
+          queryClient.invalidateQueries({ queryKey: ['todas-colunas-tabela'] });
+          
+          if (novoCampo.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX)) {
+             toast({ 
+              title: 'Coluna criada', 
+              description: `A coluna "${novoCampo.campo_destino}" foi criada na tabela.` 
+            });
+          }
         }
-
-        toast({ 
-          title: 'Coluna criada', 
-          description: `A coluna "${novoCampo.campo_destino}" foi criada na tabela.` 
-        });
       }
 
       // Inserir o mapeamento
@@ -272,6 +305,15 @@ export function MapeamentoCamposCard({
   };
 
   const handleRemoveCampo = async (id: string) => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para remover mapeamentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const { data: userData } = await supabase.auth.getUser();
       
@@ -284,16 +326,40 @@ export function MapeamentoCamposCard({
         return;
       }
 
-      // Usar RPC com SECURITY DEFINER para contornar RLS
-      const { data: result, error } = await supabase.rpc(
-        'vv_b_soft_delete_mapeamento_campo',
-        { p_id: id }
-      );
+      // Tentar exclusão direta (fallback para quando RPC não existe/migração pendente)
+      const { error: updateError } = await supabase
+        .from('vv_b_api_mapeamento_campos')
+        .update({ 
+          deleted: 'X',
+          data_delete: new Date().toISOString(),
+          usuario_delete_id: userData.user.id
+        })
+        .eq('id', id);
 
-      if (error) throw error;
-
-      if (!result) {
-        throw new Error('Não foi possível excluir o mapeamento.');
+      if (updateError) {
+        // Se der erro de permissão, tentar via RPC (caso RLS bloqueie update direto mas permita RPC)
+        console.warn('Erro no update direto, tentando RPC:', updateError);
+        const { data: result, error: rpcError } = await supabase.rpc(
+          'vv_b_soft_delete',
+          { 
+            p_table_name: 'vv_b_api_mapeamento_campos',
+            p_id: id 
+          }
+        );
+        
+        if (rpcError) throw rpcError;
+      } else {
+        // Se update direto funcionou, tentar registrar auditoria (best effort)
+        try {
+           await supabase.from('vv_b_audit_log' as any).insert({
+             table_name: 'vv_b_api_mapeamento_campos',
+             record_id: id,
+             action: 'SOFT_DELETE',
+             user_id: userData.user.id
+           });
+        } catch (e) {
+          console.warn('Não foi possível registrar auditoria:', e);
+        }
       }
 
       toast({ title: 'Campo removido' });
@@ -309,6 +375,15 @@ export function MapeamentoCamposCard({
 
 
   const handleUpdateCampo = async (id: string, field: string, value: any) => {
+    if (!canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para atualizar mapeamentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const { data: userData } = await supabase.auth.getUser();
       
@@ -340,6 +415,7 @@ export function MapeamentoCamposCard({
 
   // Iniciar edição de um mapeamento
   const handleStartEdit = (mapeamento: MapeamentoCampo) => {
+    if (!canEdit) return;
     setEditandoId(mapeamento.id);
     setEditandoCampo({
       campo_api: mapeamento.campo_api,
@@ -357,6 +433,7 @@ export function MapeamentoCamposCard({
 
   // Salvar edição
   const handleSaveEdit = async () => {
+    if (!canEdit) return;
     if (!editandoId) return;
 
     try {
@@ -371,24 +448,32 @@ export function MapeamentoCamposCard({
         return;
       }
 
-      // Se mudou para um novo campo dyn_*, criar a coluna
+      // Se mudou o campo destino, verificar se precisa criar coluna
       const campoDestinoNovo = editandoCampo.campo_destino || '';
       const mapeamentoOriginal = mapeamentos?.find(m => m.id === editandoId);
       
-      if (campoDestinoNovo.startsWith(CAMPO_DINAMICO_PREFIX) && 
-          campoDestinoNovo !== mapeamentoOriginal?.campo_destino) {
-        const tipoColuna = TIPO_COLUNA_MAP[editandoCampo.tipo_dado || 'string'] || 'TEXT';
-        
-        const { data: resultadoColuna, error: erroColuna } = await supabase.rpc(
-          'vv_b_add_dynamic_column',
-          { 
-            p_column_name: campoDestinoNovo, 
-            p_column_type: tipoColuna 
-          }
-        );
+      if (campoDestinoNovo && campoDestinoNovo !== mapeamentoOriginal?.campo_destino) {
+        const colunaExiste = todasColunasTabela?.some(c => c.column_name === campoDestinoNovo);
+        const campoVirtual = campoDestinoNovo === 'cliente_cnpj';
 
-        if (erroColuna) {
-          throw new Error(`Erro ao criar coluna na tabela: ${erroColuna.message}`);
+        if (!colunaExiste && !campoVirtual) {
+          const tipoColuna = TIPO_COLUNA_MAP[editandoCampo.tipo_dado || 'string'] || 'TEXT';
+          
+          const { data: resultadoColuna, error: erroColuna } = await supabase.rpc(
+            'vv_b_add_dynamic_column',
+            { 
+              p_column_name: campoDestinoNovo, 
+              p_column_type: tipoColuna 
+            }
+          );
+
+          if (erroColuna) {
+            throw new Error(`Erro ao criar coluna na tabela: ${erroColuna.message}`);
+          }
+          
+          if (resultadoColuna) {
+             queryClient.invalidateQueries({ queryKey: ['todas-colunas-tabela'] });
+          }
         }
       }
 
@@ -429,7 +514,7 @@ export function MapeamentoCamposCard({
       return;
     }
     setModoCampoDinamico(false);
-    const destino = CAMPOS_DESTINO_PADRAO.find(c => c.value === campoDestino);
+    const destino = camposDestinoDisponiveis.find(c => c.value === campoDestino);
     setNovoCampo({
       ...novoCampo,
       campo_destino: campoDestino,
@@ -448,36 +533,93 @@ export function MapeamentoCamposCard({
     setModoCampoDinamico(false);
   };
 
-  // Query para buscar colunas dinâmicas já criadas na tabela
+  // Query para buscar colunas dinâmicas já criadas na tabela (mantido como fallback ou complemento)
   const { data: colunasDinamicas } = useQuery({
     queryKey: ['colunas-dinamicas'],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('vv_b_list_dynamic_columns');
-      if (error) throw error;
+      if (error) return []; // Silenciar erro se não existir
       return (data || []) as { column_name: string; data_type: string }[];
     },
   });
 
-  // Campos dinâmicos já mapeados ou existentes na tabela
-  const camposDinamicosMapeados = useMemo(() => {
-    const doColunas = (colunasDinamicas || []).map(c => ({
-      value: c.column_name,
-      label: c.column_name.replace(/^dyn_/, '').replace(/_/g, ' '),
-      tipo: c.data_type,
-    }));
+  // Combinar colunas padrão com as colunas reais da tabela
+  const camposDestinoDisponiveis = useMemo(() => {
+    const mapOpcoes = new Map<string, any>();
     
-    // Adicionar também os mapeados que talvez ainda não apareçam na lista de colunas
-    const dosMapeamentos = (mapeamentos || [])
-      .filter(m => m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX))
-      .filter(m => !doColunas.some(c => c.value === m.campo_destino))
-      .map(m => ({
-        value: m.campo_destino,
-        label: m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '').replace(/_/g, ' '),
-        tipo: 'text',
-      }));
+    // 1. Adicionar campos padrão
+    CAMPOS_DESTINO_PADRAO.forEach(c => {
+      mapOpcoes.set(c.value, { ...c, is_padrao: true, is_dinamico: false });
+    });
     
-    return [...doColunas, ...dosMapeamentos];
-  }, [mapeamentos, colunasDinamicas]);
+    // 2. Adicionar colunas reais da tabela
+    if (Array.isArray(todasColunasTabela)) {
+      todasColunasTabela.forEach(c => {
+        if (!c?.column_name) return; // Proteção contra nulos
+        
+        if (!mapOpcoes.has(c.column_name)) {
+          const isDinamico = c.column_name.startsWith(CAMPO_DINAMICO_PREFIX);
+          const label = isDinamico 
+            ? `📦 ${c.column_name.replace(CAMPO_DINAMICO_PREFIX, '').replace(/_/g, ' ')}` 
+            : c.column_name;
+            
+          mapOpcoes.set(c.column_name, {
+            value: c.column_name,
+            label: label,
+            tipo_sugerido: c.data_type === 'integer' || c.data_type === 'numeric' ? 'number' : c.data_type === 'boolean' ? 'boolean' : c.data_type === 'date' || c.data_type.includes('timestamp') ? 'date' : 'string',
+            obrigatorio: false,
+            is_padrao: false,
+            is_dinamico: isDinamico
+          });
+        }
+      });
+    }
+
+    // 3. Fallback: colunas dinâmicas conhecidas se RPC falhar
+    if (Array.isArray(colunasDinamicas)) {
+      colunasDinamicas.forEach(c => {
+        if (!c?.column_name) return;
+        
+        if (!mapOpcoes.has(c.column_name)) {
+          mapOpcoes.set(c.column_name, {
+            value: c.column_name,
+            label: `📦 ${c.column_name.replace(/^dyn_/, '').replace(/_/g, ' ')}`,
+            tipo_sugerido: c.data_type === 'integer' || c.data_type === 'numeric' ? 'number' : 'string',
+            obrigatorio: false,
+            is_padrao: false,
+            is_dinamico: true
+          });
+        }
+      });
+    }
+
+    // 4. Adicionar mapeados existentes que não estão nas listas acima
+    if (Array.isArray(mapeamentos)) {
+      mapeamentos.forEach(m => {
+        if (!m?.campo_destino) return;
+        
+        if (m.campo_destino.startsWith(CAMPO_DINAMICO_PREFIX) && !mapOpcoes.has(m.campo_destino)) {
+          mapOpcoes.set(m.campo_destino, {
+            value: m.campo_destino,
+            label: `📦 ${m.campo_destino.replace(CAMPO_DINAMICO_PREFIX, '').replace(/_/g, ' ')}`,
+            tipo_sugerido: m.tipo_dado,
+            obrigatorio: false,
+            is_padrao: false,
+            is_dinamico: true
+          });
+        }
+      });
+    }
+      
+    return Array.from(mapOpcoes.values()).sort((a, b) => {
+      if (!a || !b) return 0;
+      if (a.is_padrao && !b.is_padrao) return -1;
+      if (!a.is_padrao && b.is_padrao) return 1;
+      if (a.is_dinamico && !b.is_dinamico) return -1;
+      if (!a.is_dinamico && b.is_dinamico) return 1;
+      return (a.label || '').localeCompare(b.label || '');
+    });
+  }, [todasColunasTabela, colunasDinamicas, mapeamentos]);
 
   return (
     <Card>
@@ -526,10 +668,10 @@ export function MapeamentoCamposCard({
               </Button>
             </div>
 
-            {/* Container com altura fixa e overflow-x visível */}
-            <div className="max-h-64 overflow-x-auto overflow-y-auto">
-              <Table className="min-w-max">
-                <TableHeader className="sticky top-0 bg-background z-10">
+            {/* Container com altura máxima e overflow-x visível */}
+            <div className="max-h-[500px] overflow-auto relative border rounded-md bg-background">
+              <Table className="min-w-max w-full">
+                <TableHeader className="sticky top-0 bg-background z-20 shadow-sm">
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
                     {previewColumns.map((key) => (
@@ -613,6 +755,7 @@ export function MapeamentoCamposCard({
         )}
 
         {/* Adicionar novo campo */}
+        {canEdit && (
         <div className="p-4 bg-muted/50 rounded-lg space-y-4">
           <Label className="font-medium">Adicionar Novo Mapeamento</Label>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
@@ -697,14 +840,13 @@ export function MapeamentoCamposCard({
                     <SelectItem value="__novo_campo__">
                       <span className="text-primary font-medium">+ Criar nova coluna (dados_extras)</span>
                     </SelectItem>
-                    {camposDinamicosMapeados.map((c) => (
+                    {camposDestinoDisponiveis
+                      .filter(c => c && c.value && typeof c.value === 'string')
+                      .map((c) => (
                       <SelectItem key={c.value} value={c.value}>
-                        <span className="font-mono text-xs">📦 {c.label}</span>
-                      </SelectItem>
-                    ))}
-                    {CAMPOS_DESTINO_PADRAO.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label} {c.obrigatorio && <span className="text-destructive">*</span>}
+                        <span className={c.is_padrao ? "" : "font-mono text-xs"}>
+                          {c.label} {c.obrigatorio && <span className="text-destructive">*</span>}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -741,14 +883,20 @@ export function MapeamentoCamposCard({
               />
               <Label className="text-xs">Obrigatório</Label>
             </div>
-            <Button onClick={handleAddCampo} disabled={loading} className="gap-2">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Adicionar
-            </Button>
+            <div className="md:col-span-1">
+              <Button 
+                onClick={handleAddCampo}
+                disabled={loading}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
+        )}
 
-        {/* Lista de campos mapeados */}
+        {/* Lista de Mapeamentos */}
         {isLoading ? (
           <div className="animate-pulse space-y-2">
             <div className="h-10 bg-muted rounded"></div>
@@ -805,14 +953,13 @@ export function MapeamentoCamposCard({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {camposDinamicosMapeados.map((c) => (
+                            {camposDestinoDisponiveis
+                              .filter(c => c && c.value && typeof c.value === 'string')
+                              .map((c) => (
                               <SelectItem key={c.value} value={c.value}>
-                                <span className="font-mono text-xs">📦 {c.label}</span>
-                              </SelectItem>
-                            ))}
-                            {CAMPOS_DESTINO_PADRAO.map((c) => (
-                              <SelectItem key={c.value} value={c.value}>
-                                {c.label}
+                                <span className={c.is_padrao ? "" : "font-mono text-xs"}>
+                                  {c.label}
+                                </span>
                               </SelectItem>
                             ))}
                           </SelectContent>

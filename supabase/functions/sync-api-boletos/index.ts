@@ -288,6 +288,7 @@ serve(async (req) => {
               } 
               else {
                 // Campos fixos da tabela
+                let isStandard = true;
                 switch (map.campo_destino) {
                   case 'numero_nota': numeroNota = String(valorApi); break;
                   case 'numero_cobranca': numeroCobranca = String(valorApi); break;
@@ -300,6 +301,12 @@ serve(async (req) => {
                   case 'banco': banco = String(valorApi); break;
                   case 'empresa': empresa = Number(valorApi); break;
                   case 'cliente': cliente = String(valorApi); break;
+                  default: isStandard = false; break;
+                }
+                
+                // Se não for campo padrão nem dyn_ nem dados_extras, salvar em dados_extras
+                if (!isStandard) {
+                   dadosExtras[map.campo_destino] = String(valorApi);
                 }
               }
             }
@@ -311,16 +318,25 @@ serve(async (req) => {
         if (!numeroNota) camposFaltando.push('numero_nota');
         if (!numeroCobranca) camposFaltando.push('numero_cobranca');
 
+        // Verificar flag de ignorar validação (pode vir no body ou na config da integração)
+        const ignorarValidacao = integracao.ignorar_validacao === true || integracao.ignorar_validacao === 'true';
+
         if (camposFaltando.length > 0) {
-          registrosComErro.push({
-            integracao_id,
-            json_original: item,
-            tipo_erro: 'validacao',
-            mensagem_erro: `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`,
-            campo_erro: camposFaltando.join(', '),
-            valor_erro: null
-          });
-          continue;
+          if (ignorarValidacao) {
+             // Preencher com valor padrão para não falhar no banco
+             if (!numeroNota) numeroNota = `MISSING_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+             if (!numeroCobranca) numeroCobranca = `MISSING_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+          } else {
+            registrosComErro.push({
+              integracao_id,
+              json_original: item,
+              tipo_erro: 'validacao',
+              mensagem_erro: `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`,
+              campo_erro: camposFaltando.join(', '),
+              valor_erro: null
+            });
+            continue;
+          }
         }
 
         // CNPJ é opcional - se vier, tentaremos vincular ao cliente
@@ -342,6 +358,9 @@ serve(async (req) => {
             business_partner: item?.BusinessPartner ?? null,
           });
         }
+
+        // Garantir que colunas dinâmicas (dyn_) também estejam em dados_extras (fallback)
+        Object.assign(dadosExtras, colunasDinamicas);
 
         registrosPreparados.push({
           cnpjNormalizado,
@@ -422,7 +441,20 @@ serve(async (req) => {
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
       // Criar chave única para evitar duplicatas no batch (sem depender de cliente_id)
-      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}`;
+      // Se houver chaves configuradas na integração, usar elas. Caso contrário, usar padrão.
+      let chaveUnica = '';
+      
+      if (integracao.campos_chave && Array.isArray(integracao.campos_chave) && integracao.campos_chave.length > 0) {
+        chaveUnica = integracao.campos_chave.map((k: string) => {
+           const val = getValueByPath(reg.jsonOriginal, k);
+           return val !== undefined && val !== null ? String(val) : '';
+        }).join('|');
+      }
+
+      // Fallback: se não gerou chave (config vazia ou valores nulos), usar numero_nota + numero_cobranca
+      if (!chaveUnica || chaveUnica.replace(/\|/g, '').trim() === '') {
+        chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}`;
+      }
       
       if (chavesDuplicadas.has(chaveUnica)) {
         registrosComErro.push({

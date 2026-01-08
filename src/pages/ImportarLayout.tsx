@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useBancos } from '@/hooks/useBancos';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { useNavigate } from 'react-router-dom';
 import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB, TipoRegistroCNAB } from '@/types/boleto';
 import { BoletoPreview } from '@/components/boleto/BoletoPreview';
@@ -98,9 +99,42 @@ function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 
 }
 
 export default function ImportarLayout() {
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { data: bancos = [], isLoading: bancosLoading } = useBancos();
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Permissão de acesso à página (requer criar modelos)
+  if (!hasPermission('modelos', 'criar')) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para importar novos layouts.
+          </p>
+          <Button 
+            variant="outline" 
+            className="mt-4"
+            onClick={() => navigate('/modelos')}
+          >
+            Voltar para Modelos
+          </Button>
+        </div>
+      </MainLayout>
+    );
+  }
+
   const jsonInputRef = useRef<HTMLInputElement>(null);
   
   const [arquivoRemessa, setArquivoRemessa] = useState<File | null>(null);
@@ -153,6 +187,15 @@ export default function ImportarLayout() {
   };
 
   const handleArquivoJSON = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const canCreate = hasPermission('modelos', 'criar');
+    if (!canCreate) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para importar layouts.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const file = event.target.files?.[0];
     if (file) {
       try {
@@ -435,6 +478,16 @@ export default function ImportarLayout() {
   };
 
   const handleGerarPadrao = async () => {
+    const canCreate = hasPermission('modelos', 'criar');
+    if (!canCreate) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para gerar layouts.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Validar arquivos conforme modo de importação
     if (modoImportacao === 'remessa' && !arquivoRemessa) {
       toast({
@@ -568,6 +621,16 @@ export default function ImportarLayout() {
   };
 
   const handleSalvar = () => {
+    const canCreate = hasPermission('modelos', 'criar');
+    if (!canCreate) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para salvar layouts.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!padraoGerado) {
       toast({
         title: 'Erro',

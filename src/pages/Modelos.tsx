@@ -50,6 +50,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useBancos } from '@/hooks/useBancos';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { uploadPdfToStorage, getPdfUrl } from '@/lib/pdfStorage';
 import { useNavigate } from 'react-router-dom';
 import { inferirCamposDoBoletoPDF } from '@/lib/boletoPdfFieldInference';
@@ -101,7 +102,36 @@ export default function Modelos() {
   const navigate = useNavigate();
   const { data: bancos } = useBancos();
   const { user } = useAuth();
-  const { canEdit, isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
+  const { isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
+
+  const canCreate = hasPermission('modelos', 'criar');
+  const canEdit = hasPermission('modelos', 'editar');
+  const canDelete = hasPermission('modelos', 'excluir');
+  const canView = hasPermission('modelos', 'visualizar');
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar modelos de boleto.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   // Estado do formulário
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
@@ -133,7 +163,7 @@ export default function Modelos() {
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
         .select('*')
-        .is('deleted', null)
+        .neq('deleted', 'X')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -272,16 +302,40 @@ export default function Modelos() {
   // Mutation para deletar modelo
   const deleteModelo = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      // 1. Tentar Update Direto (Fallback)
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+
+      const { error: updateError } = await supabase
         .from('vv_b_modelos_boleto')
-        .update({ 
-          deleted: '*', 
+        .update({
+          deleted: 'X',
           data_delete: new Date().toISOString(),
-          usuario_delete_id: user?.id 
+          usuario_delete_id: userId
         })
         .eq('id', id);
-      
-      if (error) throw error;
+
+      if (updateError) {
+        // 2. Tentar RPC se update direto falhar (por RLS)
+        console.warn('Update direto falhou, tentando RPC:', updateError);
+        const { error: rpcError } = await supabase
+          .rpc('vv_b_soft_delete', {
+            p_table_name: 'vv_b_modelos_boleto',
+            p_id: id
+          });
+        
+        if (rpcError) throw rpcError;
+      } else {
+        // 3. Audit Log (Best Effort)
+        if (userId) {
+          await supabase.from('vv_b_audit_log' as any).insert({
+            table_name: 'vv_b_modelos_boleto',
+            record_id: id,
+            action: 'SOFT_DELETE',
+            user_id: userId
+          }).catch(console.warn);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['modelos-boleto'] });
@@ -330,30 +384,40 @@ export default function Modelos() {
       return;
     }
 
-    if (!canEdit) {
-      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador para salvar modelos.', variant: 'destructive' });
-      return;
-    }
-
-    const payload = {
-      nome_modelo: formNome,
-      banco_id: formBancoId || null,
-      bancos_compativeis: formBancoId ? [formBancoId] : [],
-      tipo_layout: formTipoLayout as TipoImpressao,
-      texto_instrucoes: formTextoInstrucoes,
-      campos_mapeados: modeloEditando?.campos_mapeados || [],
-    };
-
     if (modeloEditando) {
+      if (!canEdit) {
+        toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar modelos.', variant: 'destructive' });
+        return;
+      }
+      const payload = {
+        nome_modelo: formNome,
+        banco_id: formBancoId || null,
+        bancos_compativeis: formBancoId ? [formBancoId] : [],
+        tipo_layout: formTipoLayout as TipoImpressao,
+        texto_instrucoes: formTextoInstrucoes,
+        campos_mapeados: modeloEditando?.campos_mapeados || [],
+      };
       updateModelo.mutate({ id: modeloEditando.id, ...payload });
     } else {
+      if (!canCreate) {
+        toast({ title: 'Sem permissão', description: 'Você não tem permissão para criar modelos.', variant: 'destructive' });
+        return;
+      }
+      const payload = {
+        nome_modelo: formNome,
+        banco_id: formBancoId || null,
+        bancos_compativeis: formBancoId ? [formBancoId] : [],
+        tipo_layout: formTipoLayout as TipoImpressao,
+        texto_instrucoes: formTextoInstrucoes,
+        campos_mapeados: [],
+      };
       createModelo.mutate(payload);
     }
   };
 
   const handleDuplicar = async (modelo: ModeloBoleto) => {
-    if (!canEdit) {
-      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+    if (!canCreate) {
+      toast({ title: 'Sem permissão', description: 'Você não tem permissão para criar modelos.', variant: 'destructive' });
       return;
     }
     await createModelo.mutateAsync({
@@ -364,8 +428,8 @@ export default function Modelos() {
   };
 
   const handleDeletar = () => {
-    if (!canEdit) {
-      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+    if (!canDelete) {
+      toast({ title: 'Sem permissão', description: 'Você não tem permissão para excluir modelos.', variant: 'destructive' });
       return;
     }
     if (modeloDeletando) {
@@ -376,7 +440,7 @@ export default function Modelos() {
   // Função para reanexar PDF a um modelo existente
   const handleReanexarPDF = (modelo: ModeloBoleto) => {
     if (!canEdit) {
-      toast({ title: 'Sem permissão', description: 'Você precisa de permissão de admin ou operador.', variant: 'destructive' });
+      toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar modelos.', variant: 'destructive' });
       return;
     }
     setModeloParaReanexar(modelo);
@@ -736,7 +800,7 @@ export default function Modelos() {
         )}
 
         {/* Aviso para usuário sem permissão */}
-        {user && !canEdit && !isLoadingRole && !canBootstrapAdmin && (
+        {user && (!canCreate && !canEdit && !canDelete) && !isLoadingRole && !canBootstrapAdmin && (
           <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
             <CardContent className="py-4">
               <div className="flex items-start gap-3">
@@ -744,7 +808,7 @@ export default function Modelos() {
                 <div>
                   <p className="font-medium text-sm text-blue-800 dark:text-blue-200">Modo Visualização</p>
                   <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                    Você pode visualizar os modelos, mas precisa de permissão de admin ou operador para criar/editar.
+                    Você pode visualizar os modelos, mas não tem permissão para criar, editar ou excluir.
                   </p>
                 </div>
               </div>
@@ -860,60 +924,65 @@ export default function Modelos() {
                       <Layers className="h-4 w-4 mr-1" />
                       Layout
                     </Button>
+                    
                     {canEdit && (
-                      <>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleReanexarPDF(modelo)}
-                                disabled={updateModelo.isPending && modeloParaReanexar?.id === modelo.id}
-                              >
-                                {updateModelo.isPending && modeloParaReanexar?.id === modelo.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Reanexar PDF ao modelo</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDuplicar(modelo)}
-                                disabled={createModelo.isPending}
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Duplicar modelo</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setModeloDeletando(modelo)}
-                                disabled={modelo.padrao || deleteModelo.isPending}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReanexarPDF(modelo)}
+                              disabled={updateModelo.isPending && modeloParaReanexar?.id === modelo.id}
+                            >
+                              {updateModelo.isPending && modeloParaReanexar?.id === modelo.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Reanexar PDF ao modelo</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+
+                    {canCreate && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDuplicar(modelo)}
+                              disabled={createModelo.isPending}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Duplicar modelo</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+
+                    {canDelete && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setModeloDeletando(modelo)}
+                              disabled={modelo.padrao || deleteModelo.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {modelo.padrao ? 'Modelo padrão não pode ser excluído' : 'Excluir modelo'}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </div>
                 </CardContent>

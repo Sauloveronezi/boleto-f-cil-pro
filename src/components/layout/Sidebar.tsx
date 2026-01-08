@@ -25,25 +25,25 @@ export function Sidebar() {
       title: 'Principal',
       items: [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-        { icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' },
-        { icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' },
+        ...(canAccess('boletos') ? [{ icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' }] : []),
+        ...(canAccess('integracoes') ? [{ icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' }] : []),
       ]
     },
     {
       title: 'Cadastros',
       items: [
-        { icon: Users, label: 'Clientes', href: '/clientes' },
-        { icon: Receipt, label: 'Notas Fiscais', href: '/notas' },
-        { icon: Building2, label: 'Bancos', href: '/bancos' },
+        ...(canAccess('clientes') ? [{ icon: Users, label: 'Clientes', href: '/clientes' }] : []),
+        ...(canAccess('notas') ? [{ icon: Receipt, label: 'Notas Fiscais', href: '/notas' }] : []),
+        ...(canAccess('bancos') ? [{ icon: Building2, label: 'Bancos', href: '/bancos' }] : []),
       ]
     },
     {
       title: 'Configurações',
       items: [
-        { icon: Palette, label: 'Modelos de Layout', href: '/modelos' },
-        { icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' },
-        { icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' },
-        { icon: Settings, label: 'Configurações', href: '/configuracoes' },
+        ...(canAccess('modelos') ? [{ icon: Palette, label: 'Modelos de Layout', href: '/modelos' }] : []),
+        ...(canAccess('configuracoes') ? [{ icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' }] : []),
+        ...(canAccess('modelos') ? [{ icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' }] : []),
+        ...(canAccess('configuracoes') ? [{ icon: Settings, label: 'Configurações', href: '/configuracoes' }] : []),
       ]
     },
     {

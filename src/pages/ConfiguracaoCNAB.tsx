@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { 
   FileText, Plus, Save, Trash2, HelpCircle, Settings2, 
-  Upload, Eye, AlertCircle, ArrowLeft, Download 
+  Upload, Eye, AlertCircle, ArrowLeft, Download, Loader2 
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { usePermissoes } from '@/hooks/usePermissoes';
 // Atualização dos padrões CNAB e correções de tipos
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
@@ -146,9 +147,33 @@ function converterParaCampoDetectado(campo: CampoCNAB, index: number): CampoDete
 
 export default function ConfiguracaoCNAB() {
   const { toast } = useToast();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   
   // Lista principal
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoCNAB[]>([]);
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!hasPermission('configuracoes', 'visualizar')) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar configurações CNAB.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
   
   // Estado de Edição
   const [configSelecionada, setConfigSelecionada] = useState<ConfiguracaoCNAB | null>(null);
@@ -178,6 +203,14 @@ export default function ConfiguracaoCNAB() {
   // --- ACTIONS ---
 
   const handleNovaConfig = () => {
+    if (!hasPermission('configuracoes', 'criar')) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para criar novos padrões CNAB.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setNovaConfig(true);
     setConfigSelecionada(null);
     setBancoId('');
@@ -190,6 +223,14 @@ export default function ConfiguracaoCNAB() {
   };
 
   const handleEditarConfig = (config: ConfiguracaoCNAB) => {
+    if (!hasPermission('configuracoes', 'editar')) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para editar padrões CNAB.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setNovaConfig(false);
     setConfigSelecionada(config);
     setBancoId(config.banco_id);
@@ -221,6 +262,19 @@ export default function ConfiguracaoCNAB() {
   };
 
   const handleSalvar = () => {
+    // Permissão check
+    if (configSelecionada) {
+       if (!hasPermission('configuracoes', 'editar')) {
+         toast({ title: 'Acesso Negado', description: 'Sem permissão para editar.', variant: 'destructive' });
+         return;
+       }
+    } else {
+       if (!hasPermission('configuracoes', 'criar')) {
+         toast({ title: 'Acesso Negado', description: 'Sem permissão para criar.', variant: 'destructive' });
+         return;
+       }
+    }
+
     if (!bancoId || !nomeConfig) {
       toast({
         title: 'Campos obrigatórios',
@@ -280,6 +334,14 @@ export default function ConfiguracaoCNAB() {
   };
 
   const handleExcluir = (id: string) => {
+    if (!hasPermission('configuracoes', 'excluir')) {
+      toast({
+        title: 'Acesso Negado',
+        description: 'Você não tem permissão para excluir padrões CNAB.',
+        variant: 'destructive'
+      });
+      return;
+    }
     const novasConfigs = configuracoes.filter(c => c.id !== id);
     setConfiguracoes(novasConfigs);
     localStorage.setItem('padroesCNAB', JSON.stringify(novasConfigs));
@@ -445,6 +507,16 @@ export default function ConfiguracaoCNAB() {
   const getBancoNome = (id: string) => BANCOS_SUPORTADOS.find(b => b.id === id)?.nome_banco || 'Desconhecido';
 
   // --- RENDER ---
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!novaConfig && !configSelecionada) {
     // LIST VIEW

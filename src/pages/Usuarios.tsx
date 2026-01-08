@@ -19,9 +19,37 @@ import { ptBR } from 'date-fns/locale';
 export default function Usuarios() {
   const { usuarios, isLoading, aprovarUsuario, desativarUsuario, excluirUsuario, atualizarPerfil } = useUsuarios();
   const { perfis } = usePerfisAcesso();
-  const { hasPermission, isMaster } = usePermissoes();
+  const { hasPermission, isMaster, isLoading: isLoadingPermissoes } = usePermissoes();
   const { criarUsuario, alterarSenha } = useManageUsers();
   
+  const canEdit = hasPermission('usuarios', 'editar');
+  const canCreate = hasPermission('usuarios', 'criar');
+  const canDelete = hasPermission('usuarios', 'excluir');
+  const canView = hasPermission('usuarios', 'visualizar');
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar usuários.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
+
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
@@ -31,10 +59,8 @@ export default function Usuarios() {
   const [novaSenha, setNovaSenha] = useState('');
   const [novoNome, setNovoNome] = useState('');
 
-  const canEdit = hasPermission('usuarios', 'editar');
-  const canDelete = hasPermission('usuarios', 'excluir');
-
   const handleAprovar = (usuario: Usuario) => {
+    if (!canEdit) return;
     setSelectedUsuario(usuario);
     setDialogMode('aprovar');
     setSelectedPerfilId('');
@@ -43,6 +69,7 @@ export default function Usuarios() {
   };
 
   const handleEditar = (usuario: Usuario) => {
+    if (!canEdit) return;
     setSelectedUsuario(usuario);
     setDialogMode('editar');
     setSelectedPerfilId(usuario.perfil_acesso_id || '');
@@ -50,12 +77,14 @@ export default function Usuarios() {
   };
 
   const handleExcluir = (usuario: Usuario) => {
+    if (!canDelete) return;
     setSelectedUsuario(usuario);
     setDialogMode('excluir');
     setDialogOpen(true);
   };
 
   const handleCriarUsuario = () => {
+    if (!canCreate) return;
     setSelectedUsuario(null);
     setDialogMode('criar');
     setNovoEmail('');
@@ -67,6 +96,7 @@ export default function Usuarios() {
   };
 
   const handleAlterarSenha = (usuario: Usuario) => {
+    if (!canEdit) return;
     setSelectedUsuario(usuario);
     setDialogMode('senha');
     setNovaSenha('');
@@ -75,6 +105,7 @@ export default function Usuarios() {
 
   const handleConfirmar = async () => {
     if (dialogMode === 'criar') {
+      if (!canCreate) return;
       await criarUsuario.mutateAsync({ 
         email: novoEmail, 
         password: novaSenha,
@@ -90,6 +121,7 @@ export default function Usuarios() {
     }
 
     if (dialogMode === 'senha') {
+      if (!canEdit) return;
       if (!selectedUsuario) return;
       await alterarSenha.mutateAsync({ userId: selectedUsuario.user_id, password: novaSenha });
       setDialogOpen(false);
@@ -100,17 +132,20 @@ export default function Usuarios() {
     if (!selectedUsuario) return;
 
     if (dialogMode === 'aprovar') {
+      if (!canEdit) return;
       await aprovarUsuario.mutateAsync({
         usuarioId: selectedUsuario.id,
         perfilAcessoId: selectedPerfilId,
         role: selectedRole
       });
     } else if (dialogMode === 'editar') {
+      if (!canEdit) return;
       await atualizarPerfil.mutateAsync({
         usuarioId: selectedUsuario.id,
         perfilAcessoId: selectedPerfilId
       });
     } else if (dialogMode === 'excluir') {
+      if (!canDelete) return;
       await excluirUsuario.mutateAsync(selectedUsuario.id);
     }
 
@@ -152,7 +187,7 @@ export default function Usuarios() {
               Aprove, edite ou exclua usuários do sistema
             </p>
           </div>
-          {isMaster && (
+          {canCreate && (
             <Button onClick={handleCriarUsuario} className="gap-2">
               <Plus className="h-4 w-4" />
               Novo Usuário
@@ -255,7 +290,7 @@ export default function Usuarios() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {isMaster && (
+                        {canEdit && (
                           <Button
                             size="sm"
                             variant="outline"

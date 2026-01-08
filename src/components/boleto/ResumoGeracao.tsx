@@ -1,4 +1,4 @@
-import { FileText, Download, Building2, Users, Receipt, Palette, Database } from 'lucide-react';
+import { FileText, Download, Building2, Users, Receipt, Palette, Database, Lock, Loader2 } from 'lucide-react';
 import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { usePermissoes } from '@/hooks/usePermissoes';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ResumoGeracaoProps {
   tipoOrigem: TipoOrigem | null;
@@ -43,6 +50,9 @@ export function ResumoGeracao({
   onTipoSaidaChange,
   onGerar,
 }: ResumoGeracaoProps) {
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
+  const canGerar = hasPermission('boletos', 'criar');
+
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -237,15 +247,42 @@ export function ResumoGeracao({
 
       {/* Botões de Ação */}
       <div className="flex justify-end gap-4">
-        <Button
-          size="lg"
-          onClick={onGerar}
-          disabled={!modeloSelecionado || notasSelecionadas.length === 0}
-          className="px-8"
-        >
-          <Download className="h-5 w-5 mr-2" />
-          Gerar {notasSelecionadas.length} Boleto(s)
-        </Button>
+        {isLoadingPermissoes ? (
+          <Button size="lg" disabled className="px-8">
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Verificando Permissões...
+          </Button>
+        ) : !canGerar ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="inline-block">
+                  <Button
+                    size="lg"
+                    disabled={true}
+                    className="px-8 opacity-50 cursor-not-allowed"
+                  >
+                    <Lock className="h-4 w-4 mr-2" />
+                    Sem Permissão
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Você precisa de permissão para gerar boletos.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Button
+            size="lg"
+            onClick={onGerar}
+            disabled={!modeloSelecionado || notasSelecionadas.length === 0}
+            className="px-8"
+          >
+            <Download className="h-5 w-5 mr-2" />
+            Gerar {notasSelecionadas.length} Boleto(s)
+          </Button>
+        )}
       </div>
     </div>
   );

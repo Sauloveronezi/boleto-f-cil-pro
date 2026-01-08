@@ -19,14 +19,39 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Cliente } from '@/types/boleto';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { useClientes } from '@/hooks/useClientes';
 import { MapPin, Phone, Mail, Building } from 'lucide-react';
 
 export default function Clientes() {
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const [busca, setBusca] = useState('');
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   
   const { data: clientes = [], isLoading, error } = useClientes();
+
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!hasPermission('clientes', 'visualizar')) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar clientes.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const clientesFiltrados = clientes.filter((cliente) => {
     const termoBusca = busca.toLowerCase();

@@ -33,6 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 interface Integracao {
   id: string;
@@ -52,6 +53,7 @@ interface Integracao {
   auth_api_key_encrypted?: string;
   auth_header_name?: string;
   campos_api_detectados?: string[];
+  ignorar_validacao?: boolean;
 }
 
 interface IntegracaoFormProps {
@@ -80,7 +82,13 @@ const TIPOS_AUTENTICACAO = [
 export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: IntegracaoFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissoes();
   const [isOpen, setIsOpen] = useState(false);
+
+  const canCreate = hasPermission('integracoes', 'criar');
+  const canEdit = hasPermission('integracoes', 'editar');
+  const canDelete = hasPermission('integracoes', 'excluir');
+
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -108,6 +116,7 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
     auth_api_key: '',
     auth_header_name: 'Authorization',
     custom_headers: '',
+    ignorar_validacao: false,
   });
 
   useEffect(() => {
@@ -127,6 +136,7 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
         auth_api_key: '', // Não preenchemos a api key por segurança
         auth_header_name: integracao.auth_header_name || 'Authorization',
         custom_headers: integracao.headers_autenticacao ? JSON.stringify(integracao.headers_autenticacao, null, 2) : '',
+        ignorar_validacao: integracao.ignorar_validacao || false,
       });
     }
   }, [integracao]);
@@ -190,6 +200,23 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
   };
 
   const handleSubmit = async () => {
+    if (integracao && !canEdit) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para editar integrações.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!integracao && !canCreate) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para criar integrações.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!formData.nome) {
       toast({
         title: 'Erro',
@@ -228,6 +255,7 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
         auth_usuario: formData.auth_usuario || null,
         auth_header_name: formData.auth_header_name,
         headers_autenticacao,
+        ignorar_validacao: formData.ignorar_validacao,
       };
 
       // Adicionar campos de senha/token apenas se foram preenchidos (para não sobrescrever)
@@ -274,18 +302,52 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
 
   const handleDelete = async () => {
     if (!integracao) return;
+    
+    if (!canDelete) {
+      toast({
+        title: 'Sem permissão',
+        description: 'Você não tem permissão para excluir integrações.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     setLoading(true);
     try {
+      // 1. Tentar Update Direto (Fallback)
       const { data: userData } = await supabase.auth.getUser();
-      const usuarioId = userData.user?.id ?? null;
+      const userId = userData.user?.id;
 
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('vv_b_api_integracoes')
-        .update({ deleted: '*', data_delete: new Date().toISOString(), usuario_delete_id: usuarioId })
+        .update({
+          deleted: 'X',
+          data_delete: new Date().toISOString(),
+          usuario_delete_id: userId
+        })
         .eq('id', integracao.id);
 
-      if (error) throw error;
+      if (updateError) {
+        // 2. Tentar RPC se update direto falhar (por RLS)
+        console.warn('Update direto falhou, tentando RPC:', updateError);
+        const { error: rpcError } = await supabase
+          .rpc('vv_b_soft_delete', {
+            p_table_name: 'vv_b_api_integracoes',
+            p_id: integracao.id
+          });
+
+        if (rpcError) throw rpcError;
+      } else {
+        // 3. Audit Log (Best Effort)
+        if (userId) {
+          await supabase.from('vv_b_audit_log' as any).insert({
+            table_name: 'vv_b_api_integracoes',
+            record_id: integracao.id,
+            action: 'SOFT_DELETE',
+            user_id: userId
+          }).catch(console.warn);
+        }
+      }
 
       toast({ title: 'Integração removida' });
       queryClient.invalidateQueries({ queryKey: ['api-integracoes'] });
@@ -602,6 +664,19 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
                     onCheckedChange={(v) => setFormData({ ...formData, ativo: v })}
                   />
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Ignorar Validação</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Salvar registros mesmo com falha de validação (campos obrigatórios faltando)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.ignorar_validacao}
+                    onCheckedChange={(v) => setFormData({ ...formData, ignorar_validacao: v })}
+                  />
+                </div>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -671,18 +746,28 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          {integracao && (
-            <Button variant="destructive" onClick={handleDelete} disabled={loading}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remover
+        <div className="flex items-center justify-between">
+          {integracao && canDelete && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              <span className="ml-2">Excluir</span>
             </Button>
           )}
-          <Button onClick={handleSubmit} disabled={loading}>
-            <Save className="h-4 w-4 mr-2" />
-            Salvar
-          </Button>
-        </DialogFooter>
+          <div className="flex gap-2 ml-auto">
+            <Button variant="outline" onClick={() => setIsOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmit} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
