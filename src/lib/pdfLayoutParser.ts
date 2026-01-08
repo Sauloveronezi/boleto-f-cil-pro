@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { TipoLinha } from '@/components/cnab/CnabTextEditor';
 import { CORES_CAMPOS } from '@/types/cnab';
+import { extractCnabLayoutFromPdf, layoutSpecToCamposDetectados } from './cnabLayoutExtractor';
 
 // Configurar worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -23,13 +24,46 @@ export interface CampoDetectado {
   cor: string;
 }
 
-interface TextLine {
-  text: string;
-  y: number;
-  x: number;
+/**
+ * Parser principal de PDF de layout CNAB
+ * Usa o novo extrator robusto que suporta formatos Itaú e Bradesco
+ */
+export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
+  try {
+    // Usar o novo extrator robusto
+    const result = await extractCnabLayoutFromPdf(file);
+    
+    if (result.success && result.layoutSpec) {
+      // Converter LayoutSpec para CampoDetectado[]
+      const campos = layoutSpecToCamposDetectados(result.layoutSpec);
+      
+      if (campos.length > 0) {
+        console.log(`Parser robusto: ${campos.length} campos extraídos de ${result.pages_analyzed} páginas`);
+        if (result.warnings.length > 0) {
+          console.warn('Avisos do parser:', result.warnings);
+        }
+        return campos;
+      }
+    }
+    
+    // Se o parser robusto falhou, tentar fallback
+    console.warn('Parser robusto não encontrou campos, tentando fallback...');
+    if (result.errors.length > 0) {
+      console.warn('Erros do parser robusto:', result.errors);
+    }
+    
+    return await parseCnabPdfFallback(file);
+    
+  } catch (error) {
+    console.error('Erro no parser principal:', error);
+    return await parseCnabPdfFallback(file);
+  }
 }
 
-export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
+/**
+ * Parser de fallback (versão simplificada)
+ */
+async function parseCnabPdfFallback(file: File): Promise<CampoDetectado[]> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   
@@ -41,18 +75,16 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
     
-    // Agrupar itens por linha (y aproximado)
     const items = textContent.items as TextItem[];
-    const lines: TextLine[] = [];
+    const lines: { text: string; y: number; x: number }[] = [];
     
-    // Ordenar por Y (decrescente) e X (crescente)
     items.sort((a, b) => {
       const yDiff = b.transform[5] - a.transform[5];
-      if (Math.abs(yDiff) > 5) return yDiff; // Margem de erro para mesma linha
+      if (Math.abs(yDiff) > 5) return yDiff;
       return a.transform[4] - b.transform[4];
     });
 
-    let currentLine: TextLine | null = null;
+    let currentLine: { text: string; y: number; x: number } | null = null;
     
     items.forEach(item => {
       const y = item.transform[5];
@@ -70,7 +102,6 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
     });
     if (currentLine) lines.push(currentLine);
 
-    // Analisar linhas
     for (const line of lines) {
       const text = line.text.toUpperCase();
       
@@ -90,11 +121,9 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
       } else if (text.includes('SEGMENTO R') || (text.includes('DETALHE') && text.includes(' R '))) {
         currentSegment = 'detalhe_segmento_r';
       } else if (text.includes('DETALHE') && !text.includes('SEGMENTO')) {
-        // Fallback para CNAB 400 ou detalhe genérico
         currentSegment = 'detalhe';
       }
 
-      // Tentar extrair campos
       const field = extractFieldFromLine(line.text, currentSegment);
       if (field) {
         idCounter++;
@@ -110,7 +139,7 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
     }
   }
 
-  // Filtrar duplicatas ou campos inválidos
+  // Filtrar duplicatas
   campos = campos.filter((c, index, self) => 
     index === self.findIndex((t) => (
       t.posicaoInicio === c.posicaoInicio && 
@@ -119,7 +148,6 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
   );
 
   return campos.sort((a, b) => {
-    // Primeiro ordenar por tipo de linha
     if (a.tipoLinha !== b.tipoLinha) {
        const ordem: Record<string, number> = {
          'header_arquivo': 1,
@@ -145,74 +173,59 @@ function extractFieldFromLine(text: string, segment: TipoLinha): Omit<CampoDetec
 
   // Padrões para extração de tabelas de layout CNAB
   const patterns = [
-    // Padrão Bradesco/Itaú: "01.0 Campo Nome | 1 | 3 | 3 | Num | Descrição"
-    // Campos separados por espaços ou pipes, com número do campo no início
+    // Padrão Bradesco: "01.0 Campo Nome | 1 | 3 | 3 | Num"
     /^(\d{1,2}\.\d)\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(Num|Alfa|X\(\d+\)|9\(\d+\))/i,
     
-    // Padrão tabela com posições: "Campo | Posição Início-Fim | Tamanho"
-    // Ex: "Banco 1 3 3 Num"
-    /^([A-Za-záàâãéèêíïóôõúç\s\/]+?)\s+(\d{1,3})\s+(\d{1,3})\s+\d+\s+(Num|Alfa|[X9]\(\d+\))/i,
+    // Padrão Itaú: "Campo | 001-003 | 9(03)"
+    /^([A-Za-záàâãéèêíïóôõúç\s\/\-\.]+?)\s+(\d{1,3})\s*[-–a]\s*(\d{1,3})\s+([X9]\([^)]+\)(?:V9\([^)]+\))?)/i,
     
-    // Padrão FEBRABAN com código do campo: "G001 | Código do Banco | 001 | 003"
+    // Padrão FEBRABAN: "G001 | Código do Banco | 001 | 003"
     /^[A-Z]\d{3}\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})/i,
     
-    // Padrão com Picture completo: "NOME 001 003 9(03)"
+    // Padrão com Picture: "NOME 001 003 9(03)"
     /(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+([X9]\(\d+\)(?:V9\(\d+\))?)/i,
     
-    // Padrão genérico: Dois números seguidos no texto (posição início-fim)
-    // "001 003 Nome do Campo" ou "Nome 001 003"
+    // Padrão genérico: posição início-fim
     /^(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})\s+(.+)$/i,
     /^(.+)\s+(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})$/i,
-    
-    // Padrão com tamanho: "001 003 3 Nome"
-    /^(\d{1,3})\s+(\d{1,3})\s+\d+\s+(.+)$/i,
   ];
 
-  // Tentar cada padrão
   for (const regex of patterns) {
     const match = text.match(regex);
     if (match) {
-      // Determinar qual grupo é start, end, nome baseado no padrão
       if (regex.source.startsWith('^(\\d{1,2}\\.\\d)')) {
-        // Padrão Bradesco: grupo 2 = nome, 3 = start, 4 = end
         name = match[2].trim();
         start = parseInt(match[3]);
         end = parseInt(match[4]);
         picture = match[6] || '';
       } else if (regex.source.includes('A-Z]\\d{3}')) {
-        // Padrão FEBRABAN: grupo 1 = nome, 2 = start, 3 = end
         name = match[1].trim();
         start = parseInt(match[2]);
         end = parseInt(match[3]);
       } else if (regex.source.startsWith('^([A-Za-z')) {
-        // Padrão simples: grupo 1 = nome, 2 = start, 3 = end
         name = match[1].trim();
         start = parseInt(match[2]);
         end = parseInt(match[3]);
         picture = match[4] || '';
       } else if (regex.source.includes('X9]\\(\\d+\\)\\(')) {
-        // Padrão com Picture: grupo 1 = nome, 2 = start, 3 = end, 4 = picture
         name = match[1].trim();
         start = parseInt(match[2]);
         end = parseInt(match[3]);
         picture = match[4];
       } else if (regex.source.startsWith('^(\\d{1,3})\\s*')) {
-        // Padrão início com números: grupo 1 = start, 2 = end, 3 = nome
         start = parseInt(match[1]);
         end = parseInt(match[2]);
         name = match[3].trim();
       } else if (regex.source.startsWith('^(.+)\\s+')) {
-        // Padrão nome primeiro: grupo 1 = nome, 2 = start, 3 = end
         name = match[1].trim();
         start = parseInt(match[2]);
         end = parseInt(match[3]);
       }
-      
       break;
     }
   }
 
-  // Fallback: busca profunda por dois números que pareçam posições
+  // Fallback: busca por dois números que pareçam posições
   if (!start || !end || !name) {
     const regexDeep = /(\d{1,3})\s*(?:-|a|à)\s*(\d{1,3})/;
     const deepMatch = text.match(regexDeep);
@@ -226,20 +239,16 @@ function extractFieldFromLine(text: string, segment: TipoLinha): Omit<CampoDetec
   }
   
   if (start > 0 && end > 0 && name) {
-    name = name.trim();
+    name = name.trim()
+      .replace(/^[-–—]\s*/, '')
+      .replace(/\s*[-–—]$/, '')
+      .replace(/^\d{1,2}\.\d\s*/, '')
+      .replace(/\s+/g, ' ');
     
-    // Limpezas comuns no nome
-    name = name.replace(/^[-–—]\s*/, '');
-    name = name.replace(/\s*[-–—]$/, '');
-    name = name.replace(/^\d{1,2}\.\d\s*/, ''); // Remove "01.0 " do início
-    name = name.replace(/\s+/g, ' '); // Normaliza espaços
-    
-    // Validações básicas
     if (start > end) return null;
-    if (end > 444) return null; // CNAB 400 + margem ou 240 + margem
+    if (end > 444) return null;
     if (name.length < 2) return null;
     
-    // Ignorar linhas que parecem cabeçalhos de tabela
     const lowerName = name.toLowerCase();
     const headerWords = ['de', 'até', 'pos', 'posição', 'nome do campo', 'conteúdo', 'picture', 
                          'formato', 'default', 'descrição', 'nº', 'campo', 'tamanho'];
@@ -247,7 +256,6 @@ function extractFieldFromLine(text: string, segment: TipoLinha): Omit<CampoDetec
       return null;
     }
 
-    // Detectar tipo e destino
     const { tipo, destino } = inferTypeAndDestiny(name, picture);
 
     return {
@@ -268,7 +276,7 @@ function inferTypeAndDestiny(name: string, picture: string = ''): { tipo: 'numer
   let tipo: 'numerico' | 'alfanumerico' | 'data' | 'valor' = 'alfanumerico';
   let destino = '';
 
-  // Inferir pelo Picture se disponível
+  // Inferir pelo Picture
   if (picture) {
     const picLower = picture.toLowerCase();
     if (picLower.includes('v') || picLower.includes('9v')) {
@@ -280,7 +288,7 @@ function inferTypeAndDestiny(name: string, picture: string = ''): { tipo: 'numer
     }
   }
 
-  // Refinar pelo nome (tem precedência para Data e Valor)
+  // Refinar pelo nome
   if (lower.includes('valor') || lower.includes('mora') || lower.includes('multa') || lower.includes('desconto')) {
     tipo = 'valor';
     destino = 'valor';
@@ -307,7 +315,7 @@ function inferTypeAndDestiny(name: string, picture: string = ''): { tipo: 'numer
   } else if (lower.includes('nome') && (lower.includes('empresa') || lower.includes('beneficiário') || lower.includes('cedente'))) {
     destino = 'razao_social';
   } else if (lower.includes('nome') && (lower.includes('pagador') || lower.includes('sacado'))) {
-    destino = 'nome_sacado';
+    destino = 'sacado_nome';
   } else if (lower.includes('convênio') || lower.includes('convenio')) {
     destino = 'convenio';
   } else if (lower.includes('carteira')) {
