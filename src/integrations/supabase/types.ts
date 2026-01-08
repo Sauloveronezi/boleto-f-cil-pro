@@ -1284,87 +1284,159 @@ export type Database = {
       }
       vv_b_boletos_api: {
         Row: {
+          bairro: string | null
           banco: string | null
+          bankcontrolkey: string | null
+          BR_NFeNumber: string | null
+          BR_NFPartnerFunction: string | null
+          CashDiscount1Days: string | null
+          CashDiscount1Percent: string | null
+          CashDiscount2Days: string | null
+          CashDiscountAmountInFuncnlCrcy: string | null
+          CashDiscountAmtInCoCodeCrcy: string | null
+          CashDiscountAmtInTransacCrcy: string | null
+          cep: string | null
           cliente: string | null
           cliente_id: string | null
           created_at: string
+          customer: string | null
           dados_extras: Json | null
           data_delete: string | null
           data_desconto: string | null
           data_emissao: string | null
           data_vencimento: string | null
           deleted: string | null
+          documento: string | null
+          DocumentReferenceID: string | null
           dyn_cidade: string | null
           dyn_conta: number | null
-          dyn_desconto_data: string | null
           dyn_desconto1: string | null
           dyn_nome_do_cliente: string | null
           dyn_zonatransporte: string | null
           empresa: number | null
+          endereco: string | null
+          FinancialAccountType: string | null
           id: string
           integracao_id: string | null
           json_original: Json | null
           numero_cobranca: string
           numero_nota: string
+          pais: string | null
+          PaymentAmountInFunctionalCrcy: string | null
+          PaymentDueDate: string | null
+          PaymentMethod: string | null
+          paymentrundate: string | null
+          PaytAmountInCoCodeCurrency: string | null
+          PostingDate: string | null
+          serie: string | null
           sincronizado_em: string | null
+          uf: string | null
           updated_at: string
           usuario_delete_id: string | null
           valor: number | null
           valor_desconto: number | null
         }
         Insert: {
+          bairro?: string | null
           banco?: string | null
+          bankcontrolkey?: string | null
+          BR_NFeNumber?: string | null
+          BR_NFPartnerFunction?: string | null
+          CashDiscount1Days?: string | null
+          CashDiscount1Percent?: string | null
+          CashDiscount2Days?: string | null
+          CashDiscountAmountInFuncnlCrcy?: string | null
+          CashDiscountAmtInCoCodeCrcy?: string | null
+          CashDiscountAmtInTransacCrcy?: string | null
+          cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
           created_at?: string
+          customer?: string | null
           dados_extras?: Json | null
           data_delete?: string | null
           data_desconto?: string | null
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          documento?: string | null
+          DocumentReferenceID?: string | null
           dyn_cidade?: string | null
           dyn_conta?: number | null
-          dyn_desconto_data?: string | null
           dyn_desconto1?: string | null
           dyn_nome_do_cliente?: string | null
           dyn_zonatransporte?: string | null
           empresa?: number | null
+          endereco?: string | null
+          FinancialAccountType?: string | null
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
           numero_cobranca: string
           numero_nota: string
+          pais?: string | null
+          PaymentAmountInFunctionalCrcy?: string | null
+          PaymentDueDate?: string | null
+          PaymentMethod?: string | null
+          paymentrundate?: string | null
+          PaytAmountInCoCodeCurrency?: string | null
+          PostingDate?: string | null
+          serie?: string | null
           sincronizado_em?: string | null
+          uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
           valor_desconto?: number | null
         }
         Update: {
+          bairro?: string | null
           banco?: string | null
+          bankcontrolkey?: string | null
+          BR_NFeNumber?: string | null
+          BR_NFPartnerFunction?: string | null
+          CashDiscount1Days?: string | null
+          CashDiscount1Percent?: string | null
+          CashDiscount2Days?: string | null
+          CashDiscountAmountInFuncnlCrcy?: string | null
+          CashDiscountAmtInCoCodeCrcy?: string | null
+          CashDiscountAmtInTransacCrcy?: string | null
+          cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
           created_at?: string
+          customer?: string | null
           dados_extras?: Json | null
           data_delete?: string | null
           data_desconto?: string | null
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          documento?: string | null
+          DocumentReferenceID?: string | null
           dyn_cidade?: string | null
           dyn_conta?: number | null
-          dyn_desconto_data?: string | null
           dyn_desconto1?: string | null
           dyn_nome_do_cliente?: string | null
           dyn_zonatransporte?: string | null
           empresa?: number | null
+          endereco?: string | null
+          FinancialAccountType?: string | null
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
           numero_cobranca?: string
           numero_nota?: string
+          pais?: string | null
+          PaymentAmountInFunctionalCrcy?: string | null
+          PaymentDueDate?: string | null
+          PaymentMethod?: string | null
+          paymentrundate?: string | null
+          PaytAmountInCoCodeCurrency?: string | null
+          PostingDate?: string | null
+          serie?: string | null
           sincronizado_em?: string | null
+          uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
@@ -2343,6 +2415,10 @@ export type Database = {
           column_name: string
           data_type: string
         }[]
+      }
+      vv_b_soft_delete: {
+        Args: { p_id: string; p_table_name: string }
+        Returns: boolean
       }
       vv_b_soft_delete_mapeamento_campo: {
         Args: { p_id: string }

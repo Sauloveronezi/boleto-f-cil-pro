@@ -95,11 +95,6 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
       }
 
       // Tentar extrair campos
-      // Padrões comuns: 
-      // "001 003 Código" (Posição Inicial, Posição Final, Nome)
-      // "1 3 Banco"
-      // "1 a 3 Banco"
-      // "Nome ... 001 003 ... 9(03)" (Com Picture)
       const field = extractFieldFromLine(line.text, currentSegment);
       if (field) {
         idCounter++;
@@ -108,7 +103,7 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
           id: String(idCounter),
           tipoLinha: currentSegment,
           cor: CORES_CAMPOS[idCounter % CORES_CAMPOS.length],
-          confianca: field.nome.length > 50 ? 70 : 90, // Menor confiança se pegou muito texto
+          confianca: field.nome.length > 50 ? 70 : 90,
           valor: '(do PDF)'
         });
       }
@@ -143,95 +138,102 @@ export async function parseCnabPdf(file: File): Promise<CampoDetectado[]> {
 }
 
 function extractFieldFromLine(text: string, segment: TipoLinha): Omit<CampoDetectado, 'id' | 'tipoLinha' | 'cor' | 'confianca' | 'valor'> | null {
-  // Regex para encontrar posições: "001 003", "1 a 3", "001 - 003", "001 a 003"
-  // E o resto do texto como nome
-  
-  // Estratégia: Encontrar dois números próximos que pareçam ser start/end
-  
   let start = 0;
   let end = 0;
   let name = '';
   let picture = '';
 
-  // 0. Padrão Tabela Completa (Com Picture)
-  // Ex: "NOME DO CAMPO SIGNIFICADO 001 003 9(03) 341"
-  // Procura por: (Texto) (Num) (Num) (Picture)
-  // Picture regex: X(01), 9(03), 9(10)V9(2)
-  const regexTable = /(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+([X9]\(\d+\)(?:V9\(\d+\))?)/i;
-  
-  const matchTable = text.match(regexTable);
-  if (matchTable) {
-      name = matchTable[1].trim();
-      start = parseInt(matchTable[2]);
-      end = parseInt(matchTable[3]);
-      picture = matchTable[4];
-  } else {
-      // Fallback para padrões sem Picture
-      
-      // 1. Padrão "Start Separator End Name" ou "Start Separator End"
-      // Ex: "001 003 Código", "1-3 Código", "1 a 3 Código"
-      const regexStart = /^(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})\s+(.+)$/i;
-      
-      // 2. Padrão "Name Start Separator End"
-      // Ex: "Código 001 003", "Código 1-3"
-      const regexEnd = /^(.+)\s+(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})$/i;
-
-      // 3. Padrão "Start End Len Name" (comum em manuais)
-      // Ex: "001 003 3 Código"
-      const regexWithLen = /^(\d{1,3})\s+(\d{1,3})\s+\d+\s+(.+)$/i;
-      
-      // 4. Padrão busca profunda (dois números no meio do texto)
-      // Ex: "Posição 001 a 003 do registro"
-      const regexDeep = /(\d{1,3})\s*(?:-|a|à)\s*(\d{1,3})/;
+  // Padrões para extração de tabelas de layout CNAB
+  const patterns = [
+    // Padrão Bradesco/Itaú: "01.0 Campo Nome | 1 | 3 | 3 | Num | Descrição"
+    // Campos separados por espaços ou pipes, com número do campo no início
+    /^(\d{1,2}\.\d)\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s+(Num|Alfa|X\(\d+\)|9\(\d+\))/i,
     
-      let match = text.match(regexStart);
-      if (match) {
+    // Padrão tabela com posições: "Campo | Posição Início-Fim | Tamanho"
+    // Ex: "Banco 1 3 3 Num"
+    /^([A-Za-záàâãéèêíïóôõúç\s\/]+?)\s+(\d{1,3})\s+(\d{1,3})\s+\d+\s+(Num|Alfa|[X9]\(\d+\))/i,
+    
+    // Padrão FEBRABAN com código do campo: "G001 | Código do Banco | 001 | 003"
+    /^[A-Z]\d{3}\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})/i,
+    
+    // Padrão com Picture completo: "NOME 001 003 9(03)"
+    /(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+([X9]\(\d+\)(?:V9\(\d+\))?)/i,
+    
+    // Padrão genérico: Dois números seguidos no texto (posição início-fim)
+    // "001 003 Nome do Campo" ou "Nome 001 003"
+    /^(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})\s+(.+)$/i,
+    /^(.+)\s+(\d{1,3})\s*(?:-|a|à|\s)\s*(\d{1,3})$/i,
+    
+    // Padrão com tamanho: "001 003 3 Nome"
+    /^(\d{1,3})\s+(\d{1,3})\s+\d+\s+(.+)$/i,
+  ];
+
+  // Tentar cada padrão
+  for (const regex of patterns) {
+    const match = text.match(regex);
+    if (match) {
+      // Determinar qual grupo é start, end, nome baseado no padrão
+      if (regex.source.startsWith('^(\\d{1,2}\\.\\d)')) {
+        // Padrão Bradesco: grupo 2 = nome, 3 = start, 4 = end
+        name = match[2].trim();
+        start = parseInt(match[3]);
+        end = parseInt(match[4]);
+        picture = match[6] || '';
+      } else if (regex.source.includes('A-Z]\\d{3}')) {
+        // Padrão FEBRABAN: grupo 1 = nome, 2 = start, 3 = end
+        name = match[1].trim();
+        start = parseInt(match[2]);
+        end = parseInt(match[3]);
+      } else if (regex.source.startsWith('^([A-Za-z')) {
+        // Padrão simples: grupo 1 = nome, 2 = start, 3 = end
+        name = match[1].trim();
+        start = parseInt(match[2]);
+        end = parseInt(match[3]);
+        picture = match[4] || '';
+      } else if (regex.source.includes('X9]\\(\\d+\\)\\(')) {
+        // Padrão com Picture: grupo 1 = nome, 2 = start, 3 = end, 4 = picture
+        name = match[1].trim();
+        start = parseInt(match[2]);
+        end = parseInt(match[3]);
+        picture = match[4];
+      } else if (regex.source.startsWith('^(\\d{1,3})\\s*')) {
+        // Padrão início com números: grupo 1 = start, 2 = end, 3 = nome
         start = parseInt(match[1]);
         end = parseInt(match[2]);
-        name = match[3];
-      } else {
-        match = text.match(regexWithLen);
-        if (match) {
-          start = parseInt(match[1]);
-          end = parseInt(match[2]);
-          name = match[3];
-        } else {
-          match = text.match(regexEnd);
-          if (match) {
-            start = parseInt(match[2]);
-            end = parseInt(match[3]);
-            name = match[1];
-          } else {
-            // Tentar busca profunda como fallback
-            // Cuidado com falsos positivos (ex: datas, valores)
-            const deepMatch = text.match(regexDeep);
-            if (deepMatch) {
-                start = parseInt(deepMatch[1]);
-                end = parseInt(deepMatch[2]);
-                // Remover os números do nome e o que vier depois (geralmente lixo ou picture não detectada)
-                const parts = text.split(deepMatch[0]);
-                name = parts[0].trim();
-                // Se o nome ficou vazio, tenta pegar o que vem depois (caso invertido)
-                if (!name && parts[1]) name = parts[1].trim();
-            }
-          }
-        }
+        name = match[3].trim();
+      } else if (regex.source.startsWith('^(.+)\\s+')) {
+        // Padrão nome primeiro: grupo 1 = nome, 2 = start, 3 = end
+        name = match[1].trim();
+        start = parseInt(match[2]);
+        end = parseInt(match[3]);
       }
+      
+      break;
+    }
+  }
+
+  // Fallback: busca profunda por dois números que pareçam posições
+  if (!start || !end || !name) {
+    const regexDeep = /(\d{1,3})\s*(?:-|a|à)\s*(\d{1,3})/;
+    const deepMatch = text.match(regexDeep);
+    if (deepMatch) {
+      start = parseInt(deepMatch[1]);
+      end = parseInt(deepMatch[2]);
+      const parts = text.split(deepMatch[0]);
+      name = parts[0].trim();
+      if (!name && parts[1]) name = parts[1].trim();
+    }
   }
   
   if (start > 0 && end > 0 && name) {
     name = name.trim();
     
     // Limpezas comuns no nome
-    name = name.replace(/^[-–—]\s*/, ''); // Remover traços no início
-    name = name.replace(/\s*[-–—]$/, ''); // Remover traços no fim
+    name = name.replace(/^[-–—]\s*/, '');
+    name = name.replace(/\s*[-–—]$/, '');
+    name = name.replace(/^\d{1,2}\.\d\s*/, ''); // Remove "01.0 " do início
+    name = name.replace(/\s+/g, ' '); // Normaliza espaços
     
-    // Tentar limpar "Significado" se vier grudado no nome (heurística simples)
-    // Se o nome for muito longo e tiver palavras em caixa alta no meio, pode ser o "Significado"
-    // Ex: "CÓDIGO DO BANCO CÓDIGO DO BCO NA COMPENSAÇÃO" -> "CÓDIGO DO BANCO"
-    // Difícil fazer isso genericamente sem quebrar nomes compostos válidos.
-    // Vamos deixar o usuário editar.
-
     // Validações básicas
     if (start > end) return null;
     if (end > 444) return null; // CNAB 400 + margem ou 240 + margem
@@ -239,8 +241,10 @@ function extractFieldFromLine(text: string, segment: TipoLinha): Omit<CampoDetec
     
     // Ignorar linhas que parecem cabeçalhos de tabela
     const lowerName = name.toLowerCase();
-    if (lowerName === 'de' || lowerName === 'até' || lowerName === 'pos' || lowerName === 'posição' || lowerName === 'nome do campo' || lowerName === 'conteúdo' || lowerName === 'picture') {
-        return null;
+    const headerWords = ['de', 'até', 'pos', 'posição', 'nome do campo', 'conteúdo', 'picture', 
+                         'formato', 'default', 'descrição', 'nº', 'campo', 'tamanho'];
+    if (headerWords.includes(lowerName)) {
+      return null;
     }
 
     // Detectar tipo e destino
@@ -266,29 +270,51 @@ function inferTypeAndDestiny(name: string, picture: string = ''): { tipo: 'numer
 
   // Inferir pelo Picture se disponível
   if (picture) {
-      if (picture.includes('V') || picture.includes('v')) {
-          tipo = 'valor';
-      } else if (picture.startsWith('9')) {
-          tipo = 'numerico';
-      } else if (picture.startsWith('X')) {
-          tipo = 'alfanumerico';
-      }
+    const picLower = picture.toLowerCase();
+    if (picLower.includes('v') || picLower.includes('9v')) {
+      tipo = 'valor';
+    } else if (picture.startsWith('9') || picLower === 'num') {
+      tipo = 'numerico';
+    } else if (picture.startsWith('X') || picLower === 'alfa') {
+      tipo = 'alfanumerico';
+    }
   }
 
-  // Refinar pelo nome (tem precedência para Data e Valor sem picture explícita)
+  // Refinar pelo nome (tem precedência para Data e Valor)
   if (lower.includes('valor') || lower.includes('mora') || lower.includes('multa') || lower.includes('desconto')) {
     tipo = 'valor';
     destino = 'valor';
-  } else if (lower.includes('data') || lower.includes('vencimento') || lower.includes('emissão')) {
+  } else if (lower.includes('data') || lower.includes('vencimento') || lower.includes('emissão') || lower.includes('geração')) {
     tipo = 'data';
     if (lower.includes('vencimento')) destino = 'data_vencimento';
     else if (lower.includes('emissão')) destino = 'data_emissao';
-  } else if (lower.includes('cnpj') || lower.includes('cpf')) {
-    if (!picture || picture.startsWith('9')) tipo = 'numerico';
+    else if (lower.includes('geração')) destino = 'data_geracao';
+  } else if (lower.includes('cnpj') || lower.includes('cpf') || lower.includes('inscrição')) {
+    if (!picture || picture.toLowerCase().includes('num') || picture.startsWith('9')) tipo = 'numerico';
     destino = 'sacado_cpf_cnpj'; 
   } else if (lower.includes('nosso número') || lower.includes('nosso numero')) {
-    if (!picture || picture.startsWith('9')) tipo = 'numerico';
+    if (!picture || picture.toLowerCase().includes('num') || picture.startsWith('9')) tipo = 'numerico';
     destino = 'nosso_numero';
+  } else if (lower.includes('banco') && (lower.includes('código') || lower.includes('codigo'))) {
+    tipo = 'numerico';
+    destino = 'codigo_banco';
+  } else if (lower.includes('agência') || lower.includes('agencia')) {
+    tipo = 'numerico';
+    destino = 'agencia';
+  } else if (lower.includes('conta') && !lower.includes('conta-corrente')) {
+    tipo = 'numerico';
+    destino = 'conta';
+  } else if (lower.includes('nome') && (lower.includes('empresa') || lower.includes('beneficiário') || lower.includes('cedente'))) {
+    destino = 'razao_social';
+  } else if (lower.includes('nome') && (lower.includes('pagador') || lower.includes('sacado'))) {
+    destino = 'nome_sacado';
+  } else if (lower.includes('convênio') || lower.includes('convenio')) {
+    destino = 'convenio';
+  } else if (lower.includes('carteira')) {
+    destino = 'carteira';
+  } else if (lower.includes('sequência') || lower.includes('sequencial') || lower.includes('nsa')) {
+    tipo = 'numerico';
+    destino = 'sequencial';
   }
 
   return { tipo, destino };

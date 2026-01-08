@@ -104,10 +104,12 @@ export function useUsuarios() {
   const excluirUsuario = useMutation({
     mutationFn: async (usuarioId: string) => {
       const { error } = await supabase
-        .rpc('vv_b_soft_delete', {
-          p_table_name: 'vv_b_usuarios',
-          p_id: usuarioId
-        });
+        .from('vv_b_usuarios')
+        .update({
+          deleted: 'X',
+          data_delete: new Date().toISOString()
+        })
+        .eq('id', usuarioId);
       
       if (error) throw error;
     },
