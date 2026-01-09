@@ -287,8 +287,7 @@ serve(async (req) => {
                 }
               } 
               else {
-                // Campos fixos da tabela
-                let isStandard = true;
+                // Campos fixos da tabela - atribuir às variáveis específicas
                 switch (map.campo_destino) {
                   case 'numero_nota': numeroNota = String(valorApi); break;
                   case 'numero_cobranca': numeroCobranca = String(valorApi); break;
@@ -301,12 +300,33 @@ serve(async (req) => {
                   case 'banco': banco = String(valorApi); break;
                   case 'empresa': empresa = Number(valorApi); break;
                   case 'cliente': cliente = String(valorApi); break;
-                  default: isStandard = false; break;
-                }
-                
-                // Se não for campo padrão nem dyn_ nem dados_extras, salvar em dados_extras
-                if (!isStandard) {
-                   dadosExtras[map.campo_destino] = String(valorApi);
+                  default:
+                    // TODOS os outros campos mapeados devem ir para colunasDinamicas
+                    // para serem salvos como colunas reais na tabela
+                    // Converter valor de acordo com o tipo_dado
+                    let valorConvertido: any = valorApi;
+                    switch (map.tipo_dado) {
+                      case 'number':
+                        valorConvertido = isNaN(Number(valorApi)) ? null : Number(valorApi);
+                        break;
+                      case 'date':
+                        valorConvertido = parseODataDate(valorApi);
+                        break;
+                      case 'boolean':
+                        valorConvertido = Boolean(valorApi);
+                        break;
+                      default:
+                        // String - converter datas OData automaticamente se detectadas
+                        const strVal = String(valorApi);
+                        if (strVal.match(/^\/Date\(\d+\)\/?$/)) {
+                          valorConvertido = parseODataDate(strVal);
+                        } else {
+                          valorConvertido = strVal;
+                        }
+                        break;
+                    }
+                    colunasDinamicas[map.campo_destino] = valorConvertido;
+                    break;
                 }
               }
             }
