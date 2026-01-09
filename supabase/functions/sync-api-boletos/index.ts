@@ -433,41 +433,16 @@ serve(async (req) => {
     }
 
     // Preparar registros finais com cliente_id
-    const registrosParaUpsert: any[] = [];
-    const chavesDuplicadas = new Set<string>();
+    // Usar Map para deduplicar - mantém apenas o ÚLTIMO registro de cada chave única
+    const registrosPorChave = new Map<string, any>();
 
     for (const reg of registrosPreparados) {
       // Tentar buscar cliente_id se tiver CNPJ, mas NÃO é obrigatório
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Criar chave única para evitar duplicatas no batch (sem depender de cliente_id)
-      // Se houver chaves configuradas na integração, usar elas. Caso contrário, usar padrão.
-      let chaveUnica = '';
-      
-      if (integracao.campos_chave && Array.isArray(integracao.campos_chave) && integracao.campos_chave.length > 0) {
-        chaveUnica = integracao.campos_chave.map((k: string) => {
-           const val = getValueByPath(reg.jsonOriginal, k);
-           return val !== undefined && val !== null ? String(val) : '';
-        }).join('|');
-      }
-
-      // Fallback: se não gerou chave (config vazia ou valores nulos), usar numero_nota + numero_cobranca
-      if (!chaveUnica || chaveUnica.replace(/\|/g, '').trim() === '') {
-        chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}`;
-      }
-      
-      if (chavesDuplicadas.has(chaveUnica)) {
-        registrosComErro.push({
-          integracao_id,
-          json_original: reg.jsonOriginal,
-          tipo_erro: 'duplicado',
-          mensagem_erro: `Registro duplicado no mesmo lote: ${chaveUnica}`,
-          campo_erro: 'chave_unica',
-          valor_erro: chaveUnica
-        });
-        continue;
-      }
-      chavesDuplicadas.add(chaveUnica);
+      // Criar chave única baseada em numero_nota + numero_cobranca (constraint do banco)
+      // Esta é a chave usada no ON CONFLICT, então deve ser exatamente esta
+      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}`;
 
       // Construir registro base
       const registroBase: Record<string, any> = {
@@ -495,8 +470,16 @@ serve(async (req) => {
         }
       }
 
-      registrosParaUpsert.push(registroBase);
+      // Se já existe, sobrescreve (mantém o último)
+      if (registrosPorChave.has(chaveUnica)) {
+        // Log de duplicata silencioso (não é erro, apenas deduplicação)
+        console.log(`[sync-api-boletos] Deduplicando registro: ${chaveUnica}`);
+      }
+      registrosPorChave.set(chaveUnica, registroBase);
     }
+
+    // Converter Map para array (registros únicos)
+    const registrosParaUpsert = Array.from(registrosPorChave.values());
 
     console.log(`[sync-api-boletos] Registros únicos para upsert: ${registrosParaUpsert.length}`);
 
