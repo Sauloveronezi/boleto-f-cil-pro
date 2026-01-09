@@ -1,6 +1,9 @@
 /**
  * Extrator de Layout CNAB a partir de Manual PDF
- * Suporta formatos Itaú e Bradesco
+ * Suporta formatos Itaú BBA, Bradesco, Santander e outros
+ * 
+ * IMPORTANTE: PDFs de bancos diferentes têm formatos de tabela distintos.
+ * Este módulo implementa múltiplas estratégias de parsing.
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
@@ -34,21 +37,34 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  * REGEX PATTERNS para extração de tabelas
  */
 
-// Padrão Itaú: "NOME DO CAMPO | SIGNIFICADO | 001-003 | 9(03) | Conteúdo"
-const RE_ITAU = /^(?<field>.+?)\s+(?<desc>.+?)\s+(?<start>\d{1,3})\s*[-a]\s*(?<end>\d{1,3})\s+(?<picture>[X9]\([^)]+\)(?:V9\([^)]+\))?)\s*(?<content>.*)?$/i;
+// === PADRÃO ITAÚ BBA ===
+// Formato: "NOME DO CAMPO | SIGNIFICADO | 001 003 | 9(03) | Conteúdo"
+// ou: "AGÊNCIA | AGÊNCIA ... | 054 057 | 9(04) | NOTA 1"
+const RE_ITAU_BBA_TABLE = /^(.+?)\s{2,}(.+?)\s{2,}(\d{3})\s+(\d{3})\s+([X9]\([^)]+\)(?:V9\([^)]+\))?)\s*(.*)$/i;
 
-// Padrão Itaú alternativo: "Campo | 001 | 003 | 9(03)"
-const RE_ITAU_ALT = /^(?<field>[A-Za-záàâãéèêíïóôõúçÁÀÂÃÉÈÊÍÏÓÔÕÚÇ\s\-\/\.]+?)\s+(?<start>\d{1,3})\s+(?<end>\d{1,3})\s+(?<picture>[X9]\([^)]+\)(?:V9\([^)]+\))?)/i;
+// Formato alternativo Itaú: "CAMPO DESCRIÇÃO 001-003 9(03)"
+const RE_ITAU_DASH = /^(?<field>.+?)\s+(?<desc>.+?)\s+(?<start>\d{1,3})\s*[-a]\s*(?<end>\d{1,3})\s+(?<picture>[X9]\([^)]+\)(?:V9\([^)]+\))?)\s*(?<content>.*)?$/i;
 
-// Padrão Bradesco: "01.0 Campo Nome | 1 | 3 | 3 | - | Num | Default"
+// === PADRÃO ITAÚ SIMPLES ===
+// Formato: "NOME POSIÇÃO PICTURE" - ex: "CÓDIGO DO BANCO 001 003 9(03) 341"
+const RE_ITAU_SIMPLE = /^([A-ZÀ-Ú\s\-\/\.]+)\s+(\d{3})\s+(\d{3})\s+([X9]\([^)]+\)(?:V9\([^)]+\))?)\s*(.*)$/i;
+
+// === PADRÃO BRADESCO ===
+// Formato: "01.0 Campo Nome | 1 | 3 | 3 | - | Num | Default"
 const RE_BRADESCO = /^(\d{1,2}\.\d)\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})(?:\s+(\d{1,3}))?(?:\s+(\d{1,2}))?(?:\s+(\d{1,2}))?\s*[-–]?\s*(Num|Alfa|Alpha|X|9)?\s*(.*)$/i;
 
-// Padrão FEBRABAN: "G001 | Código do Banco | 001 | 003 | 003"
+// === PADRÃO FEBRABAN ===
+// Formato: "G001 | Código do Banco | 001 | 003 | 003"
 const RE_FEBRABAN = /^([A-Z]\d{3})\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})(?:\s+(\d{1,3}))?/i;
 
-// Padrão genérico com posições: "Campo 001 003" ou "001-003 Campo"
+// === PADRÃO GENÉRICO COM POSIÇÕES ===
+const RE_GENERIC_SPACES = /^(.+?)\s{2,}(\d{1,3})\s+(\d{1,3})\s+([X9V\(\)0-9]+)\s*(.*)$/i;
 const RE_GENERIC_POS = /^(.+?)\s+(\d{1,3})\s*[-–a]\s*(\d{1,3})$/i;
 const RE_GENERIC_POS_FIRST = /^(\d{1,3})\s*[-–a]\s*(\d{1,3})\s+(.+)$/i;
+
+// === PADRÃO LINHA MARKDOWN ===
+// Formato: "| CAMPO | DESCRIÇÃO | 001 003 | 9(03) | CONTEÚDO |"
+const RE_MARKDOWN_TABLE = /^\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*(\d{1,3})\s*[-–\s]?\s*(\d{1,3})?\s*\|\s*([^|]+)\s*\|\s*([^|]*)\s*\|?$/i;
 
 // Detectar tamanho de registro
 const RE_RECORD_SIZE = /tamanho\s*(?:do\s*)?registro\s*[=:]\s*(\d{3})\s*(?:bytes|posições|pos\.?)?/i;
@@ -58,6 +74,15 @@ const TABLE_HEADERS = [
   'nome do campo', 'significado', 'posição', 'picture', 'conteúdo',
   'campo', 'de', 'até', 'nº', 'formato', 'default', 'descrição',
   'pos', 'tamanho', 'tipo', 'dig', 'dec'
+];
+
+// Palavras que indicam que é um campo válido (para ajudar na detecção)
+const FIELD_INDICATORS = [
+  'código', 'codigo', 'nome', 'data', 'valor', 'número', 'numero', 'tipo',
+  'agência', 'agencia', 'conta', 'banco', 'lote', 'registro', 'brancos',
+  'zeros', 'complemento', 'reservado', 'sequência', 'sequencia', 'layout',
+  'inscrição', 'inscricao', 'convênio', 'convenio', 'empresa', 'detalhe',
+  'header', 'trailer', 'cnab', 'serviço', 'servico', 'operação', 'operacao'
 ];
 
 /**
@@ -86,9 +111,9 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
       }))
       .sort((a, b) => (b.y - a.y) || (a.x - b.x));
 
-    // Agrupar em linhas por proximidade de Y
+    // Agrupar em linhas por proximidade de Y (aumentar tolerância)
     const lineBuckets: typeof sortedItems[] = [];
-    const yTolerance = 3.0;
+    const yTolerance = 5.0; // Aumentado para melhor agrupamento
 
     for (const item of sortedItems) {
       const last = lineBuckets[lineBuckets.length - 1];
@@ -104,22 +129,27 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
       }
     }
 
-    // Montar linhas de texto
+    // Montar linhas de texto preservando espaçamento entre colunas
     const lines: PdfTextLine[] = lineBuckets.map(bucket => {
       bucket.sort((a, b) => a.x - b.x);
       
       let text = '';
-      let prevX = -Infinity;
+      let prevEnd = -Infinity;
       
       for (const t of bucket) {
-        const gap = t.x - prevX;
-        if (text && gap > 8) text += ' ';
+        const gap = t.x - prevEnd;
+        // Se houver um gap grande, adicionar múltiplos espaços para preservar colunas
+        if (text && gap > 20) {
+          text += '  '; // Dois espaços indicam separação de coluna
+        } else if (text && gap > 4) {
+          text += ' ';
+        }
         text += t.str;
-        prevX = t.x + t.w;
+        prevEnd = t.x + t.w;
       }
       
       return {
-        text: text.replace(/\s+/g, ' ').trim(),
+        text: text.replace(/\s{3,}/g, '  ').trim(), // Normalizar espaços múltiplos para 2
         y: bucket[0].y,
         x: bucket[0].x,
         pageNumber: p,
@@ -138,6 +168,24 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
 function detectRecordType(text: string): string | null {
   const lower = text.toLowerCase();
   
+  // Detecção específica para Itaú BBA
+  if (lower.includes('header de arquivo') || lower.includes('header arquivo')) {
+    return 'HEADER_ARQUIVO';
+  }
+  if (lower.includes('header de lote') || lower.includes('header lote')) {
+    return 'HEADER_LOTE';
+  }
+  if (lower.includes('registro detalhe') || lower.includes('detalhe de lote')) {
+    return 'DETALHE';
+  }
+  if (lower.includes('trailer de lote') || lower.includes('trailer lote')) {
+    return 'TRAILER_LOTE';
+  }
+  if (lower.includes('trailer de arquivo') || lower.includes('trailer arquivo')) {
+    return 'TRAILER_ARQUIVO';
+  }
+  
+  // Fallback para patterns gerais
   for (const [recordType, patterns] of Object.entries(RECORD_TYPE_PATTERNS)) {
     for (const pattern of patterns) {
       if (lower.includes(pattern)) {
@@ -162,10 +210,10 @@ function detectRecordSize(lines: string[]): 240 | 400 | null {
     }
     
     // Também detectar pelo contexto
-    if (line.toLowerCase().includes('cnab 240') || line.includes('240 posições')) {
+    if (line.toLowerCase().includes('cnab 240') || line.includes('240 posições') || line.includes('240 bytes')) {
       return 240;
     }
-    if (line.toLowerCase().includes('cnab 400') || line.includes('400 posições')) {
+    if (line.toLowerCase().includes('cnab 400') || line.includes('400 posições') || line.includes('400 bytes')) {
       return 400;
     }
   }
@@ -177,8 +225,30 @@ function detectRecordSize(lines: string[]): 240 | 400 | null {
  */
 function isTableHeader(text: string): boolean {
   const lower = text.toLowerCase();
-  const matchCount = TABLE_HEADERS.filter(h => lower.includes(h)).length;
+  
+  // Verificar se contém palavras-chave de cabeçalho
+  const headerKeywords = ['nome do campo', 'significado', 'posição', 'picture', 'conteúdo'];
+  const matchCount = headerKeywords.filter(h => lower.includes(h)).length;
+  
   return matchCount >= 2;
+}
+
+/**
+ * Verificar se a linha parece ser um campo válido de CNAB
+ */
+function looksLikeField(text: string): boolean {
+  const lower = text.toLowerCase();
+  
+  // Deve conter números de posição (3 dígitos)
+  const hasPositions = /\d{3}\s+\d{3}/.test(text) || /\d{1,3}\s*[-–a]\s*\d{1,3}/.test(text);
+  
+  // Deve conter picture (X ou 9 seguido de parênteses)
+  const hasPicture = /[X9]\(\d+\)/i.test(text);
+  
+  // Ou deve conter indicadores de campo conhecidos
+  const hasFieldIndicator = FIELD_INDICATORS.some(ind => lower.includes(ind));
+  
+  return (hasPositions && hasPicture) || (hasPositions && hasFieldIndicator);
 }
 
 /**
@@ -189,13 +259,13 @@ function inferDataType(picture: string, fieldName: string): CnabDataType {
   const picLower = picture?.toLowerCase() || '';
   
   // Por picture
-  if (picLower.includes('v') || picLower.includes('9v')) {
+  if (picLower.includes('v') || /9\([^)]+\)v9/i.test(picture)) {
     return 'decimal';
   }
-  if (picLower === 'num' || picture?.startsWith('9')) {
+  if (picLower === 'num' || picture?.match(/^9\(\d+\)$/)) {
     return 'num';
   }
-  if (picLower === 'alfa' || picLower === 'alpha' || picture?.startsWith('X')) {
+  if (picLower === 'alfa' || picLower === 'alpha' || picture?.match(/^X\(\d+\)$/i)) {
     return 'alfa';
   }
   
@@ -211,6 +281,11 @@ function inferDataType(picture: string, fieldName: string): CnabDataType {
   }
   if (lower.includes('cnab') || lower.includes('branco') || lower.includes('filler') || lower.includes('uso exclusivo')) {
     return 'cnab_filler';
+  }
+  
+  // Inferir pelo tamanho do picture se numérico ou alfa
+  if (picture?.startsWith('9')) {
+    return 'num';
   }
   
   return 'alfa';
@@ -238,52 +313,179 @@ function inferDestination(fieldName: string): string | undefined {
   // Regras específicas
   const lower = fieldName.toLowerCase();
   
-  if (lower.includes('nosso') && lower.includes('numero') || lower.includes('número')) {
+  if ((lower.includes('nosso') && (lower.includes('numero') || lower.includes('número')))) {
     return 'nosso_numero';
   }
   if (lower.includes('data') && lower.includes('vencimento')) {
     return 'data_vencimento';
   }
-  if ((lower.includes('nome') && (lower.includes('sacado') || lower.includes('pagador'))) ||
+  if ((lower.includes('nome') && (lower.includes('sacado') || lower.includes('pagador') || lower.includes('debitado'))) ||
       (lower === 'sacado' || lower === 'pagador')) {
     return 'sacado_nome';
   }
-  if ((lower.includes('cpf') || lower.includes('cnpj')) && 
-      (lower.includes('sacado') || lower.includes('pagador'))) {
+  if ((lower.includes('cpf') || lower.includes('cnpj') || lower.includes('inscri')) && 
+      (lower.includes('sacado') || lower.includes('pagador') || lower.includes('debitado'))) {
     return 'sacado_cpf_cnpj';
   }
-  if (lower.includes('valor') && (lower.includes('titulo') || lower.includes('título') || lower.includes('nominal'))) {
+  if (lower.includes('valor') && (lower.includes('titulo') || lower.includes('título') || lower.includes('nominal') || lower.includes('agendado') || lower.includes('lancamento'))) {
     return 'valor';
   }
-  if (lower.includes('codigo') && lower.includes('banco') || lower === 'banco') {
+  if ((lower.includes('codigo') || lower.includes('código')) && lower.includes('banco')) {
     return 'codigo_banco';
   }
-  if (lower === 'agencia' || lower === 'agência') {
+  if (lower === 'agencia' || lower === 'agência' || lower.includes('número agência') || lower.includes('numero agencia')) {
     return 'agencia';
   }
-  if (lower === 'conta' || lower.includes('conta corrente')) {
+  if (lower === 'conta' || lower.includes('conta corrente') || lower.includes('c/c')) {
     return 'conta';
+  }
+  if (lower.includes('convênio') || lower.includes('convenio')) {
+    return 'convenio';
+  }
+  if (lower.includes('sequência') || lower.includes('sequencia')) {
+    return 'sequencial';
+  }
+  if (lower.includes('seu número') || lower.includes('seu numero') || lower.includes('número documento') || lower.includes('numero documento')) {
+    return 'numero_documento';
+  }
+  if (lower.includes('data') && (lower.includes('geração') || lower.includes('geracao'))) {
+    return 'data_geracao';
+  }
+  if (lower.includes('data') && lower.includes('agendada')) {
+    return 'data_vencimento';
   }
   
   return undefined;
 }
 
 /**
- * Parsear uma linha de tabela usando múltiplos padrões
+ * Estratégia 1: Parser para formato Itaú BBA
+ * Formato: "NOME CAMPO  SIGNIFICADO  001 003  9(03)  Conteúdo"
  */
-function parseTableRow(line: string): ParsedTableRow | null {
+function parseItauBBA(line: string): ParsedTableRow | null {
   // Ignorar cabeçalhos
-  if (isTableHeader(line)) {
-    return null;
+  if (isTableHeader(line)) return null;
+  
+  // Verificar se parece um campo válido
+  if (!looksLikeField(line)) return null;
+  
+  // Padrão 1: Com espaços duplos separando colunas
+  let match = line.match(RE_ITAU_BBA_TABLE);
+  if (match) {
+    return {
+      field: match[1].trim(),
+      description: match[2].trim(),
+      start: parseInt(match[3]),
+      end: parseInt(match[4]),
+      picture: match[5].trim(),
+      content: match[6]?.trim() || undefined,
+    };
   }
   
-  let result: ParsedTableRow | null = null;
+  // Padrão 2: Linha simples com posições
+  match = line.match(RE_ITAU_SIMPLE);
+  if (match) {
+    return {
+      field: match[1].trim(),
+      description: match[1].trim(),
+      start: parseInt(match[2]),
+      end: parseInt(match[3]),
+      picture: match[4].trim(),
+      content: match[5]?.trim() || undefined,
+    };
+  }
+  
+  // Padrão 3: Com traço separando posições
+  match = line.match(RE_ITAU_DASH);
+  if (match?.groups) {
+    return {
+      field: match.groups.field.trim(),
+      description: match.groups.desc.trim(),
+      start: parseInt(match.groups.start),
+      end: parseInt(match.groups.end),
+      picture: match.groups.picture?.trim(),
+      content: match.groups.content?.trim() || undefined,
+    };
+  }
+  
+  return null;
+}
 
-  // Tentar padrão Bradesco
-  let match = line.match(RE_BRADESCO);
+/**
+ * Estratégia 2: Parser para formato Markdown (tabelas com |)
+ */
+function parseMarkdownTable(line: string): ParsedTableRow | null {
+  if (!line.includes('|')) return null;
+  if (isTableHeader(line)) return null;
+  if (line.includes('---')) return null; // Separador markdown
+  
+  const match = line.match(RE_MARKDOWN_TABLE);
+  if (match) {
+    const field = match[1].trim();
+    const desc = match[2].trim();
+    const startStr = match[3];
+    const endStr = match[4] || match[3]; // Se não tiver end, usa start
+    const picture = match[5].trim();
+    const content = match[6]?.trim();
+    
+    // Validar
+    const start = parseInt(startStr);
+    const end = parseInt(endStr);
+    
+    if (isNaN(start) || isNaN(end) || start > end || end > 500) {
+      return null;
+    }
+    
+    return {
+      field,
+      description: desc,
+      start,
+      end,
+      picture,
+      content,
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Estratégia 3: Parser genérico com espaços
+ */
+function parseGenericSpaces(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  if (!looksLikeField(line)) return null;
+  
+  const match = line.match(RE_GENERIC_SPACES);
+  if (match) {
+    const start = parseInt(match[2]);
+    const end = parseInt(match[3]);
+    
+    if (start > end || end > 500) return null;
+    
+    return {
+      field: match[1].trim(),
+      description: match[1].trim(),
+      start,
+      end,
+      picture: match[4].trim(),
+      content: match[5]?.trim() || undefined,
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Estratégia 4: Parser Bradesco
+ */
+function parseBradesco(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  
+  const match = line.match(RE_BRADESCO);
   if (match) {
     const [, seqNum, field, startStr, endStr, lenStr, digStr, decStr, type, defaultVal] = match;
-    result = {
+    return {
       field: field.trim(),
       description: field.trim(),
       start: parseInt(startStr),
@@ -295,93 +497,88 @@ function parseTableRow(line: string): ParsedTableRow | null {
     };
   }
   
-  // Tentar padrão Itaú
-  if (!result) {
-    match = line.match(RE_ITAU);
-    if (match?.groups) {
-      result = {
-        field: match.groups.field.trim(),
-        description: match.groups.desc.trim(),
-        start: parseInt(match.groups.start),
-        end: parseInt(match.groups.end),
-        picture: match.groups.picture?.trim(),
-        content: match.groups.content?.trim() || undefined,
-      };
-    }
+  return null;
+}
+
+/**
+ * Estratégia 5: Parser FEBRABAN
+ */
+function parseFebraban(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  
+  const match = line.match(RE_FEBRABAN);
+  if (match) {
+    return {
+      field: match[2].trim(),
+      description: match[2].trim(),
+      start: parseInt(match[3]),
+      end: parseInt(match[4]),
+    };
   }
   
-  // Tentar padrão Itaú alternativo
-  if (!result) {
-    match = line.match(RE_ITAU_ALT);
-    if (match?.groups) {
-      result = {
-        field: match.groups.field.trim(),
-        description: match.groups.field.trim(),
-        start: parseInt(match.groups.start),
-        end: parseInt(match.groups.end),
-        picture: match.groups.picture?.trim(),
-      };
-    }
-  }
+  return null;
+}
+
+/**
+ * Parsear uma linha de tabela usando múltiplas estratégias
+ */
+function parseTableRow(line: string): ParsedTableRow | null {
+  // Ignorar linhas muito curtas ou que são claramente não-campos
+  if (line.length < 10) return null;
+  if (line.match(/^[=\-\*]+$/)) return null; // Separadores
+  if (line.toLowerCase().includes('x = alfanumérico') || line.toLowerCase().includes('9 = numérico')) return null;
+  if (line.toLowerCase().includes('junho/') || line.match(/^\d{1,2}$/)) return null; // Data ou número de página
   
-  // Tentar padrão FEBRABAN
-  if (!result) {
-    match = line.match(RE_FEBRABAN);
-    if (match) {
-      result = {
-        field: match[2].trim(),
-        description: match[2].trim(),
-        start: parseInt(match[3]),
-        end: parseInt(match[4]),
-      };
-    }
-  }
+  let result: ParsedTableRow | null = null;
+
+  // Tentar cada estratégia na ordem de especificidade
   
-  // Tentar padrões genéricos
-  if (!result) {
-    match = line.match(RE_GENERIC_POS);
-    if (match) {
-      result = {
-        field: match[1].trim(),
-        description: match[1].trim(),
-        start: parseInt(match[2]),
-        end: parseInt(match[3]),
-      };
-    }
-  }
+  // 1. Markdown tables (mais específico)
+  result = parseMarkdownTable(line);
+  if (result) return finalizeRow(result);
   
-  if (!result) {
-    match = line.match(RE_GENERIC_POS_FIRST);
-    if (match) {
-      result = {
-        field: match[3].trim(),
-        description: match[3].trim(),
-        start: parseInt(match[1]),
-        end: parseInt(match[2]),
-      };
-    }
-  }
+  // 2. Itaú BBA (muito comum)
+  result = parseItauBBA(line);
+  if (result) return finalizeRow(result);
   
-  // Validações
-  if (result) {
-    // Limpar nome do campo
-    result.field = result.field
-      .replace(/^[-–—]\s*/, '')
-      .replace(/\s*[-–—]$/, '')
-      .replace(/^\d{1,2}\.\d\s*/, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    
-    // Validar posições
-    if (result.start > result.end) return null;
-    if (result.end > 500) return null; // Limite razoável
-    if (result.field.length < 2) return null;
-    
-    // Inferir tipo de dado
-    result.data_type = inferDataType(result.picture || '', result.field);
-  }
+  // 3. Bradesco
+  result = parseBradesco(line);
+  if (result) return finalizeRow(result);
   
-  return result;
+  // 4. FEBRABAN
+  result = parseFebraban(line);
+  if (result) return finalizeRow(result);
+  
+  // 5. Genérico
+  result = parseGenericSpaces(line);
+  if (result) return finalizeRow(result);
+  
+  return null;
+}
+
+/**
+ * Finalizar e validar um ParsedTableRow
+ */
+function finalizeRow(row: ParsedTableRow): ParsedTableRow | null {
+  // Limpar nome do campo
+  row.field = row.field
+    .replace(/^[-–—]\s*/, '')
+    .replace(/\s*[-–—]$/, '')
+    .replace(/^\d{1,2}\.\d\s*/, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^\(\*\)\s*/, '') // Remove (*) do início
+    .trim();
+  
+  // Validar posições
+  if (row.start > row.end) return null;
+  if (row.end > 500) return null;
+  if (row.start < 1) return null;
+  if (row.field.length < 2) return null;
+  
+  // Inferir tipo de dado
+  row.data_type = inferDataType(row.picture || '', row.field);
+  
+  return row;
 }
 
 /**
@@ -391,6 +588,7 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
   const blocks: DetectedLayoutBlock[] = [];
   let currentBlock: DetectedLayoutBlock | null = null;
   let recordSize: 240 | 400 = 240;
+  let lastRecordType: string | null = null;
   
   for (const page of pages) {
     const allLines = page.lines.map(l => l.text);
@@ -406,8 +604,8 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
       
       // Detectar início de novo bloco
       const recordType = detectRecordType(text);
-      if (recordType) {
-        // Salvar bloco anterior se existir
+      if (recordType && recordType !== lastRecordType) {
+        // Salvar bloco anterior se existir e tiver campos
         if (currentBlock && currentBlock.rows.length > 0) {
           blocks.push(currentBlock);
         }
@@ -420,6 +618,7 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
           rows: [],
           raw_lines: [],
         };
+        lastRecordType = recordType;
         continue;
       }
       
@@ -429,7 +628,13 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
         
         const row = parseTableRow(text);
         if (row) {
-          currentBlock.rows.push(row);
+          // Evitar duplicatas (mesmo campo na mesma posição)
+          const isDuplicate = currentBlock.rows.some(
+            r => r.start === row.start && r.end === row.end
+          );
+          if (!isDuplicate) {
+            currentBlock.rows.push(row);
+          }
         }
       }
     }
@@ -440,13 +645,59 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
     blocks.push(currentBlock);
   }
   
+  // Ordenar campos dentro de cada bloco por posição inicial
+  for (const block of blocks) {
+    block.rows.sort((a, b) => a.start - b.start);
+  }
+  
   return blocks;
+}
+
+/**
+ * Preencher gaps no layout com campos BRANCOS/ZEROS
+ */
+function fillLayoutGaps(rows: ParsedTableRow[], recordSize: number): ParsedTableRow[] {
+  const filledRows: ParsedTableRow[] = [];
+  let expectedStart = 1;
+  
+  const sortedRows = [...rows].sort((a, b) => a.start - b.start);
+  
+  for (const row of sortedRows) {
+    // Se há um gap, preencher com BRANCOS
+    if (row.start > expectedStart) {
+      filledRows.push({
+        field: 'BRANCOS',
+        description: 'Complemento de registro (gap preenchido)',
+        start: expectedStart,
+        end: row.start - 1,
+        picture: `X(${row.start - expectedStart})`,
+        data_type: 'cnab_filler',
+      });
+    }
+    
+    filledRows.push(row);
+    expectedStart = row.end + 1;
+  }
+  
+  // Preencher até o final do registro
+  if (expectedStart <= recordSize) {
+    filledRows.push({
+      field: 'BRANCOS',
+      description: 'Complemento de registro (final)',
+      start: expectedStart,
+      end: recordSize,
+      picture: `X(${recordSize - expectedStart + 1})`,
+      data_type: 'cnab_filler',
+    });
+  }
+  
+  return filledRows;
 }
 
 /**
  * Converter bloco detectado em registro do layout
  */
-function blockToLayoutRecord(block: DetectedLayoutBlock): LayoutRecord {
+function blockToLayoutRecord(block: DetectedLayoutBlock, fillGaps: boolean = true): LayoutRecord {
   const matchKeys: MatchKeys = {
     tipo_registro_pos: { start: block.record_size === 240 ? 8 : 1, value: '0' },
   };
@@ -476,7 +727,9 @@ function blockToLayoutRecord(block: DetectedLayoutBlock): LayoutRecord {
       matchKeys.segmento_pos = { start: 14, value: 'A' };
       break;
     case 'DETALHE':
-      matchKeys.tipo_registro_pos = { start: 1, value: '1' };
+      matchKeys.tipo_registro_pos = { start: 8, value: '3' };
+      // Para Itaú BBA, o segmento A está na posição 14
+      matchKeys.segmento_pos = { start: 14, value: 'A' };
       break;
     case 'TRAILER_LOTE':
       matchKeys.tipo_registro_pos = { start: 8, value: '5' };
@@ -486,8 +739,11 @@ function blockToLayoutRecord(block: DetectedLayoutBlock): LayoutRecord {
       break;
   }
   
+  // Preencher gaps se solicitado
+  const rows = fillGaps ? fillLayoutGaps(block.rows, block.record_size) : block.rows;
+  
   // Converter rows em fields
-  const fields: LayoutField[] = block.rows.map((row, index) => {
+  const fields: LayoutField[] = rows.map((row, index) => {
     const normalized = row.field
       .toLowerCase()
       .normalize('NFD')
@@ -541,7 +797,7 @@ function detectBankCode(lines: string[]): { code: string; name: string } {
     { code: '033', name: 'Santander', patterns: ['santander'] },
     { code: '104', name: 'Caixa Econômica Federal', patterns: ['caixa', 'cef'] },
     { code: '237', name: 'Bradesco', patterns: ['bradesco'] },
-    { code: '341', name: 'Itaú', patterns: ['itaú', 'itau', 'itaubba', 'sisdeb'] },
+    { code: '341', name: 'Itaú', patterns: ['itaú', 'itau', 'itaubba', 'itaú bba', 'sisdeb'] },
     { code: '422', name: 'Safra', patterns: ['safra'] },
     { code: '748', name: 'Sicredi', patterns: ['sicredi'] },
     { code: '756', name: 'Sicoob', patterns: ['sicoob'] },
@@ -559,7 +815,7 @@ function detectBankCode(lines: string[]): { code: string; name: string } {
 }
 
 /**
- * Validar layout (detectar sobreposições e gaps)
+ * Validar layout (detectar sobreposições)
  */
 function validateLayout(records: LayoutRecord[], recordSize: number): string[] {
   const warnings: string[] = [];
@@ -577,22 +833,14 @@ function validateLayout(records: LayoutRecord[], recordSize: number): string[] {
       }
     }
     
-    // Verificar cobertura (gaps)
-    let expectedStart = 1;
-    for (const field of fields) {
-      if (field.start_pos > expectedStart) {
+    // Verificar se o último campo termina no tamanho esperado
+    if (fields.length > 0) {
+      const lastField = fields[fields.length - 1];
+      if (lastField.end_pos !== recordSize) {
         warnings.push(
-          `Gap em ${record.record_name}: posições ${expectedStart}-${field.start_pos - 1} não cobertas ` +
-          `(antes de "${field.field_name_original}")`
+          `${record.record_name}: Último campo termina em ${lastField.end_pos}, esperado ${recordSize}`
         );
       }
-      expectedStart = field.end_pos + 1;
-    }
-    
-    if (expectedStart <= recordSize) {
-      warnings.push(
-        `${record.record_name}: posições ${expectedStart}-${recordSize} não cobertas (final do registro)`
-      );
     }
   }
   
@@ -607,8 +855,12 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
   const warnings: string[] = [];
   
   try {
+    console.log('[CNAB Extractor] Iniciando análise do PDF:', file.name);
+    
     // Extrair linhas do PDF
     const { pages } = await extractPdfLines(file);
+    
+    console.log(`[CNAB Extractor] Extraídas ${pages.length} páginas`);
     
     if (pages.length === 0) {
       return {
@@ -620,22 +872,34 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
       };
     }
     
+    // Log de debug: mostrar algumas linhas
+    for (const page of pages.slice(0, 3)) {
+      console.log(`[CNAB Extractor] Página ${page.pageNumber}:`, page.lines.slice(0, 5).map(l => l.text));
+    }
+    
     // Coletar todas as linhas para análise inicial
     const allLines = pages.flatMap(p => p.lines.map(l => l.text));
     
     // Detectar banco
     const bank = detectBankCode(allLines);
+    console.log(`[CNAB Extractor] Banco detectado: ${bank.name} (${bank.code})`);
     
     // Detectar tamanho do registro
     let recordSize: 240 | 400 = detectRecordSize(allLines) || 240;
+    console.log(`[CNAB Extractor] Tamanho do registro: ${recordSize}`);
     
     // Detectar blocos de layout
     const blocks = detectLayoutBlocks(pages);
+    console.log(`[CNAB Extractor] Blocos detectados: ${blocks.length}`);
+    
+    for (const block of blocks) {
+      console.log(`[CNAB Extractor] - ${block.record_name}: ${block.rows.length} campos`);
+    }
     
     if (blocks.length === 0) {
       return {
         success: false,
-        errors: ['Nenhum layout CNAB detectado no PDF. Verifique se o arquivo contém tabelas de layout.'],
+        errors: ['Nenhum layout CNAB detectado no PDF. Verifique se o arquivo contém tabelas de layout de campos.'],
         warnings: [],
         pages_analyzed: pages.length,
         fields_extracted: 0,
@@ -643,7 +907,7 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
     }
     
     // Converter blocos em registros
-    const records = blocks.map(blockToLayoutRecord);
+    const records = blocks.map(block => blockToLayoutRecord(block, true));
     
     // Validar layout
     const validationWarnings = validateLayout(records, recordSize);
@@ -651,6 +915,7 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
     
     // Contar campos extraídos
     const totalFields = records.reduce((sum, r) => sum + r.fields.length, 0);
+    console.log(`[CNAB Extractor] Total de campos extraídos: ${totalFields}`);
     
     // Montar LayoutSpec
     const layoutSpec: LayoutSpec = {
@@ -679,7 +944,7 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
     };
     
   } catch (error) {
-    console.error('Erro ao processar PDF:', error);
+    console.error('[CNAB Extractor] Erro ao processar PDF:', error);
     return {
       success: false,
       errors: [`Erro ao processar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`],
@@ -716,6 +981,10 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
           break;
         case 'DETALHE_R':
           tipoLinha = 'detalhe_segmento_r';
+          break;
+        case 'DETALHE':
+        case 'DETALHE_A':
+          tipoLinha = 'detalhe';
           break;
         case 'TRAILER_LOTE':
           tipoLinha = 'trailer_lote';
