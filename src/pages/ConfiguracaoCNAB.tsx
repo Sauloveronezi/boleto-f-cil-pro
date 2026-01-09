@@ -149,31 +149,10 @@ export default function ConfiguracaoCNAB() {
   const { toast } = useToast();
   const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   
+  // TODOS os hooks devem vir antes de qualquer return condicional
+  
   // Lista principal
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoCNAB[]>([]);
-
-  if (isLoadingPermissoes) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
-  }
-
-  if (!hasPermission('configuracoes', 'visualizar')) {
-    return (
-      <MainLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
-          <p className="text-muted-foreground">
-            Você não tem permissão para visualizar configurações CNAB.
-          </p>
-        </div>
-      </MainLayout>
-    );
-  }
   
   // Estado de Edição
   const [configSelecionada, setConfigSelecionada] = useState<ConfiguracaoCNAB | null>(null);
@@ -199,6 +178,30 @@ export default function ConfiguracaoCNAB() {
     const salvos = JSON.parse(localStorage.getItem('padroesCNAB') || '[]');
     setConfiguracoes(salvos);
   }, []);
+
+  // Early returns - devem vir DEPOIS de todos os hooks
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!hasPermission('configuracoes', 'visualizar')) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar configurações CNAB.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   // --- ACTIONS ---
 
