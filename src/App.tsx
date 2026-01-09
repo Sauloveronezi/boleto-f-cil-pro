@@ -15,6 +15,7 @@ import Modelos from "./pages/Modelos";
 import ImportarLayout from "./pages/ImportarLayout";
 import Configuracoes from "./pages/Configuracoes";
 import ConfiguracaoCNAB from "./pages/ConfiguracaoCNAB";
+import ArquivosCNAB from "./pages/ArquivosCNAB";
 import BoletosApi from "./pages/BoletosApi";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -46,6 +47,7 @@ const App = () => (
             <Route path="/importar-layout" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><ImportarLayout /></Protected></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><Configuracoes /></Protected></ProtectedRoute>} />
             <Route path="/configuracao-cnab" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><ConfiguracaoCNAB /></Protected></ProtectedRoute>} />
+            <Route path="/arquivos-cnab" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><ArquivosCNAB /></Protected></ProtectedRoute>} />
             <Route path="/boletos-api" element={<ProtectedRoute><Protected modulo="integracoes" fallback={<AccessDenied />}><BoletosApi /></Protected></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute><Protected modulo="usuarios" fallback={<AccessDenied />}><Usuarios /></Protected></ProtectedRoute>} />
             <Route path="/perfis-acesso" element={<ProtectedRoute><Protected modulo="perfis" fallback={<AccessDenied />}><PerfisAcesso /></Protected></ProtectedRoute>} />
