@@ -105,35 +105,7 @@ export default function Modelos() {
   const { isLoading: isLoadingRole, canBootstrapAdmin, bootstrapAdmin } = useUserRole();
   const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
 
-  const canCreate = hasPermission('modelos', 'criar');
-  const canEdit = hasPermission('modelos', 'editar');
-  const canDelete = hasPermission('modelos', 'excluir');
-  const canView = hasPermission('modelos', 'visualizar');
-
-  if (isLoadingPermissoes) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
-  }
-
-  if (!canView) {
-    return (
-      <MainLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
-          <p className="text-muted-foreground">
-            Você não tem permissão para visualizar modelos de boleto.
-          </p>
-        </div>
-      </MainLayout>
-    );
-  }
-
-  // Estado do formulário
+  // Estado do formulário - TODOS os hooks devem vir antes de qualquer return condicional
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
   const [modeloVisualizando, setModeloVisualizando] = useState<ModeloBoleto | null>(null);
@@ -155,6 +127,11 @@ export default function Modelos() {
   const [formBancoId, setFormBancoId] = useState<string>('');
   const [formTipoLayout, setFormTipoLayout] = useState<string>('CNAB_400');
   const [formTextoInstrucoes, setFormTextoInstrucoes] = useState('');
+
+  const canCreate = hasPermission('modelos', 'criar');
+  const canEdit = hasPermission('modelos', 'editar');
+  const canDelete = hasPermission('modelos', 'excluir');
+  const canView = hasPermission('modelos', 'visualizar');
 
   // Carregar modelos do banco de dados
   const { data: modelos, isLoading } = useQuery({
@@ -353,6 +330,30 @@ export default function Modelos() {
       resetForm();
     }
   }, [criarNovo]);
+
+  // Early returns - devem vir DEPOIS de todos os hooks
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!canView) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para visualizar modelos de boleto.
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const getBancoNome = (bancoId: string | null) => {
     if (!bancoId) return 'Banco não selecionado';
