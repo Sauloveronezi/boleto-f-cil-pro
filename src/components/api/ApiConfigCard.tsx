@@ -141,10 +141,10 @@ export function ApiConfigCard() {
       if (mapError) throw mapError;
 
       const destinos = new Set((mapeamentos || []).map((m: any) => m.campo_destino));
+      // Somente numero_nota e numero_cobranca são obrigatórios - cliente NÃO é obrigatório
       const obrigatorios = [
         { key: 'numero_nota', label: 'Número da Nota' },
         { key: 'numero_cobranca', label: 'Número Cobrança' },
-        { key: 'cliente_cnpj', label: 'CNPJ Cliente' },
       ];
 
       const faltando = obrigatorios.filter((c) => !destinos.has(c.key));
@@ -161,18 +161,21 @@ export function ApiConfigCard() {
       const result = await syncApi.mutateAsync({ integracao_id: integracaoId, modo_demo: modoDemo });
 
       if (result?.success && (result.status === 'sucesso' || result.status === 'parcial')) {
+        const total = (result.registros_novos || 0) + (result.registros_atualizados || 0);
         toast({
           title: result.status === 'parcial' ? 'Sincronização concluída (parcial)' : 'Sincronização concluída',
-          description: `${result.registros_novos || 0} novos, ${result.registros_atualizados || 0} atualizados`,
+          description: total > 0 
+            ? `${result.registros_atualizados || 0} registros processados`
+            : 'Nenhum registro novo ou atualizado',
         });
       } else {
         const primeiroErro = Array.isArray(result?.erros) ? result.erros[0] : null;
-        const motivo = primeiroErro?.tipo === 'cliente_nao_encontrado'
-          ? `Nenhum registro importado: CNPJ ${primeiroErro.cnpj} não existe em Clientes.`
-          : (result?.error || 'Nenhum registro importado. Verifique o preview (Testar API) e o cadastro de clientes.');
+        const motivo = primeiroErro?.erro 
+          ? primeiroErro.erro
+          : (result?.error || 'Verifique o preview (Testar API) e os mapeamentos de campos.');
 
         toast({
-          title: 'Sincronização sem importação',
+          title: 'Erro na sincronização',
           description: motivo,
           variant: 'destructive'
         });
