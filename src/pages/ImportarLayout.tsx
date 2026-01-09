@@ -99,42 +99,12 @@ function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 
 }
 
 export default function ImportarLayout() {
+  // === ALL HOOKS MUST BE DECLARED UNCONDITIONALLY AT THE TOP ===
   const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { data: bancos = [], isLoading: bancosLoading } = useBancos();
-
-  if (isLoadingPermissoes) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
-  }
-
-  // Permissão de acesso à página (requer criar modelos)
-  if (!hasPermission('modelos', 'criar')) {
-    return (
-      <MainLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
-          <p className="text-muted-foreground">
-            Você não tem permissão para importar novos layouts.
-          </p>
-          <Button 
-            variant="outline" 
-            className="mt-4"
-            onClick={() => navigate('/modelos')}
-          >
-            Voltar para Modelos
-          </Button>
-        </div>
-      </MainLayout>
-    );
-  }
-
+  
   const jsonInputRef = useRef<HTMLInputElement>(null);
   
   const [arquivoRemessa, setArquivoRemessa] = useState<File | null>(null);
@@ -154,6 +124,37 @@ export default function ImportarLayout() {
   const [arquivoLayoutPDF, setArquivoLayoutPDF] = useState<File | null>(null);
   const [mostrarEditorVisual, setMostrarEditorVisual] = useState(false);
   const [errosLeitura, setErrosLeitura] = useState<{ campo: string; mensagem: string }[]>([]);
+
+  // === EARLY RETURNS AFTER ALL HOOKS ===
+  if (isLoadingPermissoes) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!hasPermission('modelos', 'criar')) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)]">
+          <h1 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h1>
+          <p className="text-muted-foreground">
+            Você não tem permissão para importar novos layouts.
+          </p>
+          <Button 
+            variant="outline" 
+            className="mt-4"
+            onClick={() => navigate('/modelos')}
+          >
+            Voltar para Modelos
+          </Button>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const handleArquivoRemessa = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
