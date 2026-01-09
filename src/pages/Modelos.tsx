@@ -163,7 +163,7 @@ export default function Modelos() {
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
         .select('*')
-        .neq('deleted', 'X')
+        .or('deleted.is.null,deleted.eq.')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
