@@ -1240,6 +1240,84 @@ export type Database = {
           },
         ]
       }
+      vv_b_arquivos_cnab_lidos: {
+        Row: {
+          banco_id: string | null
+          configuracao_cnab_id: string | null
+          conteudo_original: string
+          created_at: string | null
+          dados_parseados: Json
+          data_delete: string | null
+          data_processamento: string | null
+          deleted: string | null
+          id: string
+          nome_arquivo: string
+          status: string | null
+          tipo_arquivo: string
+          tipo_cnab: string
+          total_registros: number | null
+          updated_at: string | null
+          usuario_delete_id: string | null
+          usuario_id: string | null
+          valor_total: number | null
+        }
+        Insert: {
+          banco_id?: string | null
+          configuracao_cnab_id?: string | null
+          conteudo_original: string
+          created_at?: string | null
+          dados_parseados?: Json
+          data_delete?: string | null
+          data_processamento?: string | null
+          deleted?: string | null
+          id?: string
+          nome_arquivo: string
+          status?: string | null
+          tipo_arquivo: string
+          tipo_cnab: string
+          total_registros?: number | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+          usuario_id?: string | null
+          valor_total?: number | null
+        }
+        Update: {
+          banco_id?: string | null
+          configuracao_cnab_id?: string | null
+          conteudo_original?: string
+          created_at?: string | null
+          dados_parseados?: Json
+          data_delete?: string | null
+          data_processamento?: string | null
+          deleted?: string | null
+          id?: string
+          nome_arquivo?: string
+          status?: string | null
+          tipo_arquivo?: string
+          tipo_cnab?: string
+          total_registros?: number | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+          usuario_id?: string | null
+          valor_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_arquivos_cnab_lidos_banco_id_fkey"
+            columns: ["banco_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_bancos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vv_b_arquivos_cnab_lidos_configuracao_cnab_id_fkey"
+            columns: ["configuracao_cnab_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_configuracoes_cnab"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vv_b_bancos: {
         Row: {
           ativo: boolean | null
@@ -1748,6 +1826,7 @@ export type Database = {
           id: string
           linhas: Json | null
           nome: string
+          tipo_arquivo: string | null
           tipo_cnab: string
           updated_at: string
           usuario_delete_id: string | null
@@ -1762,6 +1841,7 @@ export type Database = {
           id?: string
           linhas?: Json | null
           nome: string
+          tipo_arquivo?: string | null
           tipo_cnab: string
           updated_at?: string
           usuario_delete_id?: string | null
@@ -1776,6 +1856,7 @@ export type Database = {
           id?: string
           linhas?: Json | null
           nome?: string
+          tipo_arquivo?: string | null
           tipo_cnab?: string
           updated_at?: string
           usuario_delete_id?: string | null
@@ -1861,6 +1942,56 @@ export type Database = {
           usuario_delete_id?: string | null
         }
         Relationships: []
+      }
+      vv_b_linhas_cnab: {
+        Row: {
+          arquivo_cnab_id: string
+          campos_editados: Json | null
+          campos_extraidos: Json | null
+          conteudo_editado: string | null
+          conteudo_original: string
+          created_at: string | null
+          id: string
+          numero_linha: number
+          status: string | null
+          tipo_registro: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          arquivo_cnab_id: string
+          campos_editados?: Json | null
+          campos_extraidos?: Json | null
+          conteudo_editado?: string | null
+          conteudo_original: string
+          created_at?: string | null
+          id?: string
+          numero_linha: number
+          status?: string | null
+          tipo_registro?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          arquivo_cnab_id?: string
+          campos_editados?: Json | null
+          campos_extraidos?: Json | null
+          conteudo_editado?: string | null
+          conteudo_original?: string
+          created_at?: string | null
+          id?: string
+          numero_linha?: number
+          status?: string | null
+          tipo_registro?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_linhas_cnab_arquivo_cnab_id_fkey"
+            columns: ["arquivo_cnab_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_arquivos_cnab_lidos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vv_b_modelos_boleto: {
         Row: {
