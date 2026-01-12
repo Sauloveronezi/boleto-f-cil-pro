@@ -17,7 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserRole } from '@/hooks/useUserRole';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { useNavigate } from 'react-router-dom';
 import { analisarPDF, PDFDimensions } from '@/lib/pdfAnalyzer';
 
@@ -41,7 +41,8 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { canEdit } = useUserRole();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
+  const canEdit = hasPermission('modelos', 'criar');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -161,7 +162,8 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   };
 
   // Permitir importar sem banco selecionado - o modelo pode ser usado para qualquer banco
-  const canImport = !!arquivo && !!nomeModelo && !!user && canEdit;
+  // Permite importar durante carregamento de permissões se usuário logado
+  const canImport = !!arquivo && !!nomeModelo && !!user && (isLoadingPermissoes || canEdit);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

@@ -140,7 +140,7 @@ export default function Modelos() {
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
         .select('*')
-        .or('deleted.is.null,deleted.eq.')
+        .is('deleted', null)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -286,7 +286,7 @@ export default function Modelos() {
       const { error: updateError } = await supabase
         .from('vv_b_modelos_boleto')
         .update({
-          deleted: 'X',
+          deleted: '*',
           data_delete: new Date().toISOString(),
           usuario_delete_id: userId
         })
