@@ -1362,20 +1362,35 @@ export type Database = {
       }
       vv_b_boletos_api: {
         Row: {
+          accountingdocument: string | null
+          AccountingDocument: string | null
+          accountingdocumenttype: string | null
           bairro: string | null
           banco: string | null
+          bankaccountlongid: string | null
+          BankAccountLongID: string | null
           bankcontrolkey: string | null
-          BR_NFeNumber: string | null
+          bankinternalid: string | null
+          BankInternalID: string | null
+          billingdocument: string | null
+          br_nfenumber: string | null
+          br_nfnumber: string | null
           BR_NFPartnerFunction: string | null
+          br_nfsourcedocumenttype: string | null
+          br_nfsubseries: string | null
           CashDiscount1Days: string | null
           CashDiscount1Percent: string | null
           CashDiscount2Days: string | null
+          cashdiscountamountinfuncnlcrcy: string | null
           CashDiscountAmountInFuncnlCrcy: string | null
+          cashdiscountamtincocodecrcy: string | null
           CashDiscountAmtInCoCodeCrcy: string | null
+          cashdiscountamtintransaccrcy: string | null
           CashDiscountAmtInTransacCrcy: string | null
           cep: string | null
           cliente: string | null
           cliente_id: string | null
+          companycode: number | null
           created_at: string
           customer: string | null
           dados_extras: Json | null
@@ -1400,35 +1415,65 @@ export type Database = {
           numero_cobranca: string
           numero_nota: string
           pais: string | null
+          payeeadditionalname: string | null
+          payeeregion: string | null
+          paymentamountinfunctionalcrcy: string | null
           PaymentAmountInFunctionalCrcy: string | null
+          paymentcurrency: string | null
+          PaymentCurrency: string | null
           PaymentDueDate: string | null
           PaymentMethod: string | null
+          paymentorigin: string | null
+          PaymentOrigin: string | null
+          paymentreference: string | null
           paymentrundate: string | null
+          paymentrunisproposal: string | null
+          PaymentRunIsProposal: string | null
+          paytamountincocodecurrency: string | null
           PaytAmountInCoCodeCurrency: string | null
           PostingDate: string | null
           serie: string | null
           sincronizado_em: string | null
+          taxnumber1: string | null
+          TaxNumber1: string | null
           uf: string | null
           updated_at: string
           usuario_delete_id: string | null
           valor: number | null
           valor_desconto: number | null
+          yy1_custtranspzone_sdh: string | null
+          yy1_custtranspzonpais_sdh: string | null
         }
         Insert: {
+          accountingdocument?: string | null
+          AccountingDocument?: string | null
+          accountingdocumenttype?: string | null
           bairro?: string | null
           banco?: string | null
+          bankaccountlongid?: string | null
+          BankAccountLongID?: string | null
           bankcontrolkey?: string | null
-          BR_NFeNumber?: string | null
+          bankinternalid?: string | null
+          BankInternalID?: string | null
+          billingdocument?: string | null
+          br_nfenumber?: string | null
+          br_nfnumber?: string | null
           BR_NFPartnerFunction?: string | null
+          br_nfsourcedocumenttype?: string | null
+          br_nfsubseries?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
+          cashdiscountamountinfuncnlcrcy?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
+          cashdiscountamtincocodecrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
+          cashdiscountamtintransaccrcy?: string | null
           CashDiscountAmtInTransacCrcy?: string | null
           cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
+          companycode?: number | null
           created_at?: string
           customer?: string | null
           dados_extras?: Json | null
@@ -1453,35 +1498,65 @@ export type Database = {
           numero_cobranca: string
           numero_nota: string
           pais?: string | null
+          payeeadditionalname?: string | null
+          payeeregion?: string | null
+          paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
+          paymentcurrency?: string | null
+          PaymentCurrency?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
+          paymentorigin?: string | null
+          PaymentOrigin?: string | null
+          paymentreference?: string | null
           paymentrundate?: string | null
+          paymentrunisproposal?: string | null
+          PaymentRunIsProposal?: string | null
+          paytamountincocodecurrency?: string | null
           PaytAmountInCoCodeCurrency?: string | null
           PostingDate?: string | null
           serie?: string | null
           sincronizado_em?: string | null
+          taxnumber1?: string | null
+          TaxNumber1?: string | null
           uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
           valor_desconto?: number | null
+          yy1_custtranspzone_sdh?: string | null
+          yy1_custtranspzonpais_sdh?: string | null
         }
         Update: {
+          accountingdocument?: string | null
+          AccountingDocument?: string | null
+          accountingdocumenttype?: string | null
           bairro?: string | null
           banco?: string | null
+          bankaccountlongid?: string | null
+          BankAccountLongID?: string | null
           bankcontrolkey?: string | null
-          BR_NFeNumber?: string | null
+          bankinternalid?: string | null
+          BankInternalID?: string | null
+          billingdocument?: string | null
+          br_nfenumber?: string | null
+          br_nfnumber?: string | null
           BR_NFPartnerFunction?: string | null
+          br_nfsourcedocumenttype?: string | null
+          br_nfsubseries?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
+          cashdiscountamountinfuncnlcrcy?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
+          cashdiscountamtincocodecrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
+          cashdiscountamtintransaccrcy?: string | null
           CashDiscountAmtInTransacCrcy?: string | null
           cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
+          companycode?: number | null
           created_at?: string
           customer?: string | null
           dados_extras?: Json | null
@@ -1506,19 +1581,34 @@ export type Database = {
           numero_cobranca?: string
           numero_nota?: string
           pais?: string | null
+          payeeadditionalname?: string | null
+          payeeregion?: string | null
+          paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
+          paymentcurrency?: string | null
+          PaymentCurrency?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
+          paymentorigin?: string | null
+          PaymentOrigin?: string | null
+          paymentreference?: string | null
           paymentrundate?: string | null
+          paymentrunisproposal?: string | null
+          PaymentRunIsProposal?: string | null
+          paytamountincocodecurrency?: string | null
           PaytAmountInCoCodeCurrency?: string | null
           PostingDate?: string | null
           serie?: string | null
           sincronizado_em?: string | null
+          taxnumber1?: string | null
+          TaxNumber1?: string | null
           uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
           valor_desconto?: number | null
+          yy1_custtranspzone_sdh?: string | null
+          yy1_custtranspzonpais_sdh?: string | null
         }
         Relationships: [
           {
