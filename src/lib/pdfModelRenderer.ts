@@ -67,6 +67,7 @@ export interface DadosBoleto {
   linha_digitavel?: string;
   codigo_barras?: string;
   instrucoes?: string;
+  sacador_avalista?: string;
   [key: string]: string | undefined;
 }
 
@@ -128,18 +129,35 @@ export async function renderizarBoleto(
   pdfBaseBytes: ArrayBuffer,
   elementos: ElementoParaRender[],
   dados: DadosBoleto,
-  escala: number = 2 // Scale used in the editor (mm to px)
+  escala: number = 2, // Scale used in the editor (mm to px)
+  usarFundoPdf: boolean = true
 ): Promise<Uint8Array> {
-  // Load the base PDF
-  const pdfDoc = await PDFDocument.load(pdfBaseBytes);
-  
-  // Get the first page
-  const pages = pdfDoc.getPages();
-  if (pages.length === 0) {
-    throw new Error('PDF base não contém páginas');
+  let pdfDoc: PDFDocument;
+  let page: PDFPage;
+
+  if (usarFundoPdf) {
+    // Load the base PDF
+    pdfDoc = await PDFDocument.load(pdfBaseBytes);
+    const pages = pdfDoc.getPages();
+    if (pages.length === 0) {
+      throw new Error('PDF base não contém páginas');
+    }
+    page = pages[0];
+  } else {
+    // Create a new PDF with the same dimensions as the base PDF
+    const tempDoc = await PDFDocument.load(pdfBaseBytes);
+    const tempPages = tempDoc.getPages();
+    if (tempPages.length === 0) {
+      throw new Error('PDF base não contém páginas');
+    }
+    const tempPage = tempPages[0];
+    const { width, height } = tempPage.getSize();
+
+    pdfDoc = await PDFDocument.create();
+    page = pdfDoc.addPage([width, height]);
   }
-  const page = pages[0];
-  const { width: pageWidth, height: pageHeight } = page.getSize();
+  
+  const { height: pageHeight } = page.getSize();
   
   // Load fonts
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -291,7 +309,8 @@ export async function gerarBoletosComModelo(
   storagePath: string,
   elementos: ElementoParaRender[],
   dadosBoletos: DadosBoleto[],
-  escala: number = 2
+  escala: number = 2,
+  usarFundoPdf: boolean = false
 ): Promise<Uint8Array> {
   // Load base PDF
   const pdfBaseBytes = await carregarPDFBase(storagePath);
@@ -302,7 +321,7 @@ export async function gerarBoletosComModelo(
   
   for (const dados of dadosBoletos) {
     // Render this boleto
-    const boletoBytes = await renderizarBoleto(pdfBaseBytes, elementos, dados, escala);
+    const boletoBytes = await renderizarBoleto(pdfBaseBytes, elementos, dados, escala, usarFundoPdf);
     const boletoPdf = await PDFDocument.load(boletoBytes);
     
     // Copy page to output

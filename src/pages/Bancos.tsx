@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Settings, Percent, Calendar, FileText, Edit, Loader2 } from 'lucide-react';
+import { Building2, Settings, Percent, Calendar, FileText, Loader2, HelpCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,15 +20,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { HelpCircle } from 'lucide-react';
 import { Banco, ConfiguracaoBanco, TIPOS_IMPRESSAO } from '@/types/boleto';
 import { useToast } from '@/hooks/use-toast';
 import { useBancos } from '@/hooks/useBancos';
 import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
 import { usePermissoes } from '@/hooks/usePermissoes';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function Bancos() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: bancos = [], isLoading: bancosLoading } = useBancos();
   const { data: configuracoes = [] } = useConfiguracoesBanco();
   const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
@@ -38,6 +40,8 @@ export default function Bancos() {
   
   const [bancoEditando, setBancoEditando] = useState<Banco | null>(null);
   const [configEditando, setConfigEditando] = useState<ConfiguracaoBanco | null>(null);
+  const [formData, setFormData] = useState<Partial<ConfiguracaoBanco>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   if (isLoadingPermissoes) {
     return (
@@ -66,8 +70,8 @@ export default function Bancos() {
     return configuracoes.find(c => c.banco_id === bancoId);
   };
 
-  const handleSalvar = () => {
-    if (!canEdit) {
+  const handleSalvar = async () => {
+    if (!canEdit || !bancoEditando) {
       toast({
         title: 'Sem permissão',
         description: 'Você não tem permissão para editar bancos.',
@@ -75,12 +79,52 @@ export default function Bancos() {
       });
       return;
     }
-    toast({
-      title: 'Configurações salvas',
-      description: 'As configurações do banco foram atualizadas com sucesso.',
-    });
-    setBancoEditando(null);
-    setConfigEditando(null);
+    
+    setIsSaving(true);
+    try {
+      const dadosSalvar = {
+        ...formData,
+        banco_id: bancoEditando.id,
+        // Ensure numbers are numbers
+        taxa_juros_mensal: Number(formData.taxa_juros_mensal),
+        multa_percentual: Number(formData.multa_percentual),
+        dias_carencia: Number(formData.dias_carencia),
+      };
+
+      if (configEditando?.id) {
+        // Update
+        const { error } = await supabase
+          .from('vv_b_configuracoes_banco')
+          .update(dadosSalvar)
+          .eq('id', configEditando.id);
+        if (error) throw error;
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from('vv_b_configuracoes_banco')
+          .insert(dadosSalvar);
+        if (error) throw error;
+      }
+
+      toast({
+        title: 'Configurações salvas',
+        description: 'As configurações do banco foram atualizadas com sucesso.',
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['configuracoes_banco'] });
+      setBancoEditando(null);
+      setConfigEditando(null);
+      setFormData({});
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Não foi possível salvar as configurações.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEditar = (banco: Banco) => {
@@ -95,6 +139,22 @@ export default function Bancos() {
     setBancoEditando(banco);
     const config = getConfiguracao(banco.id);
     setConfigEditando(config || null);
+    setFormData(config || {
+      banco_id: banco.id,
+      taxa_juros_mensal: 1,
+      multa_percentual: 2,
+      dias_carencia: 0,
+      carteira: '',
+      agencia: '',
+      conta: '',
+      codigo_cedente: '',
+      convenio: '',
+      texto_instrucao_padrao: ''
+    });
+  };
+
+  const updateField = (field: keyof ConfiguracaoBanco, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   if (bancosLoading) {
@@ -236,7 +296,8 @@ export default function Bancos() {
                       <Input
                         type="number"
                         step="0.1"
-                        defaultValue={configEditando?.taxa_juros_mensal || 1}
+                        value={formData.taxa_juros_mensal || 0}
+                        onChange={(e) => updateField('taxa_juros_mensal', e.target.value)}
                         className="mt-1"
                       />
                     </div>
@@ -245,7 +306,8 @@ export default function Bancos() {
                       <Input
                         type="number"
                         step="0.1"
-                        defaultValue={configEditando?.multa_percentual || 2}
+                        value={formData.multa_percentual || 0}
+                        onChange={(e) => updateField('multa_percentual', e.target.value)}
                         className="mt-1"
                       />
                     </div>
@@ -253,7 +315,8 @@ export default function Bancos() {
                       <Label className="text-sm">Dias de carência</Label>
                       <Input
                         type="number"
-                        defaultValue={configEditando?.dias_carencia || 0}
+                        value={formData.dias_carencia || 0}
+                        onChange={(e) => updateField('dias_carencia', e.target.value)}
                         className="mt-1"
                       />
                     </div>
@@ -268,7 +331,8 @@ export default function Bancos() {
                     <div>
                       <Label className="text-sm">Carteira</Label>
                       <Input
-                        defaultValue={configEditando?.carteira || ''}
+                        value={formData.carteira || ''}
+                        onChange={(e) => updateField('carteira', e.target.value)}
                         className="mt-1"
                         placeholder="Ex: 17"
                       />
@@ -276,7 +340,8 @@ export default function Bancos() {
                     <div>
                       <Label className="text-sm">Agência</Label>
                       <Input
-                        defaultValue={configEditando?.agencia || ''}
+                        value={formData.agencia || ''}
+                        onChange={(e) => updateField('agencia', e.target.value)}
                         className="mt-1"
                         placeholder="Ex: 1234"
                       />
@@ -284,7 +349,8 @@ export default function Bancos() {
                     <div>
                       <Label className="text-sm">Conta</Label>
                       <Input
-                        defaultValue={configEditando?.conta || ''}
+                        value={formData.conta || ''}
+                        onChange={(e) => updateField('conta', e.target.value)}
                         className="mt-1"
                         placeholder="Ex: 56789-0"
                       />
@@ -292,9 +358,19 @@ export default function Bancos() {
                     <div>
                       <Label className="text-sm">Código do Cedente</Label>
                       <Input
-                        defaultValue={configEditando?.codigo_cedente || ''}
+                        value={formData.codigo_cedente || ''}
+                        onChange={(e) => updateField('codigo_cedente', e.target.value)}
                         className="mt-1"
                         placeholder="Ex: 123456"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Convênio</Label>
+                      <Input
+                        value={formData.convenio || ''}
+                        onChange={(e) => updateField('convenio', e.target.value)}
+                        className="mt-1"
+                        placeholder="Ex: 1234567"
                       />
                     </div>
                   </div>
@@ -319,7 +395,8 @@ export default function Bancos() {
                     </TooltipProvider>
                   </Label>
                   <Textarea
-                    defaultValue={configEditando?.texto_instrucao_padrao || ''}
+                    value={formData.texto_instrucao_padrao || ''}
+                    onChange={(e) => updateField('texto_instrucao_padrao', e.target.value)}
                     placeholder="Ex: Não receber após 30 dias do vencimento. Cobrar juros de {{taxa_juros}}% ao mês..."
                     rows={3}
                   />
@@ -331,7 +408,16 @@ export default function Bancos() {
               <Button variant="outline" onClick={() => setBancoEditando(null)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSalvar}>Salvar Configurações</Button>
+              <Button onClick={handleSalvar} disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar Configurações'
+                )}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

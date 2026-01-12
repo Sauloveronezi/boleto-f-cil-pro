@@ -1,4 +1,5 @@
 import { FileText, Download, Building2, Users, Receipt, Palette, Database, Lock, Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { Banco, Cliente, NotaFiscal, ModeloBoleto, TipoOrigem, TIPOS_ORIGEM } from '@/types/boleto';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +35,9 @@ interface ResumoGeracaoProps {
   tipoSaida: 'arquivo_unico' | 'individual';
   onTipoSaidaChange: (tipo: 'arquivo_unico' | 'individual') => void;
   onGerar: () => void;
+  onGerarCNAB?: () => void;
+  imprimirFundo?: boolean;
+  onImprimirFundoChange?: (checked: boolean) => void;
 }
 
 export function ResumoGeracao({
@@ -49,6 +53,9 @@ export function ResumoGeracao({
   tipoSaida,
   onTipoSaidaChange,
   onGerar,
+  onGerarCNAB,
+  imprimirFundo = false,
+  onImprimirFundoChange,
 }: ResumoGeracaoProps) {
   const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const canGerar = hasPermission('boletos', 'criar');
@@ -230,6 +237,17 @@ export function ResumoGeracao({
                 </div>
               </div>
             </RadioGroup>
+
+            <Separator className="my-4" />
+            
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="imprimir-fundo"
+                checked={imprimirFundo}
+                onCheckedChange={onImprimirFundoChange}
+              />
+              <Label htmlFor="imprimir-fundo">Imprimir fundo do modelo (PDF original)</Label>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -273,15 +291,28 @@ export function ResumoGeracao({
             </Tooltip>
           </TooltipProvider>
         ) : (
-          <Button
-            size="lg"
-            onClick={onGerar}
-            disabled={!modeloSelecionado || notasSelecionadas.length === 0}
-            className="px-8"
-          >
-            <Download className="h-5 w-5 mr-2" />
-            Gerar {notasSelecionadas.length} Boleto(s)
-          </Button>
+          <>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={onGerarCNAB}
+              disabled={!onGerarCNAB || notasSelecionadas.length === 0}
+              className="px-6"
+            >
+              <FileText className="h-5 w-5 mr-2" />
+              Exportar CNAB
+            </Button>
+
+            <Button
+              size="lg"
+              onClick={onGerar}
+              disabled={!modeloSelecionado || notasSelecionadas.length === 0}
+              className="px-8"
+            >
+              <Download className="h-5 w-5 mr-2" />
+              Gerar {notasSelecionadas.length} Boleto(s)
+            </Button>
+          </>
         )}
       </div>
     </div>

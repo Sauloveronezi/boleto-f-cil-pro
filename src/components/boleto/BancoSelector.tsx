@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Building2, Check, Upload, FileText, CheckCircle2, Link as LinkIcon } from 'lucide-react';
+import { Building2, Check, Upload, FileText, CheckCircle2, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Banco, TipoOrigem, TIPOS_ORIGEM, ConfiguracaoCNAB } from '@/types/boleto';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // Chave para armazenar padrões CNAB no localStorage (mesma usada em ConfiguracaoCNAB.tsx)
 const CNAB_PATTERNS_STORAGE_KEY = 'padroesCNAB';
@@ -56,13 +58,55 @@ export function BancoSelector({
   onPadraoCNABChange,
 }: BancoSelectorProps) {
   const isCNAB = tipoImpressao === 'CNAB_240' || tipoImpressao === 'CNAB_400';
+  const { toast } = useToast();
 
-  // Carregar padrões CNAB do localStorage
+  // Carregar padrões CNAB do Supabase e localStorage
   const [padroesSalvos, setPadroesSalvos] = useState<ConfiguracaoCNAB[]>([]);
+  const [isLoadingPadroes, setIsLoadingPadroes] = useState(false);
   
   useEffect(() => {
-    const padroesLocalStorage = carregarPadroesLocalStorage();
-    setPadroesSalvos(padroesLocalStorage);
+    const fetchPadroes = async () => {
+      setIsLoadingPadroes(true);
+      try {
+        // Primeiro carrega do localStorage como fallback/cache
+        const padroesLocal = carregarPadroesLocalStorage();
+        setPadroesSalvos(padroesLocal);
+
+        // Busca do Supabase
+        const { data, error } = await supabase
+          .from('vv_b_configuracoes_cnab')
+          .select('*')
+          .is('deleted', null)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Erro ao carregar padrões CNAB do Supabase:', error);
+          // Não mostra toast de erro aqui para não atrapalhar o fluxo se estiver offline
+          // Mantém os dados do localStorage se houver erro
+        } else if (data) {
+          // Mapeia os dados do Supabase para o tipo ConfiguracaoCNAB
+          const padroesDB: ConfiguracaoCNAB[] = data.map((item: any) => ({
+            id: item.id,
+            banco_id: item.banco_id || '',
+            tipo_cnab: item.tipo_cnab as any,
+            nome: item.nome,
+            descricao: item.descricao,
+            campos: item.campos || [],
+            linhas: item.linhas || [], // Adiciona suporte a linhas se existir no DB
+            criado_em: item.created_at,
+            atualizado_em: item.updated_at || item.created_at
+          }));
+          
+          setPadroesSalvos(padroesDB);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar padrões:', error);
+      } finally {
+        setIsLoadingPadroes(false);
+      }
+    };
+
+    fetchPadroes();
   }, []);
 
   // Filtrar padrões disponíveis para o tipo selecionado
@@ -307,7 +351,14 @@ export function BancoSelector({
             </TooltipProvider>
           </div>
 
-          {padroesDisponiveis.length > 0 ? (
+          {isLoadingPadroes && padroesDisponiveis.length === 0 ? (
+            <div className="flex items-center justify-center p-8 bg-muted/10 border border-dashed rounded-lg">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-primary/50" />
+                <p className="text-sm text-muted-foreground">Carregando padrões...</p>
+              </div>
+            </div>
+          ) : padroesDisponiveis.length > 0 ? (
             <div className="space-y-3">
               <Select
                 value={padraoCNAB?.id || ''}

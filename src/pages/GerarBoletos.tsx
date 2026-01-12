@@ -10,15 +10,19 @@ import { ResumoGeracao } from '@/components/boleto/ResumoGeracao';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto } from '@/types/boleto';
+import { TipoOrigem, Cliente, NotaFiscal, ConfiguracaoCNAB, ModeloBoleto, ConfiguracaoBanco } from '@/types/boleto';
 import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { renderizarBoleto, DadosBoleto, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { parseCNAB, DadosCNAB } from '@/lib/cnabParser';
+import { mapearBoletoApiParaModelo, BoletoApiData, mapearModeloParaCNAB } from '@/lib/boletoMapping';
 import { useBancos } from '@/hooks/useBancos';
 import { supabase } from '@/integrations/supabase/client';
 import { getPdfUrl } from '@/lib/pdfStorage';
+import { gerarArquivoCNABFromConfig, downloadArquivoCNAB } from '@/lib/cnabGenerator';
 import { useQuery } from '@tanstack/react-query';
 import { usePermissoes } from '@/hooks/usePermissoes';
+import { format } from 'date-fns';
+import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 
 const WIZARD_STEPS: WizardStep[] = [{
   id: 1,
@@ -56,6 +60,7 @@ export default function GerarBoletos() {
   const [notasSelecionadas, setNotasSelecionadas] = useState<string[]>([]);
   const [modeloSelecionado, setModeloSelecionado] = useState<string | null>(null);
   const [tipoSaida, setTipoSaida] = useState<'arquivo_unico' | 'individual'>('arquivo_unico');
+  const [imprimirFundo, setImprimirFundo] = useState(false);
 
   const banco = bancos.find(b => b.id === bancoSelecionado) || {
     id: 'unknown',
@@ -65,8 +70,24 @@ export default function GerarBoletos() {
     ativo: false
   } as any;
 
-  // Configuração bancária específica (agência, conta, juros) deve vir de um store real.
-  const configuracao = undefined;
+  // Carregar configuração bancária específica
+  const { data: configuracao } = useQuery({
+    queryKey: ['configuracao-banco', bancoSelecionado],
+    enabled: !!bancoSelecionado,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_configuracoes_banco')
+        .select('*')
+        .eq('banco_id', bancoSelecionado)
+        .is('deleted', null)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar configuração do banco:', error);
+      }
+      return data as ConfiguracaoBanco | null;
+    }
+  });
 
   // Carregar modelos do Supabase
   const { data: modelos = [] } = useQuery({
@@ -107,10 +128,102 @@ export default function GerarBoletos() {
     }
   });
 
-  // Dados a usar (apenas CNAB importado, sem mocks)
+  // Buscar dados da empresa para preencher o beneficiário
+  const { data: empresa } = useQuery({
+    queryKey: ['empresa-dados'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_empresas')
+        .select('*')
+        .is('deleted', null)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar dados da empresa:', error);
+      }
+      return data;
+    }
+  });
+
+  // Carregar dados da API (vv_b_boletos_api) quando selecionado
+  const { data: dadosApi } = useQuery({
+    queryKey: ['boletos-api-geracao'],
+    enabled: tipoOrigem === 'API_CDS',
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_boletos_api')
+        .select('*')
+        .is('deleted', null);
+      
+      if (error) {
+        console.error('[GerarBoletos] Erro ao carregar dados da API:', error);
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Não foi possível carregar os dados da tabela vv_b_boletos_api.',
+          variant: 'destructive'
+        });
+        return { clientes: [], notas: [] };
+      }
+
+      const clientesMap = new Map<string, Cliente>();
+      const notas: NotaFiscal[] = [];
+
+      data.forEach((item: any) => {
+        // Mapear Cliente
+        // Priorizar dados diretos da API pois o vínculo com tabela de clientes foi removido
+        const clienteId = item.cliente_id || `temp_${item.id}`;
+        
+        if (!clientesMap.has(clienteId)) {
+            const cliente: Cliente = {
+                id: clienteId,
+                business_partner: item.dados_extras?.business_partner || '',
+                razao_social: item.dyn_nome_do_cliente || 'Cliente Desconhecido',
+                cnpj: item.taxnumber1 || '',
+                lzone: item.dados_extras?.lzone || '',
+                estado: item.uf || '',
+                cidade: item.dyn_cidade || '',
+                parceiro_negocio: item.dados_extras?.parceiro_negocio || '',
+                agente_frete: item.dyn_zonatransporte || '',
+                endereco: item.dados_extras?.endereco || '',
+                cep: item.dados_extras?.cep || '',
+                email: item.dados_extras?.email || '',
+                telefone: item.dados_extras?.telefone || ''
+            };
+            clientesMap.set(clienteId, cliente);
+        }
+
+        // Mapear Nota Fiscal
+        notas.push({
+            id: item.id,
+            numero_nota: item.numero_nota,
+            serie: item.dados_extras?.serie || '1',
+            data_emissao: item.data_emissao,
+            data_vencimento: item.data_vencimento,
+            valor_titulo: item.valor || 0,
+            moeda: 'BRL',
+            codigo_cliente: clienteId,
+            status: 'aberta',
+            referencia_interna: item.numero_cobranca || '',
+            cliente: clientesMap.get(clienteId),
+            // @ts-ignore - Adicionando dados originais para uso posterior
+            dados_api: item 
+        } as NotaFiscal);
+      });
+      
+      return { 
+        clientes: Array.from(clientesMap.values()), 
+        notas 
+      };
+    }
+  });
+
+  // Dados a usar
   const isCNAB = tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400';
-  const clientes: Cliente[] = isCNAB ? dadosCNAB?.clientes || [] : [];
-  const notas: NotaFiscal[] = isCNAB ? dadosCNAB?.notas || [] : [];
+  const isAPI = tipoOrigem === 'API_CDS';
+  
+  const clientes: Cliente[] = isCNAB ? dadosCNAB?.clientes || [] : (isAPI ? dadosApi?.clientes || [] : []);
+  const notas: NotaFiscal[] = isCNAB ? dadosCNAB?.notas || [] : (isAPI ? dadosApi?.notas || [] : []);
 
   // Processar arquivo CNAB quando selecionado
   useEffect(() => {
@@ -282,65 +395,115 @@ export default function GerarBoletos() {
           
           console.log('[GerarBoletos] Elementos para render:', elementos.length);
           
-          // Gerar PDF para cada nota
+          // Preparar lista de dados de todos os boletos
+          const listaDadosBoletos: DadosBoleto[] = [];
+
           for (let i = 0; i < notasParaGerar.length; i++) {
             const nota = notasParaGerar[i];
             const cliente = clientes.find(c => c.id === nota.codigo_cliente);
             
-            // Mapear dados para as variáveis usadas nos campos
-            const dadosBoleto: DadosBoleto = {
-              // Dados do pagador/cliente
-              pagador_nome: cliente?.razao_social || '',
-              pagador_cnpj: cliente?.cnpj || '',
-              pagador_endereco: cliente?.endereco || '',
-              pagador_cidade_uf: cliente?.cidade ? `${cliente.cidade}/${cliente.estado}` : '',
-              pagador_cep: cliente?.cep || '',
-              
-              // Aliases para variáveis comuns
-              cliente_razao_social: cliente?.razao_social || '',
-              cliente_cnpj: cliente?.cnpj || '',
-              cliente_endereco: cliente?.endereco || '',
-              
-              // Dados do título/boleto
-              valor_documento: nota.valor_titulo.toFixed(2),
-              valor_titulo: nota.valor_titulo.toFixed(2),
-              data_vencimento: nota.data_vencimento,
-              data_emissao: nota.data_emissao,
-              nosso_numero: nota.numero_nota,
-              numero_documento: nota.numero_nota,
-              numero_nota: nota.numero_nota,
-              
-              // Dados do banco
-              banco_nome: banco.nome_banco,
-              banco_codigo: banco.codigo_banco,
-              
-              // Linha digitável e código de barras (placeholder)
-              linha_digitavel: '00000.00000 00000.000000 00000.000000 0 00000000000000',
-              codigo_barras: '00000000000000000000000000000000000000000000',
-              
-              // Local de pagamento padrão
-              local_pagamento: 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO',
+            // @ts-ignore
+            const dadosApiItem = nota.dados_api;
+
+            // Configuração para cálculo do código de barras
+            const dadosCNABPartial = (tipoOrigem === 'CNAB_240' || tipoOrigem === 'CNAB_400') ? (dadosApiItem as Partial<DadosBoleto>) : undefined;
+            
+            const configParaBarcode = {
+                agencia: dadosCNABPartial?.agencia || configuracao?.agencia || '0000',
+                conta: dadosCNABPartial?.conta || configuracao?.conta || '00000',
+                carteira: dadosCNABPartial?.carteira || configuracao?.carteira || '17',
+                codigo_cedente: dadosCNABPartial?.codigo_cedente || configuracao?.codigo_cedente || '',
+                convenio: configuracao?.convenio || '1234567',
             };
-            
-            const pdfBytes = await renderizarBoleto(
-              basePdfBytes,
-              elementos,
-              dadosBoleto,
-            );
-            
-            // Download do PDF
-            const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = tipoSaida === 'arquivo_unico' 
-              ? `boletos_${Date.now()}.pdf`
-              : `boleto_${nota.numero_nota}.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            // Se arquivo único, gerar só uma vez com todos
-            if (tipoSaida === 'arquivo_unico') break;
+
+            // Gerar código de barras e linha digitável
+            const dadosBarcode = gerarCodigoBarras(banco, nota, configParaBarcode as any);
+
+            let dadosBoleto: DadosBoleto;
+
+            // Se for CNAB e já tivermos os dados pré-mapeados
+            if (dadosCNABPartial && 'pagador_nome' in dadosApiItem) {
+                dadosBoleto = {
+                    ...dadosApiItem,
+                    // Garante campos calculados
+                    linha_digitavel: dadosBarcode.linhaDigitavel,
+                    codigo_barras: dadosBarcode.codigoBarras,
+                    nosso_numero: dadosBarcode.nossoNumero,
+                    
+                    // Garante dados do banco
+                    banco_nome: banco.nome_banco || '',
+                    banco_codigo: banco.codigo_banco || '',
+                    
+                    // Fallbacks para campos obrigatórios se faltarem no CNAB
+                    valor_documento: dadosApiItem.valor_documento || dadosBarcode.valorFormatado,
+                    valor_cobrado: dadosApiItem.valor_cobrado || dadosBarcode.valorFormatado,
+                    data_processamento: dadosApiItem.data_processamento || format(new Date(), 'dd/MM/yyyy'),
+                    local_pagamento: dadosApiItem.local_pagamento || 'PAGÁVEL EM QUALQUER AGÊNCIA BANCÁRIA ATÉ O VENCIMENTO',
+                } as DadosBoleto;
+            } else {
+                // Fluxo API
+                const boletoData: BoletoApiData = dadosApiItem || {
+                  id: nota.id,
+                  numero_nota: nota.numero_nota,
+                  numero_cobranca: nota.referencia_interna,
+                  data_emissao: nota.data_emissao,
+                  data_vencimento: nota.data_vencimento,
+                  valor: nota.valor_titulo,
+                  dados_extras: {},
+                };
+
+                dadosBoleto = mapearBoletoApiParaModelo(
+                  boletoData,
+                  cliente,
+                  empresa,
+                  banco,
+                  configuracao,
+                  dadosBarcode
+                );
+            }
+            listaDadosBoletos.push(dadosBoleto);
+          }
+
+          if (tipoSaida === 'arquivo_unico') {
+             const pdfBytes = await gerarBoletosComModelo(
+               modeloDB.pdf_storage_path,
+               elementos,
+               listaDadosBoletos,
+               2,
+               imprimirFundo
+             );
+             
+             // Download único
+             const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+             const url = URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `boletos_${Date.now()}.pdf`;
+             a.click();
+             URL.revokeObjectURL(url);
+
+          } else {
+             // Gerar individualmente
+             for (let i = 0; i < listaDadosBoletos.length; i++) {
+                const dadosBoleto = listaDadosBoletos[i];
+                const nota = notasParaGerar[i];
+                
+                const pdfBytes = await renderizarBoleto(
+                  basePdfBytes,
+                  elementos,
+                  dadosBoleto,
+                  2,
+                  imprimirFundo
+                );
+                
+                const blob = new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `boleto_${nota.numero_nota}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+             }
           }
           
           toast({
@@ -361,6 +524,116 @@ export default function GerarBoletos() {
       description: `${notasSelecionadas.length} boleto(s) foram gerados e o download foi iniciado.`
     });
   };
+  const handleGerarCNAB = async () => {
+    if (!banco || !tipoOrigem) return;
+
+    // 1. Obter configuração CNAB
+    let configCNAB = padraoCNAB;
+    
+    // Se não tiver padrão selecionado (API), tenta buscar o padrão do banco
+    if (!configCNAB && bancoSelecionado) {
+        try {
+            const { data } = await supabase
+                .from('vv_b_configuracoes_cnab')
+                .select('*')
+                .eq('banco_id', bancoSelecionado)
+                .is('deleted', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+                
+            if (data) {
+                configCNAB = {
+                    id: data.id,
+                    banco_id: data.banco_id || '',
+                    tipo_cnab: (data.tipo_cnab as any) || 'CNAB_400',
+                    nome: data.nome,
+                    descricao: data.descricao || '',
+                    campos: (data.campos as any[]) || [],
+                    linhas: (data.linhas as any[]) || undefined,
+                    criado_em: data.created_at,
+                    atualizado_em: data.updated_at
+                };
+            } else {
+                toast({
+                    title: 'Configuração CNAB não encontrada',
+                    description: 'Configure um padrão CNAB para este banco antes de exportar.',
+                    variant: 'destructive'
+                });
+                return;
+            }
+        } catch (error) {
+            console.error('Erro ao buscar config CNAB:', error);
+            return;
+        }
+    }
+
+    if (!configCNAB) return;
+
+    // 2. Filtrar notas
+    const notasParaGerar = notas.filter(n => notasSelecionadas.includes(n.id));
+    
+    // 3. Gerar dados para cada boleto
+    const registrosCNAB: Record<string, string>[] = [];
+    
+    for (const nota of notasParaGerar) {
+        const cliente = clientes.find(c => c.id === nota.codigo_cliente);
+        
+        // @ts-ignore
+        const dadosApiItem = nota.dados_api;
+        
+        // Dados para barcode
+        const configParaBarcode = {
+            agencia: configuracao?.agencia || '0000',
+            conta: configuracao?.conta || '00000',
+            carteira: configuracao?.carteira || '17',
+            codigo_cedente: configuracao?.codigo_cedente || '',
+            convenio: configuracao?.convenio || '1234567',
+        };
+
+        const dadosBarcode = gerarCodigoBarras(banco, nota, configParaBarcode as any);
+
+        // Mapear para DadosBoleto
+        const boletoData: BoletoApiData = dadosApiItem || {
+            id: nota.id,
+            numero_nota: nota.numero_nota,
+            numero_cobranca: nota.referencia_interna,
+            data_emissao: nota.data_emissao,
+            data_vencimento: nota.data_vencimento,
+            valor: nota.valor_titulo,
+            dados_extras: {},
+        };
+
+        const dadosBoleto = mapearBoletoApiParaModelo(
+            boletoData,
+            cliente,
+            empresa,
+            banco,
+            configuracao,
+            dadosBarcode
+        );
+
+        // Mapear para registro CNAB
+        const registro = mapearModeloParaCNAB(dadosBoleto);
+        registrosCNAB.push(registro);
+    }
+
+    // 4. Gerar conteúdo do arquivo
+    const conteudo = gerarArquivoCNABFromConfig(
+        configCNAB, 
+        registrosCNAB, 
+        'remessa'
+    );
+    
+    // 5. Download
+    downloadArquivoCNAB(conteudo, `remessa_${banco.nome_banco}_${Date.now()}`, 'remessa');
+    
+    toast({
+        title: 'Arquivo CNAB gerado',
+        description: `${registrosCNAB.length} registros exportados com sucesso.`
+    });
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -375,7 +648,25 @@ export default function GerarBoletos() {
       case 3:
         return <NotaFiscalFilter notas={notas} clientes={clientes} clientesSelecionados={clientesSelecionados} notasSelecionadas={notasSelecionadas} onNotasChange={setNotasSelecionadas} />;
       case 4:
-        return <ResumoGeracao tipoOrigem={tipoOrigem} banco={banco} clientes={clientes} clientesSelecionados={clientesSelecionados} notas={notas} notasSelecionadas={notasSelecionadas} modelos={modelos} modeloSelecionado={modeloSelecionado} onModeloChange={setModeloSelecionado} tipoSaida={tipoSaida} onTipoSaidaChange={setTipoSaida} onGerar={handleGerar} />;
+        return (
+          <ResumoGeracao
+            tipoOrigem={tipoOrigem}
+            banco={banco}
+            clientes={clientes}
+            clientesSelecionados={clientesSelecionados}
+            notas={notas}
+            notasSelecionadas={notasSelecionadas}
+            modelos={modelos}
+            modeloSelecionado={modeloSelecionado}
+            onModeloChange={setModeloSelecionado}
+            tipoSaida={tipoSaida}
+            onTipoSaidaChange={setTipoSaida}
+            onGerar={handleGerar}
+            onGerarCNAB={(isCNAB || isAPI) ? handleGerarCNAB : undefined}
+            imprimirFundo={imprimirFundo}
+            onImprimirFundoChange={setImprimirFundo}
+          />
+        );
       default:
         return null;
     }
@@ -384,7 +675,7 @@ export default function GerarBoletos() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Gerar Boletos_teste</h1>
+          <h1 className="text-2xl font-bold text-foreground">Gerar Boletos</h1>
           <p className="text-muted-foreground">
             Siga as etapas para selecionar origem dos dados, banco, clientes, notas e gerar os boletos em PDF
           </p>

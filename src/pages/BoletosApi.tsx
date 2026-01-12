@@ -35,6 +35,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
+import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
 
 const ESTADOS_BRASIL = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -57,12 +58,13 @@ export default function BoletosApi() {
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
   const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
+  const [imprimirFundo, setImprimirFundo] = useState(true);
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
   const { data: bancos } = useBancos();
   const { data: configuracoes } = useConfiguracoesBanco();
-  const { hasPermission } = usePermissoes();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const canPrint = hasPermission('boletos', 'criar');
 
   const { data: boletos, isLoading, refetch } = useBoletosApi({
@@ -89,13 +91,32 @@ export default function BoletosApi() {
     }
   });
 
+  // Buscar dados da empresa para preencher o beneficiário
+  const { data: empresa } = useQuery({
+    queryKey: ['empresa-dados'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_empresas')
+        .select('*')
+        .is('deleted', null)
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar dados da empresa:', error);
+      }
+      return data;
+    }
+  });
+
   const syncApi = useSyncApi();
 
-  // Filtrar por transportadora do cliente (campo agente_frete)
+  // Filtrar por transportadora do cliente (campo agente_frete / dyn_zonatransporte)
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (filtros.transportadora) {
-        return b.cliente?.agente_frete?.toLowerCase().includes(filtros.transportadora.toLowerCase());
+        const transportadora = b.dyn_zonatransporte || b.cliente?.agente_frete || '';
+        return transportadora.toLowerCase().includes(filtros.transportadora.toLowerCase());
       }
       return true;
     }) || [];
@@ -266,63 +287,15 @@ export default function BoletosApi() {
 
         // Mapear dados dos boletos para o formato do renderizador
         const dadosBoletos: DadosBoletoModelo[] = boletosSelecionados.map((boleto: any) => {
-          const cliente = boleto.cliente;
-          const nota = {
-            id: boleto.id,
-            numero_nota: boleto.numero_nota,
-            cliente_id: boleto.cliente_id || '',
-            data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
-            data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
-            valor_titulo: boleto.valor || 0,
-            moeda: 'BRL',
-          };
-
-          // Calcular código de barras
-          const dadosCodigoBarras = gerarCodigoBarras(banco as any, nota as any, configuracao as any);
-
-          return {
-            banco_nome: banco.nome_banco,
-            banco_codigo: banco.codigo_banco,
-            agencia: configuracao?.agencia || '',
-            conta: configuracao?.conta || '',
-            beneficiario_nome: '', // Pode ser preenchido com dados da empresa
-            beneficiario_cnpj: '',
-            pagador_nome: cliente?.razao_social || boleto.dyn_nome_do_cliente || '',
-            pagador_cnpj: cliente?.cnpj || '',
-            pagador_endereco: cliente?.endereco || '',
-            pagador_cidade_uf: cliente ? `${cliente.cidade || ''} - ${cliente.estado || ''}` : boleto.dyn_cidade || '',
-            pagador_cep: cliente?.cep || '',
-            cliente_razao_social: cliente?.razao_social || boleto.dyn_nome_do_cliente || '',
-            cliente_cnpj: cliente?.cnpj || '',
-            cliente_endereco: cliente?.endereco || '',
-            nosso_numero: dadosCodigoBarras.nossoNumero,
-            numero_documento: boleto.numero_cobranca || boleto.numero_nota,
-            numero_nota: boleto.numero_nota,
-            data_documento: boleto.data_emissao ? new Date(boleto.data_emissao).toLocaleDateString('pt-BR') : '',
-            data_vencimento: boleto.data_vencimento ? new Date(boleto.data_vencimento).toLocaleDateString('pt-BR') : '',
-            data_emissao: boleto.data_emissao ? new Date(boleto.data_emissao).toLocaleDateString('pt-BR') : '',
-            data_processamento: new Date().toLocaleDateString('pt-BR'),
-            valor_documento: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor || 0),
-            valor_titulo: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor || 0),
-            carteira: configuracao?.carteira || '',
-            linha_digitavel: dadosCodigoBarras.linhaDigitavel,
-            codigo_barras: dadosCodigoBarras.codigoBarras,
-            local_pagamento: 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO',
-            instrucoes: configuracao?.texto_instrucao_padrao || '',
-            // Campos dinâmicos da API
-            dyn_cidade: boleto.dyn_cidade || boleto.dados_extras?.dyn_cidade || '',
-            dyn_conta: boleto.dyn_conta?.toString() || boleto.dados_extras?.dyn_conta?.toString() || '',
-            dyn_desconto_data: boleto.dyn_desconto_data || boleto.dados_extras?.dyn_desconto_data || '',
-            dyn_desconto1: boleto.dyn_desconto1 || boleto.dados_extras?.dyn_desconto1 || '',
-            dyn_nome_do_cliente: boleto.dyn_nome_do_cliente || boleto.dados_extras?.dyn_nome_do_cliente || '',
-            dyn_zonatransporte: boleto.dyn_zonatransporte || boleto.dados_extras?.dyn_zonatransporte || '',
-          };
+          return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao);
         });
 
         const pdfBytes = await gerarBoletosComModelo(
           modelo.pdf_storage_path,
           elementos,
-          dadosBoletos
+          dadosBoletos,
+          undefined,
+          imprimirFundo
         );
 
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -358,8 +331,16 @@ export default function BoletosApi() {
     }));
 
     const clientesParaImprimir = boletosSelecionados
-      .filter((b: any) => b.cliente)
-      .map((b: any) => b.cliente)
+      .map((b: any) => b.cliente || {
+        id: b.cliente_id || b.id,
+        razao_social: b.dyn_nome_do_cliente || 'Cliente Sem Nome',
+        cnpj: b.taxnumber1 || '',
+        endereco: b.endereco || '',
+        cidade: b.dyn_cidade || '',
+        estado: b.uf || '',
+        cep: b.cep || '',
+        agente_frete: b.dyn_zonatransporte || ''
+      })
       .filter((cliente: any, index: number, self: any[]) => 
         index === self.findIndex((c) => c.id === cliente.id)
       );
@@ -459,13 +440,37 @@ export default function BoletosApi() {
                 ))}
               </SelectContent>
             </Select>
+
+            {modeloSelecionado && (
+              <div className="flex items-center space-x-2 bg-white p-2 rounded border">
+                <Checkbox
+                  id="imprimir-fundo-api"
+                  checked={imprimirFundo}
+                  onCheckedChange={(checked) => setImprimirFundo(!!checked)}
+                />
+                <Label htmlFor="imprimir-fundo-api" className="text-xs cursor-pointer">Fundo</Label>
+              </div>
+            )}
+
             <Button 
               className="gap-2"
               onClick={handleImprimirSelecionados}
-              disabled={selecionados.size === 0 || !canPrint}
-              title={!canPrint ? "Sem permissão para gerar boletos" : "Imprimir boletos selecionados"}
+              disabled={selecionados.size === 0 || (!canPrint && !isLoadingPermissoes)}
+              title={
+                isLoadingPermissoes 
+                  ? "Carregando permissões..." 
+                  : selecionados.size === 0 
+                    ? "Selecione boletos para imprimir" 
+                    : !canPrint 
+                      ? "Sem permissão para gerar boletos" 
+                      : "Imprimir boletos selecionados"
+              }
             >
-              <Printer className="h-4 w-4" />
+              {isLoadingPermissoes ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Printer className="h-4 w-4" />
+              )}
               Imprimir ({selecionados.size})</Button>
           </div>
         </div>
@@ -639,9 +644,9 @@ export default function BoletosApi() {
                       </TableCell>
                       <TableCell className="font-mono">{boleto.numero_nota}</TableCell>
                       <TableCell className="font-mono">{boleto.numero_cobranca}</TableCell>
-                      <TableCell>{boleto.cliente?.razao_social || '-'}</TableCell>
-                      <TableCell className="font-mono text-sm">{boleto.cliente?.cnpj || '-'}</TableCell>
-                      <TableCell>{boleto.cliente?.agente_frete || '-'}</TableCell>
+                      <TableCell>{boleto.dyn_nome_do_cliente || boleto.cliente?.razao_social || '-'}</TableCell>
+                      <TableCell className="font-mono text-sm">{boleto.taxnumber1 || boleto.cliente?.cnpj || '-'}</TableCell>
+                      <TableCell>{boleto.dyn_zonatransporte || boleto.cliente?.agente_frete || '-'}</TableCell>
                       <TableCell>
                         {boleto.data_emissao 
                           ? format(new Date(boleto.data_emissao), 'dd/MM/yyyy', { locale: ptBR })

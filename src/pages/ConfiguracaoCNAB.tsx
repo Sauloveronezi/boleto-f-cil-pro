@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermissoes } from '@/hooks/usePermissoes';
+import { supabase } from '@/integrations/supabase/client';
 // Atualização dos padrões CNAB e correções de tipos
 import { useToast } from '@/hooks/use-toast';
 import { BANCOS_SUPORTADOS } from '@/data/bancos';
@@ -153,6 +154,7 @@ export default function ConfiguracaoCNAB() {
   
   // Lista principal
   const [configuracoes, setConfiguracoes] = useState<ConfiguracaoCNAB[]>([]);
+  const [isLoadingConfigs, setIsLoadingConfigs] = useState(true);
   
   // Estado de Edição
   const [configSelecionada, setConfigSelecionada] = useState<ConfiguracaoCNAB | null>(null);
@@ -175,8 +177,57 @@ export default function ConfiguracaoCNAB() {
 
   // Carregar padrões ao montar
   useEffect(() => {
-    const salvos = JSON.parse(localStorage.getItem('padroesCNAB') || '[]');
-    setConfiguracoes(salvos);
+    const carregarConfiguracoes = async () => {
+      setIsLoadingConfigs(true);
+      try {
+        const { data, error } = await supabase
+          .from('vv_b_configuracoes_cnab')
+          .select('*')
+          .is('deleted', null)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        if (data) {
+          const configs: ConfiguracaoCNAB[] = data.map(item => ({
+            id: item.id,
+            banco_id: item.banco_id || '',
+            tipo_cnab: (item.tipo_cnab as 'CNAB_240' | 'CNAB_400') || 'CNAB_400',
+            nome: item.nome,
+            descricao: item.descricao || '',
+            campos: (item.campos as any[]) || [],
+            linhas: (item.linhas as any[]) || undefined,
+            criado_em: item.created_at,
+            atualizado_em: item.updated_at
+          }));
+          setConfiguracoes(configs);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar configurações CNAB:', error);
+        toast({
+          title: 'Erro ao carregar configurações',
+          description: 'Não foi possível buscar os padrões CNAB do servidor.',
+          variant: 'destructive'
+        });
+        
+        // Tenta carregar do localStorage como fallback (apenas leitura)
+        const salvos = JSON.parse(localStorage.getItem('padroesCNAB') || '[]');
+        if (salvos.length > 0) {
+            setConfiguracoes(prev => {
+                // Merge evitando duplicatas de ID se houver colisão
+                const idsExistentes = new Set(prev.map(p => p.id));
+                const novosLocais = salvos.filter((p: ConfiguracaoCNAB) => !idsExistentes.has(p.id));
+                return [...prev, ...novosLocais];
+            });
+        }
+      } finally {
+        setIsLoadingConfigs(false);
+      }
+    };
+
+    carregarConfiguracoes();
   }, []);
 
   // Early returns - devem vir DEPOIS de todos os hooks
@@ -264,7 +315,7 @@ export default function ConfiguracaoCNAB() {
     }
   };
 
-  const handleSalvar = () => {
+  const handleSalvar = async () => {
     // Permissão check
     if (configSelecionada) {
        if (!hasPermission('configuracoes', 'editar')) {
@@ -307,36 +358,84 @@ export default function ConfiguracaoCNAB() {
         cor: c.cor
     }));
 
-    const config: ConfiguracaoCNAB = {
-      id: configSelecionada?.id || `config_${Date.now()}`,
-      banco_id: bancoId,
-      tipo_cnab: tipoCnab,
-      nome: nomeConfig,
-      descricao,
-      campos: camposFinais,
-      criado_em: configSelecionada?.criado_em || new Date().toISOString(),
-      atualizado_em: new Date().toISOString()
-    };
+    try {
+        const configData = {
+            banco_id: bancoId,
+            tipo_cnab: tipoCnab,
+            nome: nomeConfig,
+            descricao,
+            campos: camposFinais as any,
+            updated_at: new Date().toISOString(),
+            deleted: null
+        };
 
-    let novasConfigs;
-    if (configSelecionada) {
-      novasConfigs = configuracoes.map(c => c.id === config.id ? config : c);
-    } else {
-      novasConfigs = [...configuracoes, config];
+        let savedData;
+        
+        if (configSelecionada?.id && !configSelecionada.id.startsWith('config_')) {
+             // Update existing record in DB
+             const { data, error } = await supabase
+                .from('vv_b_configuracoes_cnab')
+                .update(configData)
+                .eq('id', configSelecionada.id)
+                .select()
+                .single();
+             
+             if (error) throw error;
+             savedData = data;
+        } else {
+             // Insert new record (or migration from local config_ ID)
+             const { data, error } = await supabase
+                .from('vv_b_configuracoes_cnab')
+                .insert(configData)
+                .select()
+                .single();
+
+             if (error) throw error;
+             savedData = data;
+        }
+
+        const config: ConfiguracaoCNAB = {
+          id: savedData.id,
+          banco_id: savedData.banco_id || '',
+          tipo_cnab: (savedData.tipo_cnab as any) || 'CNAB_400',
+          nome: savedData.nome,
+          descricao: savedData.descricao || '',
+          campos: (savedData.campos as any[]) || [],
+          linhas: (savedData.linhas as any[]) || undefined,
+          criado_em: savedData.created_at,
+          atualizado_em: savedData.updated_at
+        };
+
+        let novasConfigs;
+        // Se estava editando (seja DB ou local), substitui. Se for novo, adiciona.
+        if (configSelecionada) {
+            novasConfigs = configuracoes.map(c => c.id === configSelecionada.id ? config : c);
+        } else {
+            novasConfigs = [config, ...configuracoes];
+        }
+
+        setConfiguracoes(novasConfigs);
+        // Atualiza localStorage apenas como cache/backup, mas a fonte da verdade é o DB agora
+        // localStorage.setItem('padroesCNAB', JSON.stringify(novasConfigs));
+
+        toast({
+          title: 'Configuração salva',
+          description: `Padrão "${nomeConfig}" salvo com sucesso no banco de dados.`,
+        });
+
+        handleVoltar();
+
+    } catch (error) {
+       console.error('Erro ao salvar:', error);
+       toast({ 
+           title: 'Erro ao salvar', 
+           description: 'Não foi possível salvar a configuração no banco de dados.', 
+           variant: 'destructive' 
+       });
     }
-
-    setConfiguracoes(novasConfigs);
-    localStorage.setItem('padroesCNAB', JSON.stringify(novasConfigs));
-
-    toast({
-      title: 'Configuração salva',
-      description: `Padrão "${nomeConfig}" salvo com sucesso.`,
-    });
-
-    handleVoltar();
   };
 
-  const handleExcluir = (id: string) => {
+  const handleExcluir = async (id: string) => {
     if (!hasPermission('configuracoes', 'excluir')) {
       toast({
         title: 'Acesso Negado',
@@ -345,14 +444,31 @@ export default function ConfiguracaoCNAB() {
       });
       return;
     }
-    const novasConfigs = configuracoes.filter(c => c.id !== id);
-    setConfiguracoes(novasConfigs);
-    localStorage.setItem('padroesCNAB', JSON.stringify(novasConfigs));
-    handleVoltar();
-    toast({
-      title: 'Configuração excluída',
-      description: 'O padrão CNAB foi removido.',
-    });
+    
+    try {
+        const { error } = await supabase
+            .from('vv_b_configuracoes_cnab')
+            .update({ deleted: new Date().toISOString(), data_delete: new Date().toISOString() })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        const novasConfigs = configuracoes.filter(c => c.id !== id);
+        setConfiguracoes(novasConfigs);
+        // localStorage.setItem('padroesCNAB', JSON.stringify(novasConfigs));
+        handleVoltar();
+        toast({
+          title: 'Configuração excluída',
+          description: 'O padrão CNAB foi removido.',
+        });
+    } catch (error) {
+        console.error('Erro ao excluir:', error);
+        toast({
+            title: 'Erro ao excluir',
+            description: 'Não foi possível remover o padrão.',
+            variant: 'destructive'
+        });
+    }
   };
 
   const handleUpdateCampo = (id: string, updates: Partial<CampoDetectado>) => {

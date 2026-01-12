@@ -293,3 +293,107 @@ export function downloadArquivoCNAB(
   
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Lê um arquivo CNAB e extrai os dados com base na configuração
+ */
+export function lerArquivoCNAB(
+  conteudo: string,
+  config: ConfiguracaoCNAB
+): Record<string, string>[] {
+  const linhas = conteudo.split('\n').filter(l => l.trim().length > 0);
+  const registros: Record<string, string>[] = [];
+  
+  // Mapa de configurações de linha por tipo/identificador
+  // Se usar sistema novo (linhas[])
+  const configLinhas = config.linhas || [];
+  
+  // Se usar sistema legado (campos[])
+  const camposLegado = config.campos || [];
+
+  for (const linha of linhas) {
+    let camposParaLer: Array<any> = [];
+    
+    // Tentar identificar o tipo de linha
+    if (configLinhas.length > 0) {
+      // Procura uma configuração de linha que bata com o identificador na linha atual
+      const configEncontrada = configLinhas.find(conf => {
+        const pos = conf.identificador.posicao - 1; // Base 0
+        const val = linha.charAt(pos);
+        // Se tiver segmento (CNAB 240 detalhe), verifica também
+        if (conf.identificador.segmento) {
+            const valSeg = linha.charAt(13); // Posição 14 (base 0 = 13)
+            return val === conf.identificador.valor && valSeg === conf.identificador.segmento;
+        }
+        return val === conf.identificador.valor;
+      });
+      
+      if (configEncontrada) {
+        camposParaLer = configEncontrada.campos;
+      }
+    } else {
+      // Lógica legado: tenta adivinhar baseada no primeiro caractere (CNAB 400) ou pos 8 (CNAB 240)
+      const tipoCNAB = config.tipo_cnab;
+      let tipoLinha: string = 'detalhe';
+      
+      if (tipoCNAB === 'CNAB_400') {
+        const id = linha.charAt(0);
+        if (id === '0') tipoLinha = 'header_arquivo';
+        else if (id === '1') tipoLinha = 'detalhe';
+        else if (id === '9') tipoLinha = 'trailer_arquivo';
+      } else {
+        const id = linha.charAt(7); // Posição 8
+        const segmento = linha.charAt(13); // Posição 14
+        if (id === '0') tipoLinha = 'header_arquivo';
+        else if (id === '1') tipoLinha = 'header_lote';
+        else if (id === '3') {
+             if (segmento === 'P') tipoLinha = 'detalhe_segmento_p';
+             else if (segmento === 'Q') tipoLinha = 'detalhe_segmento_q';
+             else if (segmento === 'R') tipoLinha = 'detalhe_segmento_r';
+             else tipoLinha = 'detalhe';
+        }
+        else if (id === '5') tipoLinha = 'trailer_lote';
+        else if (id === '9') tipoLinha = 'trailer_arquivo';
+      }
+      
+      camposParaLer = camposLegado.filter(c => 
+        c.tipo_linha === tipoLinha || 
+        c.tipo_registro === (tipoCNAB === 'CNAB_400' ? linha.charAt(0) : linha.charAt(7))
+      );
+    }
+    
+    // Se encontrou campos para ler e é um DETALHE (ou segmento P/Q/R), extrai dados
+    // Header e Trailer geralmente não viram registros de boleto individuais, mas podem conter info global
+    // Por simplificação, vamos focar em extrair tudo e o consumidor filtra o que é registro de boleto
+    
+    if (camposParaLer.length > 0) {
+      const registro: Record<string, string> = {};
+      
+      for (const campo of camposParaLer) {
+        const inicio = (campo.posicaoInicio || campo.posicao_inicio) - 1;
+        const fim = (campo.posicaoFim || campo.posicao_fim);
+        
+        if (inicio >= 0 && fim <= linha.length) {
+          const valor = linha.substring(inicio, fim).trim();
+          
+          // Usa campo_destino como chave principal se existir
+          const chave = campo.campoDestino || campo.campo_destino || campo.nome.toLowerCase().replace(/\s/g, '_');
+          
+          registro[chave] = valor;
+          
+          // Se tiver alias/destino conhecido, popula também
+          if (campo.campoDestino && campo.campoDestino !== chave) {
+             registro[campo.campoDestino] = valor;
+          }
+        }
+      }
+      
+      // Só adiciona se extraiu algo útil
+      if (Object.keys(registro).length > 0) {
+        registros.push(registro);
+      }
+    }
+  }
+  
+  return registros;
+}

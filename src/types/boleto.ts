@@ -41,8 +41,10 @@ export interface ConfiguracaoBanco {
   carteira: string;
   agencia: string;
   conta: string;
+  digito_conta?: string;
   codigo_cedente: string;
   convenio?: string; // Código do convênio (usado pelo BB e outros)
+  local_pagamento?: string;
 }
 
 // Cliente

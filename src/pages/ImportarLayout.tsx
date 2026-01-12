@@ -28,6 +28,7 @@ import { usePermissoes } from '@/hooks/usePermissoes';
 import { useNavigate } from 'react-router-dom';
 import { ConfiguracaoCNAB, CampoCNAB, TipoLinhaCNAB, TipoRegistroCNAB } from '@/types/boleto';
 import { BoletoPreview } from '@/components/boleto/BoletoPreview';
+import { supabase } from '@/integrations/supabase/client';
 import { CnabTextEditor, CampoMapeado, TipoLinha } from '@/components/cnab/CnabTextEditor';
 import { parseCnabPdf, CampoDetectado } from '@/lib/pdfLayoutParser';
 import { gerarLinhasCNAB240, gerarCamposHeaderArquivo240, gerarCamposDetalheP240, gerarCamposDetalheQ240, gerarCamposDetalheR240, gerarCamposTrailerLote240, gerarCamposTrailerArquivo240 } from '@/types/cnab';
@@ -621,7 +622,7 @@ export default function ImportarLayout() {
     }
   };
 
-  const handleSalvar = () => {
+  const handleSalvar = async () => {
     const canCreate = hasPermission('modelos', 'criar');
     if (!canCreate) {
       toast({
@@ -664,26 +665,39 @@ export default function ImportarLayout() {
         cor: c.cor
       }));
 
-      const now = new Date().toISOString();
-      const padraoFinal: ConfiguracaoCNAB = {
-        id: `config_${Date.now()}`,
+      const configData = {
         banco_id: bancoSelecionado,
         tipo_cnab: tipoCNAB,
         nome: nomePadrao.trim(),
         descricao: padraoGerado.descricao || `Padrão ${tipoCNAB} importado`,
+        campos: camposCompletos as any,
+        deleted: null
+      };
+
+      // Salvar no Supabase
+      const { error } = await supabase
+        .from('vv_b_configuracoes_cnab')
+        .insert(configData);
+
+      if (error) throw error;
+
+      // Manter compatibilidade com localStorage por enquanto (backup)
+      const now = new Date().toISOString();
+      const padraoFinal: ConfiguracaoCNAB = {
+        id: `config_${Date.now()}`, // ID temporário para local
+        ...configData,
         campos: camposCompletos,
         criado_em: now,
         atualizado_em: now
       };
 
-      // Salvar no localStorage
       const padroesExistentes = JSON.parse(localStorage.getItem('padroesCNAB') || '[]') as ConfiguracaoCNAB[];
       padroesExistentes.push(padraoFinal);
       localStorage.setItem('padroesCNAB', JSON.stringify(padroesExistentes));
 
       toast({
         title: 'Padrão salvo com sucesso!',
-        description: `O padrão "${nomePadrao}" está disponível para uso.`,
+        description: `O padrão "${nomePadrao}" foi salvo no banco de dados.`,
       });
 
       navigate('/configuracao-cnab');

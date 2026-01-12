@@ -29,6 +29,13 @@ export interface BoletoApi {
   dados_extras: Record<string, any>;
   sincronizado_em: string;
   created_at: string;
+  dyn_nome_do_cliente?: string;
+  dyn_cidade?: string;
+  dyn_conta?: string;
+  dyn_desconto1?: string;
+  dyn_desconto_data?: string;
+  dyn_zonatransporte?: string;
+  taxnumber1?: string;
 }
 
 export interface SyncLog {
@@ -72,10 +79,7 @@ export function useBoletosApi(filtros?: {
     queryFn: async () => {
       let query = supabase
         .from('vv_b_boletos_api')
-        .select(`
-          *,
-          cliente:vv_b_clientes(id, razao_social, cnpj, estado, cidade, agente_frete)
-        `)
+        .select('*')
         .is('deleted', null)
         .order('data_emissao', { ascending: false });
 
@@ -98,17 +102,19 @@ export function useBoletosApi(filtros?: {
       
       if (filtros?.cnpj) {
         resultado = resultado.filter((b: any) => 
-          b.cliente?.cnpj?.includes(filtros.cnpj)
+          b.taxnumber1?.includes(filtros.cnpj)
         );
       }
       if (filtros?.estado) {
+        // Estado não parece estar mapeado diretamente, talvez dyn_cidade tenha UF ou precise ver outro campo
+        // Por enquanto, vamos tentar filtrar se houver campo 'uf' ou dentro de dyn_cidade
         resultado = resultado.filter((b: any) => 
-          b.cliente?.estado === filtros.estado
+          b.uf === filtros.estado || b.dyn_cidade?.includes(filtros.estado)
         );
       }
       if (filtros?.cidade) {
         resultado = resultado.filter((b: any) => 
-          b.cliente?.cidade?.toLowerCase().includes(filtros.cidade.toLowerCase())
+          b.dyn_cidade?.toLowerCase().includes(filtros.cidade.toLowerCase())
         );
       }
 

@@ -1,5 +1,8 @@
 // Parser configurável para arquivos CNAB 240 e 400
-import { NotaFiscal, Cliente, TipoOrigem, ConfiguracaoCNAB, CampoCNAB } from '@/types/boleto';
+import { NotaFiscal, Cliente, TipoOrigem, ConfiguracaoCNAB } from '@/types/boleto';
+import { lerArquivoCNAB } from './cnabGenerator';
+import { mapearCNABParaModelo } from './boletoMapping';
+import { DadosBoleto } from './pdfModelRenderer';
 
 export interface DadosCNAB {
   clientes: Cliente[];
@@ -9,48 +12,9 @@ export interface DadosCNAB {
 // Função para gerar ID único
 const gerarId = () => Math.random().toString(36).substr(2, 9);
 
-// Extrair valor de uma linha baseado nas posições configuradas
-function extrairCampo(linha: string, campo: CampoCNAB): string {
-  // Posições são 1-indexed no arquivo CNAB
-  const inicio = campo.posicao_inicio - 1;
-  const fim = campo.posicao_fim;
-  if (inicio < 0 || fim > linha.length) return '';
-  return linha.substring(inicio, fim).trim();
-}
-
-// Formatar valor baseado no formato configurado
-function formatarValor(valor: string, formato?: string): any {
-  if (!valor || valor.trim() === '') return null;
-  
-  switch (formato) {
-    case 'valor_centavos':
-      const num = parseFloat(valor.replace(/\D/g, ''));
-      return isNaN(num) ? 0 : num / 100;
-    case 'numero':
-      return parseInt(valor.replace(/\D/g, ''), 10) || 0;
-    case 'data_ddmmaa':
-      if (valor.length >= 6) {
-        const dia = valor.substring(0, 2);
-        const mes = valor.substring(2, 4);
-        const ano = `20${valor.substring(4, 6)}`;
-        return `${ano}-${mes}-${dia}`;
-      }
-      return null;
-    case 'data_ddmmaaaa':
-      if (valor.length >= 8) {
-        const dia = valor.substring(0, 2);
-        const mes = valor.substring(2, 4);
-        const ano = valor.substring(4, 8);
-        return `${ano}-${mes}-${dia}`;
-      }
-      return null;
-    default:
-      return valor;
-  }
-}
-
 // Formatar CNPJ
 function formatarCNPJ(cnpj: string): string {
+  if (!cnpj) return '';
   const numeros = cnpj.replace(/\D/g, '');
   if (numeros.length === 14) {
     return numeros.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -61,168 +25,119 @@ function formatarCNPJ(cnpj: string): string {
   return cnpj;
 }
 
-// Verificar se a linha corresponde ao tipo de registro configurado
-function verificarTipoRegistro(linha: string, tipoRegistro: string | undefined, tipoCNAB: 'CNAB_240' | 'CNAB_400'): boolean {
-  if (!tipoRegistro) return true;
+// Helper para converter data CNAB (ddmmaa ou ddmmaaaa) para ISO (yyyy-mm-dd)
+function converterDataCNAB(data: string): string {
+  if (!data) return new Date().toISOString().split('T')[0];
+  const limpa = data.replace(/\D/g, '');
   
-  if (tipoCNAB === 'CNAB_400') {
-    // No CNAB 400, o tipo de registro está na posição 1 (índice 0)
-    return linha.charAt(0) === tipoRegistro;
-  } else {
-    // No CNAB 240, o tipo de registro está na posição 8 (índice 7)
-    return linha.charAt(7) === tipoRegistro;
+  if (limpa.length === 8) { // ddmmaaaa
+    const dia = limpa.substring(0, 2);
+    const mes = limpa.substring(2, 4);
+    const ano = limpa.substring(4, 8);
+    return `${ano}-${mes}-${dia}`;
   }
+  
+  if (limpa.length === 6) { // ddmmaa
+    const dia = limpa.substring(0, 2);
+    const mes = limpa.substring(2, 4);
+    const ano = `20${limpa.substring(4, 6)}`;
+    return `${ano}-${mes}-${dia}`;
+  }
+  
+  return new Date().toISOString().split('T')[0];
 }
 
-// Encontrar linhas de detalhe no arquivo CNAB
-function encontrarLinhasDetalhe(linhas: string[], tipoCNAB: 'CNAB_240' | 'CNAB_400'): string[] {
-  return linhas.filter(linha => {
-    if (tipoCNAB === 'CNAB_400') {
-      // CNAB 400: tipo de registro '1' = detalhe
-      return linha.length >= 10 && linha.charAt(0) === '1';
-    } else {
-      // CNAB 240: tipo de registro '3' = detalhe
-      // Também aceitar '5' como detalhe conforme solicitado (trailer de lote usado como dados)
-      // E verificar se linha tem tamanho mínimo
-      if (linha.length < 10) return false;
-      const tipo = linha.charAt(7);
-      return tipo === '3' || tipo === '5';
-    }
-  });
+// Helper para converter valor CNAB (centavos) para number
+function converterValorCNAB(valor: string): number {
+  if (!valor) return 0;
+  const limpo = valor.replace(/\D/g, '');
+  const num = parseInt(limpo, 10);
+  return isNaN(num) ? 0 : num / 100;
 }
 
 // Parser configurável usando as definições do usuário
 function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): DadosCNAB {
-  const linhas = conteudo.split('\n').filter(l => l.trim().length > 0);
+  const registros = lerArquivoCNAB(conteudo, config);
   const clientes: Cliente[] = [];
   const notas: NotaFiscal[] = [];
   const clientesMap = new Map<string, Cliente>();
 
-  // Encontrar linhas de detalhe
-  let linhasDetalhe = encontrarLinhasDetalhe(linhas, config.tipo_cnab);
-  
-  // Se não encontrou linhas de detalhe, usar todas as linhas (exceto header/trailer)
-  if (linhasDetalhe.length === 0) {
-    linhasDetalhe = linhas.filter((l, i) => i > 0 && i < linhas.length - 1);
-  }
+  registros.forEach((reg, index) => {
+    // 1. Mapear para o modelo de visualização (DadosBoleto)
+    const dadosBoleto = mapearCNABParaModelo(reg);
 
-  // Agrupar campos por tipo de registro
-  const camposPorTipoRegistro = new Map<string, CampoCNAB[]>();
-  config.campos.forEach(campo => {
-    const tipo = campo.tipo_registro || '__default__';
-    if (!camposPorTipoRegistro.has(tipo)) {
-      camposPorTipoRegistro.set(tipo, []);
-    }
-    camposPorTipoRegistro.get(tipo)!.push(campo);
-  });
-
-  linhasDetalhe.forEach((linha, index) => {
-    // Para cada tipo de registro configurado, tentar extrair dados
-    let valoresExtraidos: Record<string, any> = {};
+    // 2. Extrair dados estruturados para Cliente e NotaFiscal
     
-    camposPorTipoRegistro.forEach((campos, tipoRegistro) => {
-      const tipoParaVerificar = tipoRegistro === '__default__' ? undefined : tipoRegistro;
-      
-      if (!verificarTipoRegistro(linha, tipoParaVerificar, config.tipo_cnab)) return;
-
-      // Extrair valores dos campos
-      campos.forEach(campo => {
-        const valorBruto = extrairCampo(linha, campo);
-        const valorFormatado = formatarValor(valorBruto, campo.formato);
-        if (valorFormatado !== null) {
-          valoresExtraidos[campo.campo_destino] = valorFormatado;
-        }
-      });
-    });
-
-    // Se temos CNPJ ou razão social, criar/atualizar cliente
-    const cnpj = valoresExtraidos.cnpj;
+    // Identificação do cliente
+    const cnpj = reg['cnpj_sacado'] || reg['cnpj'] || '';
+    const razaoSocial = reg['nome_sacado'] || reg['razao_social'] || `Cliente ${formatarCNPJ(cnpj)}`;
+    
     let cliente: Cliente | undefined;
-    
-    if (cnpj && !clientesMap.has(cnpj)) {
-      const clienteId = gerarId();
-      cliente = {
-        id: clienteId,
-        business_partner: `BP${(index + 1).toString().padStart(3, '0')}`,
-        razao_social: valoresExtraidos.razao_social || `Cliente ${formatarCNPJ(cnpj)}`,
-        cnpj: formatarCNPJ(cnpj),
-        lzone: 'Importado',
-        estado: valoresExtraidos.estado || 'SP',
-        cidade: valoresExtraidos.cidade || 'São Paulo',
-        parceiro_negocio: 'CNAB Import',
-        agente_frete: 'N/A',
-        endereco: valoresExtraidos.endereco || 'Endereço não informado',
-        cep: valoresExtraidos.cep || '00000-000',
-      };
-      clientesMap.set(cnpj, cliente);
-      clientes.push(cliente);
-    } else if (cnpj) {
-      cliente = clientesMap.get(cnpj);
+
+    if (cnpj) {
+      if (!clientesMap.has(cnpj)) {
+        const clienteId = gerarId();
+        cliente = {
+          id: clienteId,
+          business_partner: `BP${(index + 1).toString().padStart(3, '0')}`,
+          razao_social: razaoSocial.toUpperCase(),
+          cnpj: formatarCNPJ(cnpj),
+          lzone: 'Importado',
+          estado: reg['uf_sacado'] || reg['estado'] || 'SP',
+          cidade: reg['cidade_sacado'] || reg['cidade'] || '',
+          parceiro_negocio: 'CNAB Import',
+          agente_frete: 'N/A',
+          endereco: reg['endereco_sacado'] || reg['endereco'] || '',
+          cep: reg['cep_sacado'] || reg['cep'] || '',
+        };
+        clientesMap.set(cnpj, cliente);
+        clientes.push(cliente);
+      } else {
+        cliente = clientesMap.get(cnpj);
+      }
     }
 
-    // Se temos valor ou nosso número, criar nota
-    const temDadosNota = valoresExtraidos.valor || valoresExtraidos.nosso_numero || valoresExtraidos.numero_nota;
-    if (temDadosNota && cliente) {
+    // Identificação da Nota
+    // Se tivermos valor ou nosso número, assumimos que é uma nota válida
+    const valorStr = reg['valor'] || reg['valor_titulo'] || '';
+    const numeroNota = reg['numero_nota'] || reg['numero_documento'] || reg['nosso_numero'] || '';
+    
+    if ((valorStr || numeroNota) && cliente) {
+      const valor = converterValorCNAB(valorStr);
+      
       const nota: NotaFiscal = {
         id: gerarId(),
-        numero_nota: valoresExtraidos.numero_nota || valoresExtraidos.nosso_numero || `NF${(index + 1).toString().padStart(6, '0')}`,
+        numero_nota: numeroNota || `NF${(index + 1).toString().padStart(6, '0')}`,
         serie: '1',
-        data_emissao: valoresExtraidos.data_emissao || new Date().toISOString().split('T')[0],
-        data_vencimento: valoresExtraidos.vencimento || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        valor_titulo: valoresExtraidos.valor || 0,
+        data_emissao: converterDataCNAB(reg['data_emissao']),
+        data_vencimento: converterDataCNAB(reg['data_vencimento'] || reg['vencimento'] || ''),
+        valor_titulo: valor,
         moeda: 'BRL',
         codigo_cliente: cliente.id,
         status: 'aberta',
-        referencia_interna: valoresExtraidos.nosso_numero || `CNAB-${index + 1}`,
+        referencia_interna: reg['nosso_numero'] || `CNAB-${index + 1}`,
+        // Armazenamos o DadosBoleto completo aqui para usar na geração do PDF
+        // @ts-ignore
+        dados_api: dadosBoleto
       };
       
-      // Evitar duplicatas
-      if (nota.valor_titulo > 0 && !notas.some(n => n.numero_nota === nota.numero_nota && n.valor_titulo === nota.valor_titulo)) {
+      // Evitar duplicatas exatas
+      const duplicada = notas.some(n => 
+        n.numero_nota === nota.numero_nota && 
+        n.valor_titulo === nota.valor_titulo &&
+        n.codigo_cliente === nota.codigo_cliente
+      );
+      
+      if (!duplicada) {
         notas.push(nota);
       }
     }
   });
 
-  // Se não conseguiu parsear, mas temos linhas, gerar dados genéricos (Fallback)
-  if (notas.length === 0 && linhasDetalhe.length > 0) {
-    console.warn('CNAB Parser: Nenhuma nota extraída, gerando dados brutos');
-    
-    const clienteFallback: Cliente = {
-      id: gerarId(),
-      business_partner: 'BP-FALLBACK',
-      razao_social: 'Cliente Não Identificado (Dados Brutos)',
-      cnpj: '00000000000000',
-      lzone: 'N/A',
-      estado: 'UF',
-      cidade: 'Cidade',
-      parceiro_negocio: 'CNAB Bruto',
-      agente_frete: 'N/A',
-      endereco: 'Endereço não extraído',
-      cep: '00000-000'
-    };
-    clientes.push(clienteFallback);
-
-    linhasDetalhe.forEach((linha, index) => {
-        const nota: NotaFiscal = {
-            id: gerarId(),
-            numero_nota: `RAW-${index + 1}`,
-            serie: '1',
-            data_emissao: new Date().toISOString().split('T')[0],
-            data_vencimento: new Date().toISOString().split('T')[0],
-            valor_titulo: 0, // Usuário terá que conferir
-            moeda: 'BRL',
-            codigo_cliente: clienteFallback.id,
-            status: 'aberta',
-            referencia_interna: linha // Guardar linha inteira aqui para referência?
-        };
-        notas.push(nota);
-    });
-  }
-
-  // Se não conseguiu parsear, retornar vazio
-  if (notas.length === 0) {
-    console.warn('CNAB Parser: Nenhuma nota extraída do arquivo');
-    return { clientes: [], notas: [] };
+  // Se não conseguiu parsear, retornar vazio (ou podia ter fallback, mas lerArquivoCNAB já tenta extrair tudo)
+  if (notas.length === 0 && registros.length > 0) {
+    console.warn('CNAB Parser: Registros encontrados mas nenhuma nota válida extraída');
+    // Poderíamos implementar um fallback aqui se necessário, similar ao anterior
   }
 
   return { clientes, notas };

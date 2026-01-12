@@ -424,7 +424,48 @@ export function EditorLayoutBoleto({
   };
 
   const atualizarElemento = (id: string, updates: Partial<ElementoLayout>) => {
-    setElementos(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+    setElementos(prev => {
+      const base = prev.find(e => e.id === id);
+      const styleKeys = [
+        'fonte',
+        'tamanhoFonte',
+        'negrito',
+        'italico',
+        'alinhamento',
+        'corTexto',
+        'corFundo',
+        'bordaSuperior',
+        'bordaInferior',
+        'bordaEsquerda',
+        'bordaDireita',
+        'espessuraBorda',
+        'corBorda',
+        'visivel'
+      ];
+      const hasStyleUpdate = Object.keys(updates).some(k => styleKeys.includes(k));
+      return prev.map(e => {
+        if (e.id === id) {
+          return { ...e, ...updates };
+        }
+        if (
+          hasStyleUpdate &&
+          base &&
+          base.tipo === 'campo' &&
+          base.variavel &&
+          e.tipo === 'campo' &&
+          e.variavel === base.variavel
+        ) {
+          const synced: Partial<ElementoLayout> = {};
+          for (const k of styleKeys) {
+            if (k in updates) {
+              (synced as any)[k] = (updates as any)[k];
+            }
+          }
+          return { ...e, ...synced };
+        }
+        return e;
+      });
+    });
   };
   
   // Keyboard shortcuts for copy/paste/delete
@@ -957,6 +998,17 @@ export function EditorLayoutBoleto({
                           ))}
                         </SelectContent>
                       </Select>
+                      
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full text-xs h-7 mt-1"
+                        onClick={() => sincronizarEstilos(elementoAtual.id)}
+                        title="Aplica o estilo deste campo a todos os outros com a mesma variável"
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Sincronizar Estilos
+                      </Button>
                     </div>
                   )}
 

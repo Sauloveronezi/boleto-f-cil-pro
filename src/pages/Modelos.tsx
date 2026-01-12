@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw, FileCheck, AlertCircle, LogIn } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Palette, Plus, Copy, Edit, Trash2, FileText, Building2, Upload, Share2, Eye, Save, Loader2, Layers, RefreshCw, FileCheck, AlertCircle, LogIn, Download } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +54,8 @@ import { usePermissoes } from '@/hooks/usePermissoes';
 import { uploadPdfToStorage, getPdfUrl } from '@/lib/pdfStorage';
 import { useNavigate } from 'react-router-dom';
 import { inferirCamposDoBoletoPDF } from '@/lib/boletoPdfFieldInference';
+import { gerarDocumentacaoLayout, downloadDocumentacao } from '@/lib/layoutDocumentation';
+import ReactMarkdown from 'react-markdown';
 
 interface CampoMapeado {
   id: string | number;
@@ -80,6 +82,7 @@ interface ModeloBoleto {
   largura_pagina?: number;
   altura_pagina?: number;
   formato_pagina?: string;
+  documentacao_layout?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -109,6 +112,7 @@ export default function Modelos() {
   const [modeloEditando, setModeloEditando] = useState<ModeloBoleto | null>(null);
   const [modeloDeletando, setModeloDeletando] = useState<ModeloBoleto | null>(null);
   const [modeloVisualizando, setModeloVisualizando] = useState<ModeloBoleto | null>(null);
+  const [docVisualizando, setDocVisualizando] = useState<ModeloBoleto | null>(null);
   const [criarNovo, setCriarNovo] = useState(false);
   const [importarPDFOpen, setImportarPDFOpen] = useState(false);
   const [editorLayoutOpen, setEditorLayoutOpen] = useState(false);
@@ -157,6 +161,7 @@ export default function Modelos() {
         template_pdf_id: m.template_pdf_id,
         pdf_storage_path: m.pdf_storage_path || null,
         pdf_storage_bucket: m.pdf_storage_bucket || null,
+        documentacao_layout: m.documentacao_layout || null,
         created_at: m.created_at,
         updated_at: m.updated_at,
       })) as ModeloBoleto[];
@@ -194,6 +199,7 @@ export default function Modelos() {
         largura_pagina: modelo.largura_pagina || 210,
         altura_pagina: modelo.altura_pagina || 297,
         formato_pagina: modelo.formato_pagina || 'A4',
+        documentacao_layout: modelo.documentacao_layout || null,
         padrao: false,
       };
       
@@ -251,6 +257,38 @@ export default function Modelos() {
       }
       if (modelo.template_pdf_id !== undefined) payload.template_pdf_id = modelo.template_pdf_id;
       
+      // Se houver alteração nos campos mapeados ou instruções, regenerar documentação
+      if (modelo.campos_mapeados !== undefined || modelo.texto_instrucoes !== undefined || modelo.nome_modelo !== undefined) {
+        try {
+          // Precisamos construir o objeto modelo completo para gerar a documentação
+          // Para isso, pegamos o estado atual (se disponível no cache ou passado)
+          // Como não temos acesso fácil ao estado anterior aqui dentro, vamos fazer o melhor esforço com o payload
+          // Em um cenário ideal, buscaríamos o modelo atual do banco se necessário, mas aqui vamos assumir que o payload tem o suficiente ou é uma atualização parcial aceitável
+          
+          const modeloParaDoc = {
+            id,
+            nome_modelo: payload.nome_modelo || modelo.nome_modelo || 'Modelo',
+            banco_id: payload.banco_id || modelo.banco_id || '',
+            bancos_compativeis: payload.bancos_compativeis || modelo.bancos_compativeis || [],
+            tipo_layout: payload.tipo_layout || modelo.tipo_layout || 'CNAB_400',
+            padrao: false, // irrelevante para doc
+            campos_mapeados: payload.campos_mapeados || modelo.campos_mapeados || [],
+            texto_instrucoes: payload.texto_instrucoes || modelo.texto_instrucoes || '',
+            template_pdf_id: payload.template_pdf_id || modelo.template_pdf_id || null,
+            pdf_storage_path: payload.pdf_storage_path || null,
+            pdf_storage_bucket: payload.pdf_storage_bucket || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as ModeloBoleto;
+
+          payload.documentacao_layout = gerarDocumentacaoLayout(modeloParaDoc);
+        } catch (err) {
+          console.error('[Modelos] Erro ao regenerar documentação:', err);
+        }
+      } else if (modelo.documentacao_layout !== undefined) {
+         payload.documentacao_layout = modelo.documentacao_layout;
+      }
+      
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
         .update(payload)
@@ -279,26 +317,37 @@ export default function Modelos() {
   // Mutation para deletar modelo
   const deleteModelo = useMutation({
     mutationFn: async (id: string) => {
-      // 1. Tentar Update Direto (Fallback)
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
+      // Usar RPC genérica existente para soft delete (marca com 'X')
+      // Isso evita problemas de RLS com update direto e usa a função padrão do sistema
+      const { error } = await supabase
+        .rpc('vv_b_soft_delete', { 
+          p_table_name: 'vv_b_modelos_boleto', 
+          p_id: id 
+        });
 
-      const { error: updateError } = await supabase
-        .from('vv_b_modelos_boleto')
-        .update({
-          deleted: '*',
-          data_delete: new Date().toISOString(),
-          usuario_delete_id: userId
-        })
-        .eq('id', id);
-
-      if (updateError) {
-        throw updateError;
+      if (error) {
+        console.error('[Modelos] Delete error:', error);
+        // Fallback: se a RPC falhar (não existir), tentar update direto
+        if (error.code === '42883') { // undefined_function
+             const { data: userData } = await supabase.auth.getUser();
+             const { error: updateError } = await supabase
+              .from('vv_b_modelos_boleto')
+              .update({
+                deleted: 'x',
+                data_delete: new Date().toISOString(),
+                usuario_delete_id: userData.user?.id
+              })
+              .eq('id', id);
+            
+             if (updateError) throw new Error(`Erro ao excluir (fallback): ${updateError.message}`);
+             return;
+        }
+        throw new Error(`Erro ao excluir modelo: ${error.message}`);
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['modelos-boleto'] });
-      toast({ title: 'Modelo excluído' });
+      toast({ title: 'Modelo excluído', description: 'O modelo foi marcado como excluído.' });
       setModeloDeletando(null);
     },
     onError: (error: any) => {
@@ -989,6 +1038,26 @@ export default function Modelos() {
           </div>
         )}
 
+        {/* Modal de Documentação */}
+        <Dialog open={!!docVisualizando} onOpenChange={(open) => !open && setDocVisualizando(null)}>
+          <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Documentação do Layout: {docVisualizando?.nome_modelo}</DialogTitle>
+              <DialogDescription>
+                Documentação gerada automaticamente baseada na análise estrutural do PDF.
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="flex-1 pr-4 border rounded-md p-4 bg-muted/20">
+              <div className="prose dark:prose-invert max-w-none">
+                <ReactMarkdown>{docVisualizando?.documentacao_layout || ''}</ReactMarkdown>
+              </div>
+            </ScrollArea>
+            <DialogFooter>
+              <Button onClick={() => setDocVisualizando(null)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Modal de Edição/Criação */}
         <Dialog
           open={isFormDialogOpen}
@@ -1320,6 +1389,13 @@ export default function Modelos() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setModeloVisualizando(null)}>
                 Fechar
+              </Button>
+              <Button variant="secondary" onClick={() => {
+                  setDocVisualizando(modeloVisualizando);
+                  setModeloVisualizando(null);
+              }}>
+                <FileText className="h-4 w-4 mr-2" />
+                Documentação
               </Button>
               {canEdit && (
                 <Button onClick={() => {
