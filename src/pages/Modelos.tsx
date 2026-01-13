@@ -199,7 +199,6 @@ export default function Modelos() {
         largura_pagina: modelo.largura_pagina || 210,
         altura_pagina: modelo.altura_pagina || 297,
         formato_pagina: modelo.formato_pagina || 'A4',
-        documentacao_layout: modelo.documentacao_layout || null,
         padrao: false,
       };
       
@@ -257,37 +256,7 @@ export default function Modelos() {
       }
       if (modelo.template_pdf_id !== undefined) payload.template_pdf_id = modelo.template_pdf_id;
       
-      // Se houver alteração nos campos mapeados ou instruções, regenerar documentação
-      if (modelo.campos_mapeados !== undefined || modelo.texto_instrucoes !== undefined || modelo.nome_modelo !== undefined) {
-        try {
-          // Precisamos construir o objeto modelo completo para gerar a documentação
-          // Para isso, pegamos o estado atual (se disponível no cache ou passado)
-          // Como não temos acesso fácil ao estado anterior aqui dentro, vamos fazer o melhor esforço com o payload
-          // Em um cenário ideal, buscaríamos o modelo atual do banco se necessário, mas aqui vamos assumir que o payload tem o suficiente ou é uma atualização parcial aceitável
-          
-          const modeloParaDoc = {
-            id,
-            nome_modelo: payload.nome_modelo || modelo.nome_modelo || 'Modelo',
-            banco_id: payload.banco_id || modelo.banco_id || '',
-            bancos_compativeis: payload.bancos_compativeis || modelo.bancos_compativeis || [],
-            tipo_layout: payload.tipo_layout || modelo.tipo_layout || 'CNAB_400',
-            padrao: false, // irrelevante para doc
-            campos_mapeados: payload.campos_mapeados || modelo.campos_mapeados || [],
-            texto_instrucoes: payload.texto_instrucoes || modelo.texto_instrucoes || '',
-            template_pdf_id: payload.template_pdf_id || modelo.template_pdf_id || null,
-            pdf_storage_path: payload.pdf_storage_path || null,
-            pdf_storage_bucket: payload.pdf_storage_bucket || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          } as ModeloBoleto;
-
-          payload.documentacao_layout = gerarDocumentacaoLayout(modeloParaDoc);
-        } catch (err) {
-          console.error('[Modelos] Erro ao regenerar documentação:', err);
-        }
-      } else if (modelo.documentacao_layout !== undefined) {
-         payload.documentacao_layout = modelo.documentacao_layout;
-      }
+      // Removido: geração e persistência de documentacao_layout para compatibilidade com schema atual
       
       const { data, error } = await supabase
         .from('vv_b_modelos_boleto')
