@@ -578,7 +578,34 @@ export default function Modelos() {
       altura: el.altura,
     }));
 
-    // Cria modelo temporário e abre o editor de layout
+    // Se houver campos detectados, salva automaticamente o modelo e anexa o PDF
+    if (camposMapeados.length > 0) {
+      try {
+        await createModelo.mutateAsync({
+          nome_modelo: result.nomeModelo,
+          banco_id: bancoBaseId || null,
+          bancos_compativeis: result.bancosCompativeis,
+          tipo_layout: 'CNAB_400',
+          texto_instrucoes: '',
+          campos_mapeados: camposMapeados,
+          template_pdf_id: null,
+          pdfFile: result.file,
+        });
+        toast({
+          title: 'Modelo importado',
+          description: `O PDF foi importado, ${camposMapeados.length} campos mapeados e o modelo salvo.`,
+        });
+        setImportarPDFOpen(false);
+        return;
+      } catch (err: any) {
+        toast({
+          title: 'Aviso',
+          description: 'Não foi possível salvar automaticamente. Abrindo editor para ajustar.',
+        });
+      }
+    }
+
+    // Cria modelo temporário e abre o editor de layout (quando não detectou campos ou salvamento automático falhou)
     const novoModelo: ModeloBoleto = {
       id: `temp_${Date.now()}`,
       nome_modelo: result.nomeModelo,

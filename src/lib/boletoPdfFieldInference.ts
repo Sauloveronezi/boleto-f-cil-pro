@@ -1,8 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { ElementoLayout } from '@/components/modelos/EditorLayoutBoleto';
 
-// Configurar worker do pdf.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Configurar worker do pdf.js (via módulo local para confiabilidade em Vite)
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url
+).toString();
 
 interface TextItem {
   str: string;
