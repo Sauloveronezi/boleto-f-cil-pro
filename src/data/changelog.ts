@@ -11,6 +11,18 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.2.0',
+    date: '2026-01-13',
+    changes: [
+      { type: 'feat', description: 'Parser de tabela em grade para Bradesco e priorização por banco (237)' },
+      { type: 'feat', description: 'Parser dedicado para Santander (POS INI/FINAL, A/N, TAM, DEC) e prioridade (033)' },
+      { type: 'fix', description: 'Detecção de blocos sem cabeçalho textual (início automático e Header fallback)' },
+      { type: 'feat', description: 'Fallback FEBRABAN básico para CNAB 240 (Segmentos P/Q) garantindo notas mínimas' },
+      { type: 'refactor', description: 'Estratégia adaptativa com histórico de sucesso por banco e reordenação dinâmica' },
+      { type: 'feat', description: 'Mapeamento completo do Segmento R (descontos 2/3, multa, info ao pagador, ocorrências)' }
+    ]
+  },
+  {
     version: '0.1.0',
     date: '2026-01-13',
     changes: [
