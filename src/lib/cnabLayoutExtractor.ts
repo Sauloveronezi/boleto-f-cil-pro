@@ -26,6 +26,15 @@ import {
   RECORD_TYPE_PATTERNS,
   LAYOUT_FIELD_COLORS,
 } from '@/types/cnabLayoutSpec';
+import { 
+  gerarCamposDetalheP240, 
+  gerarCamposDetalheQ240, 
+  gerarCamposDetalheR240, 
+  gerarCamposHeaderArquivo240, 
+  gerarCamposHeaderLote240, 
+  gerarCamposTrailerLote240, 
+  gerarCamposTrailerArquivo240 
+} from '@/types/cnab';
 
 // Configurar worker do PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -1011,6 +1020,29 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
 export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/lib/pdfLayoutParser').CampoDetectado[] {
   const campos: import('@/lib/pdfLayoutParser').CampoDetectado[] = [];
   let idCounter = 0;
+  const addCampo = (c: import('@/lib/pdfLayoutParser').CampoDetectado) => {
+    idCounter++;
+    campos.push({ ...c, id: String(idCounter), cor: c.cor || LAYOUT_FIELD_COLORS[idCounter % LAYOUT_FIELD_COLORS.length] });
+  };
+  
+  const convertCampoCompleto = (
+    f: ReturnType<typeof gerarCamposDetalheP240>[number],
+    tipoLinha: import('@/components/cnab/CnabTextEditor').TipoLinha
+  ): import('@/lib/pdfLayoutParser').CampoDetectado => {
+    return {
+      id: '0',
+      nome: f.nome,
+      posicaoInicio: f.posicaoInicio,
+      posicaoFim: f.posicaoFim,
+      tamanho: f.tamanho,
+      tipo: f.formato?.includes('data') ? 'data' : f.formato?.includes('valor') ? 'valor' : (f.tipo === 'numerico' ? 'numerico' : 'alfanumerico'),
+      destino: f.campoDestino || '',
+      valor: '(do PDF)',
+      confianca: 80,
+      tipoLinha,
+      cor: LAYOUT_FIELD_COLORS[idCounter % LAYOUT_FIELD_COLORS.length],
+    };
+  };
   
   for (const layout of layoutSpec.layouts) {
     for (const record of layout.records) {
@@ -1045,29 +1077,15 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
       }
       
       for (const field of record.fields) {
-        idCounter++;
-        
-        // Mapear data_type para tipo
         let tipo: 'numerico' | 'alfanumerico' | 'data' | 'valor' = 'alfanumerico';
         switch (field.data_type) {
-          case 'num':
-            tipo = 'numerico';
-            break;
-          case 'decimal':
-            tipo = 'valor';
-            break;
-          case 'date':
-            tipo = 'data';
-            break;
-          case 'alfa':
-          case 'cnab_filler':
-          default:
-            tipo = 'alfanumerico';
-            break;
+          case 'num': tipo = 'numerico'; break;
+          case 'decimal': tipo = 'valor'; break;
+          case 'date': tipo = 'data'; break;
+          default: tipo = 'alfanumerico'; break;
         }
-        
-        campos.push({
-          id: String(idCounter),
+        addCampo({
+          id: '0',
           nome: field.field_name_original,
           posicaoInicio: field.start_pos,
           posicaoFim: field.end_pos,
@@ -1080,6 +1098,33 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
           cor: field.cor || LAYOUT_FIELD_COLORS[idCounter % LAYOUT_FIELD_COLORS.length],
         });
       }
+      
+      // Fallback: se o segmento possui poucos campos, completar com definição conhecida
+      const segmentoCount = (tl: typeof tipoLinha) => campos.filter(c => c.tipoLinha === tl).length;
+      const ensureDefaults = () => {
+        if (tipoLinha === 'detalhe_segmento_p' && segmentoCount('detalhe_segmento_p') < 10) {
+          for (const f of gerarCamposDetalheP240()) addCampo(convertCampoCompleto(f, 'detalhe_segmento_p'));
+        }
+        if (tipoLinha === 'detalhe_segmento_q' && segmentoCount('detalhe_segmento_q') < 8) {
+          for (const f of gerarCamposDetalheQ240()) addCampo(convertCampoCompleto(f, 'detalhe_segmento_q'));
+        }
+        if (tipoLinha === 'detalhe_segmento_r' && segmentoCount('detalhe_segmento_r') < 6) {
+          for (const f of gerarCamposDetalheR240()) addCampo(convertCampoCompleto(f, 'detalhe_segmento_r'));
+        }
+        if (tipoLinha === 'header_arquivo' && segmentoCount('header_arquivo') < 10) {
+          for (const f of gerarCamposHeaderArquivo240()) addCampo(convertCampoCompleto(f, 'header_arquivo'));
+        }
+        if (tipoLinha === 'header_lote' && segmentoCount('header_lote') < 6) {
+          for (const f of gerarCamposHeaderLote240()) addCampo(convertCampoCompleto(f, 'header_lote'));
+        }
+        if (tipoLinha === 'trailer_lote' && segmentoCount('trailer_lote') < 3) {
+          for (const f of gerarCamposTrailerLote240()) addCampo(convertCampoCompleto(f, 'trailer_lote'));
+        }
+        if (tipoLinha === 'trailer_arquivo' && segmentoCount('trailer_arquivo') < 3) {
+          for (const f of gerarCamposTrailerArquivo240()) addCampo(convertCampoCompleto(f, 'trailer_arquivo'));
+        }
+      };
+      ensureDefaults();
     }
   }
   
