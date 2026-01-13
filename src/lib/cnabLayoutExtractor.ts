@@ -75,6 +75,10 @@ const RE_DATE_PIC = /^(ddmmaaaa|ddmmaa)$/i;
 // === PADRÃO TABELA EM GRADE (como manual Bradesco com colunas) ===
 // Ex.: "01.0 Banco  Código do Banco na Compensação  001 003  3 0  Num  G001"
 const RE_GRID_COLUMNS = /^(\d{1,2}\.\d)\s+([A-Za-zÀ-ú\/\-\s]+?)\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,2})\s+(\d{1,2})\s+(Num|Alfa|Alpha)\s*(\S+)?/i;
+// === PADRÃO SANTANDER ===
+// Linhas com colunas: "POS INI/FINAL  DESCRIÇÃO  A/N  TAM  DEC  CONTEÚDO  NOTAS"
+// Ex.: "001 - 003  Código do Banco na compensação  N  003     033"
+const RE_SANTANDER_ROW = /^(\d{3})\s*[-–]\s*(\d{3})\s+(.+?)\s+([NA])\s+(\d{1,3})\s+(\d{1,2}|-)?\s*(.*)$/i;
 
 // === PADRÃO LINHA MARKDOWN ===
 // Formato: "| CAMPO | DESCRIÇÃO | 001 003 | 9(03) | CONTEÚDO |"
@@ -564,6 +568,40 @@ function parseGridColumns(line: string): ParsedTableRow | null {
 }
 
 /**
+ * Estratégia 3.2: Parser para formato Santander (POS INI/FINAL, A/N, TAM, DEC)
+ */
+function parseSantander(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  const match = line.match(RE_SANTANDER_ROW);
+  if (match) {
+    const [, startStr, endStr, desc, tipoAN, tamStr, decStr, conteudo] = match;
+    const start = parseInt(startStr);
+    const end = parseInt(endStr);
+    const tam = parseInt(tamStr);
+    const dec = decStr && decStr !== '-' ? parseInt(decStr) : undefined;
+    if (isNaN(start) || isNaN(end) || start > end || end > 500) return null;
+    const picture = tipoAN.toUpperCase() === 'N' ? '9' : 'X';
+    let dataType: CnabDataType = tipoAN.toUpperCase() === 'N' ? 'num' : 'alfa';
+    if (dec && dec > 0) dataType = 'decimal';
+    // Nome do campo: usar a descrição; conteúdo pode indicar campo destino (como "Nosso Número")
+    const fieldName = desc.trim();
+    const row: ParsedTableRow = {
+      field: fieldName,
+      description: fieldName,
+      start,
+      end,
+      picture,
+      digits: tam,
+      decimals: dec,
+      data_type: dataType,
+      notes: ['santander'],
+    };
+    return row;
+  }
+  return null;
+}
+
+/**
  * Estratégia 4: Parser Bradesco
  */
 function parseBradesco(line: string): ParsedTableRow | null {
@@ -632,6 +670,10 @@ function parseTableRow(line: string): ParsedTableRow | null {
   result = parseGridColumns(line);
   if (result) return finalizeRow(result);
   
+  // 2.2 Santander (POS INI/FINAL, A/N, TAM, DEC)
+  result = parseSantander(line);
+  if (result) return finalizeRow(result);
+  
   // 3. Bradesco
   result = parseBradesco(line);
   if (result) return finalizeRow(result);
@@ -685,6 +727,7 @@ function parseTableRowWithPrefs(line: string, bankCode: string | null): ParsedTa
     { name: 'markdown', fn: parseMarkdownTable },
     { name: 'itau_bba', fn: parseItauBBA },
     { name: 'grid_columns', fn: parseGridColumns },
+    { name: 'santander', fn: parseSantander },
     { name: 'bradesco', fn: parseBradesco },
     { name: 'febraban', fn: parseFebraban },
     { name: 'generic_spaces', fn: parseGenericSpaces },
@@ -694,6 +737,8 @@ function parseTableRowWithPrefs(line: string, bankCode: string | null): ParsedTa
   let baseOrder: string[] = [];
   if (bankCode === '237' && prefs.length === 0) {
     baseOrder = ['grid_columns', 'bradesco', 'febraban', 'generic_spaces', 'positions_only', 'markdown', 'itau_bba'];
+  } else if (bankCode === '033' && prefs.length === 0) {
+    baseOrder = ['santander', 'febraban', 'generic_spaces', 'positions_only', 'markdown', 'itau_bba', 'grid_columns', 'bradesco'];
   } else if (prefs.length === 0) {
     baseOrder = ['itau_bba', 'markdown', 'febraban', 'generic_spaces', 'positions_only', 'bradesco', 'grid_columns'];
   }
