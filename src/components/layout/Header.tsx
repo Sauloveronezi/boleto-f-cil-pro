@@ -2,6 +2,7 @@ import { FileText, Settings, HelpCircle, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
+import { APP_VERSION } from '@/data/changelog';
 
 interface HeaderProps {
   modoDemo: boolean;
@@ -15,7 +16,10 @@ export function Header({ modoDemo }: HeaderProps) {
           <div className="flex items-center gap-2">
             <FileText className="h-8 w-8 text-primary" />
             <div>
-              <h1 className="text-xl font-bold">BoletoERP</h1>
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-xl font-bold">BoletoERP</h1>
+                <span className="text-xs text-muted-foreground">v{APP_VERSION}</span>
+              </div>
               <p className="text-xs text-muted-foreground">Sistema de Gestão de Boletos</p>
             </div>
           </div>
@@ -32,9 +36,11 @@ export function Header({ modoDemo }: HeaderProps) {
             <Bell className="h-5 w-5" />
           </Button>
           
-          <Button variant="ghost" size="icon" className="text-header-foreground hover:bg-header-foreground/10">
-            <HelpCircle className="h-5 w-5" />
-          </Button>
+          <Link to="/referencia-versoes">
+            <Button variant="ghost" size="icon" className="text-header-foreground hover:bg-header-foreground/10" title="Referência de Versões">
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+          </Link>
           
           <Link to="/configuracoes">
             <Button variant="ghost" size="icon" className="text-header-foreground hover:bg-header-foreground/10">

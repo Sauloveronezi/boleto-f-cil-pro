@@ -11,7 +11,8 @@ import {
   FileCode,
   CloudDownload,
   UserCog,
-  Shield
+  Shield,
+  HelpCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissoes } from '@/hooks/usePermissoes';
@@ -52,6 +53,12 @@ export function Sidebar() {
         ...(canAccess('usuarios') ? [{ icon: UserCog, label: 'Usuários', href: '/usuarios' }] : []),
         ...(canAccess('perfis') ? [{ icon: Shield, label: 'Perfis de Acesso', href: '/perfis-acesso' }] : []),
       ].filter(Boolean)
+    },
+    {
+      title: 'Ajuda',
+      items: [
+        { icon: HelpCircle, label: 'Referência de Versões', href: '/referencia-versoes' }
+      ]
     }
   ].filter(section => section.items.length > 0);
 

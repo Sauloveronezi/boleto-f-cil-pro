@@ -22,6 +22,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Usuarios from "./pages/Usuarios";
 import PerfisAcesso from "./pages/PerfisAcesso";
 import AguardandoAprovacao from "./pages/AguardandoAprovacao";
+import ReferenciaVersoes from "./pages/ReferenciaVersoes";
 import NotFound from "./pages/NotFound";
 import AccessDenied from "./pages/AccessDenied";
 
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/boletos-api" element={<ProtectedRoute><Protected modulo="integracoes" fallback={<AccessDenied />}><BoletosApi /></Protected></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute><Protected modulo="usuarios" fallback={<AccessDenied />}><Usuarios /></Protected></ProtectedRoute>} />
             <Route path="/perfis-acesso" element={<ProtectedRoute><Protected modulo="perfis" fallback={<AccessDenied />}><PerfisAcesso /></Protected></ProtectedRoute>} />
+            <Route path="/referencia-versoes" element={<ProtectedRoute><ReferenciaVersoes /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
