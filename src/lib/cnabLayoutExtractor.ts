@@ -72,6 +72,9 @@ const RE_GENERIC_POS = /^(.+?)\s+(\d{1,3})\s*[-–a]\s*(\d{1,3})$/i;
 const RE_GENERIC_POS_FIRST = /^(\d{1,3})\s*[-–a]\s*(\d{1,3})\s+(.+)$/i;
 const RE_POSITIONS_ONLY = /^(.+?)\s{2,}(\d{1,3})\s+(\d{1,3})(?:\s+([A-Z0-9\(\)\/]+))?\s*(.*)$/i;
 const RE_DATE_PIC = /^(ddmmaaaa|ddmmaa)$/i;
+// === PADRÃO TABELA EM GRADE (como manual Bradesco com colunas) ===
+// Ex.: "01.0 Banco  Código do Banco na Compensação  001 003  3 0  Num  G001"
+const RE_GRID_COLUMNS = /^(\d{1,2}\.\d)\s+([A-Za-zÀ-ú\/\-\s]+?)\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})\s+(\d{1,2})\s+(\d{1,2})\s+(Num|Alfa|Alpha)\s*(\S+)?/i;
 
 // === PADRÃO LINHA MARKDOWN ===
 // Formato: "| CAMPO | DESCRIÇÃO | 001 003 | 9(03) | CONTEÚDO |"
@@ -532,6 +535,35 @@ function parsePositionsOnly(line: string): ParsedTableRow | null {
 }
 
 /**
+ * Estratégia 3.1: Parser para tabela em grade com colunas explícitas (Bradesco)
+ */
+function parseGridColumns(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  const match = line.match(RE_GRID_COLUMNS);
+  if (match) {
+    const [, campoCodigo, fieldName, desc, startStr, endStr, digStr, decStr, tipoStr, defaultVal] = match;
+    const start = parseInt(startStr);
+    const end = parseInt(endStr);
+    if (isNaN(start) || isNaN(end) || start > end || end > 500) return null;
+    const picture = (tipoStr?.toLowerCase().startsWith('num')) ? '9' : 'X';
+    const row: ParsedTableRow = {
+      field: fieldName.trim(),
+      description: desc.trim(),
+      start,
+      end,
+      picture,
+      digits: digStr ? parseInt(digStr) : undefined,
+      decimals: decStr ? parseInt(decStr) : undefined,
+      default_value: defaultVal?.trim(),
+      data_type: inferDataType(picture || '', fieldName),
+      notes: ['grid_columns'],
+    };
+    return row;
+  }
+  return null;
+}
+
+/**
  * Estratégia 4: Parser Bradesco
  */
 function parseBradesco(line: string): ParsedTableRow | null {
@@ -596,6 +628,10 @@ function parseTableRow(line: string): ParsedTableRow | null {
   result = parseItauBBA(line);
   if (result) return finalizeRow(result);
   
+  // 2.1 Tabela em grade com colunas explícitas (Bradesco)
+  result = parseGridColumns(line);
+  if (result) return finalizeRow(result);
+  
   // 3. Bradesco
   result = parseBradesco(line);
   if (result) return finalizeRow(result);
@@ -648,6 +684,7 @@ function parseTableRowWithPrefs(line: string, bankCode: string | null): ParsedTa
   const strategies: Array<{ name: string; fn: (l: string) => ParsedTableRow | null }> = [
     { name: 'markdown', fn: parseMarkdownTable },
     { name: 'itau_bba', fn: parseItauBBA },
+    { name: 'grid_columns', fn: parseGridColumns },
     { name: 'bradesco', fn: parseBradesco },
     { name: 'febraban', fn: parseFebraban },
     { name: 'generic_spaces', fn: parseGenericSpaces },
