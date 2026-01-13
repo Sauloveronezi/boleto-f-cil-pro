@@ -690,9 +690,18 @@ function parseTableRowWithPrefs(line: string, bankCode: string | null): ParsedTa
     { name: 'generic_spaces', fn: parseGenericSpaces },
     { name: 'positions_only', fn: parsePositionsOnly },
   ];
+  // Preferências padrão por banco (se ainda não houver histórico)
+  let baseOrder: string[] = [];
+  if (bankCode === '237' && prefs.length === 0) {
+    baseOrder = ['grid_columns', 'bradesco', 'febraban', 'generic_spaces', 'positions_only', 'markdown', 'itau_bba'];
+  } else if (prefs.length === 0) {
+    baseOrder = ['itau_bba', 'markdown', 'febraban', 'generic_spaces', 'positions_only', 'bradesco', 'grid_columns'];
+  }
   const ordered = [
-    ...strategies.filter(s => prefs.includes(s.name)).sort((a, b) => prefs.indexOf(a.name) - prefs.indexOf(b.name)),
-    ...strategies.filter(s => !prefs.includes(s.name)),
+    ...(prefs.length > 0
+      ? strategies.filter(s => prefs.includes(s.name)).sort((a, b) => prefs.indexOf(a.name) - prefs.indexOf(b.name))
+      : strategies.filter(s => baseOrder.includes(s.name)).sort((a, b) => baseOrder.indexOf(a.name) - baseOrder.indexOf(b.name))),
+    ...strategies.filter(s => !(prefs.length > 0 ? prefs.includes(s.name) : baseOrder.includes(s.name))),
   ];
   for (const s of ordered) {
     const r = s.fn(line);
@@ -784,6 +793,23 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
           if (!isDuplicate) {
             currentBlock.rows.push(row);
           }
+        }
+      } else {
+        // Heurística: se ainda não detectamos cabeçalho do bloco, iniciar um bloco quando a primeira linha de campo aparecer
+        const row = parseTableRowWithPrefs(text, bankCode);
+        if (row) {
+          const inferredType =
+            row.start === 1 && row.field.toLowerCase().includes('banco')
+              ? 'HEADER_ARQUIVO'
+              : 'DETALHE';
+          currentBlock = {
+            page: page.pageNumber,
+            record_name: inferredType,
+            record_size: recordSize,
+            rows: [row],
+            raw_lines: [text],
+          };
+          lastRecordType = inferredType;
         }
       }
     }
@@ -1215,6 +1241,12 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
       };
       ensureDefaults();
     }
+  }
+  
+  // Fallback global: se nenhum campo do Header de Arquivo foi extraído, adicionar definição padrão
+  const hasHeader = campos.some(c => c.tipoLinha === 'header_arquivo');
+  if (!hasHeader) {
+    for (const f of gerarCamposHeaderArquivo240()) addCampo(convertCampoCompleto(f, 'header_arquivo'));
   }
   
   return campos;
