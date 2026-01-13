@@ -332,12 +332,59 @@ export async function inferirCamposDoBoletoPDF(
     // Se não encontrou gráficos, usar linhas padrão (fallback)
     const finalGraphics = graphicElements.length > 0 ? graphicElements : gerarLinhasPadraoBoleto(pageWidthMm, pageHeightMm);
 
-    const todosElementos = [...finalGraphics, ...staticTextElements, ...elementosCampos];
-
-    console.log('[FieldInference] Total fields:', elementosCampos.length);
+    // Criar campos a partir de caixas (retângulos) quando houver label conhecido dentro
+    const rectangles = finalGraphics.filter(el => el.tipo === 'retangulo');
+    const camposFromBoxes: ElementoLayout[] = [];
+    const existingVars = new Set<string>(elementosCampos.map(e => e.variavel || '').filter(Boolean) as string[]);
+    rectangles.forEach((box) => {
+      const boxXPt = (box.x / ESCALA) * POINTS_PER_MM;
+      const boxYPtBottom = pageHeightPt - (box.y / ESCALA) * POINTS_PER_MM - (box.altura / ESCALA) * POINTS_PER_MM;
+      const boxWidthPt = (box.largura / ESCALA) * POINTS_PER_MM;
+      const boxHeightPt = (box.altura / ESCALA) * POINTS_PER_MM;
+      const boxTopPt = boxYPtBottom + boxHeightPt;
+      let best: { item: TextItem; score: number; mapping?: { variavel: string; nome: string } } | null = null;
+      for (const ti of textItems) {
+        const tx = ti.transform[4];
+        const ty = ti.transform[5];
+        const inside = tx >= boxXPt && tx <= (boxXPt + boxWidthPt) && ty >= boxYPtBottom && ty <= (boxYPtBottom + boxHeightPt);
+        if (!inside) continue;
+        const txt = ti.str.toLowerCase().trim();
+        let mapEntry: { variavel: string; nome: string } | undefined;
+        for (const [pattern, mapping] of Object.entries(FIELD_MAPPINGS)) {
+          if (txt.includes(pattern)) { mapEntry = mapping; break; }
+        }
+        const isLabel = !!mapEntry;
+        const dx = Math.abs(tx - (boxXPt + 4));
+        const dy = Math.abs(boxTopPt - ty);
+        const score = dx + dy + (isLabel ? 0 : 50);
+        if (!best || score < best.score) {
+          best = { item: ti, score, mapping: mapEntry };
+        }
+      }
+      if (best && best.mapping && !existingVars.has(best.mapping.variavel)) {
+        camposFromBoxes.push({
+          id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          tipo: 'campo',
+          nome: best.mapping.nome,
+          variavel: best.mapping.variavel,
+          x: box.x + 8,
+          y: box.y + 10,
+          largura: Math.max(60, box.largura - 16),
+          altura: Math.min(24, box.altura - 12),
+          tamanhoFonte: 10,
+          alinhamento: 'left',
+          corTexto: '#000000',
+          visivel: true,
+          ordem: graphicElements.length + staticTextElements.length + elementosCampos.length + camposFromBoxes.length,
+        });
+        existingVars.add(best.mapping.variavel);
+      }
+    });
+    
+    const todosElementos = [...finalGraphics, ...staticTextElements, ...elementosCampos, ...camposFromBoxes];
+    console.log('[FieldInference] Total fields:', elementosCampos.length + camposFromBoxes.length);
     console.log('[FieldInference] Total static texts:', staticTextElements.length);
     console.log('[FieldInference] Total graphics:', finalGraphics.length);
-    
     return todosElementos;
 
   } catch (error) {
