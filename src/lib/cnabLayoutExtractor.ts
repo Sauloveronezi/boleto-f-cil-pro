@@ -615,6 +615,59 @@ function parseTableRow(line: string): ParsedTableRow | null {
   return null;
 }
 
+function getBankPrefs(): Record<string, string[]> {
+  try {
+    const raw = typeof window !== 'undefined' ? window.localStorage.getItem('cnab_bank_strategies') : null;
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === 'object') return obj;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function saveBankPrefs(prefs: Record<string, string[]>): void {
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('cnab_bank_strategies', JSON.stringify(prefs));
+    }
+  } catch {}
+}
+
+function registerBankStrategy(bankCode: string, strategy: string): void {
+  const prefs = getBankPrefs();
+  const list = prefs[bankCode] || [];
+  const newList = [strategy, ...list.filter(s => s !== strategy)];
+  prefs[bankCode] = newList.slice(0, 10);
+  saveBankPrefs(prefs);
+}
+
+function parseTableRowWithPrefs(line: string, bankCode: string | null): ParsedTableRow | null {
+  const prefs = bankCode ? getBankPrefs()[bankCode] || [] : [];
+  const strategies: Array<{ name: string; fn: (l: string) => ParsedTableRow | null }> = [
+    { name: 'markdown', fn: parseMarkdownTable },
+    { name: 'itau_bba', fn: parseItauBBA },
+    { name: 'bradesco', fn: parseBradesco },
+    { name: 'febraban', fn: parseFebraban },
+    { name: 'generic_spaces', fn: parseGenericSpaces },
+    { name: 'positions_only', fn: parsePositionsOnly },
+  ];
+  const ordered = [
+    ...strategies.filter(s => prefs.includes(s.name)).sort((a, b) => prefs.indexOf(a.name) - prefs.indexOf(b.name)),
+    ...strategies.filter(s => !prefs.includes(s.name)),
+  ];
+  for (const s of ordered) {
+    const r = s.fn(line);
+    if (r) {
+      const res = finalizeRow(r);
+      if (res) registerBankStrategy(bankCode || '000', s.name);
+      return res;
+    }
+  }
+  return null;
+}
+
 /**
  * Finalizar e validar um ParsedTableRow
  */
@@ -643,7 +696,7 @@ function finalizeRow(row: ParsedTableRow): ParsedTableRow | null {
 /**
  * Detectar blocos de layout no documento
  */
-function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[]): DetectedLayoutBlock[] {
+function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[], bankCode: string | null = null): DetectedLayoutBlock[] {
   const blocks: DetectedLayoutBlock[] = [];
   let currentBlock: DetectedLayoutBlock | null = null;
   let recordSize: 240 | 400 = 240;
@@ -685,7 +738,7 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
       if (currentBlock) {
         currentBlock.raw_lines.push(text);
         
-        const row = parseTableRow(text);
+        const row = parseTableRowWithPrefs(text, bankCode);
         if (row) {
           // Evitar duplicatas (mesmo campo na mesma posição)
           const isDuplicate = currentBlock.rows.some(
@@ -947,8 +1000,7 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
     let recordSize: 240 | 400 = detectRecordSize(allLines) || 240;
     console.log(`[CNAB Extractor] Tamanho do registro: ${recordSize}`);
     
-    // Detectar blocos de layout
-    const blocks = detectLayoutBlocks(pages);
+    const blocks = detectLayoutBlocks(pages, bank.code || null);
     console.log(`[CNAB Extractor] Blocos detectados: ${blocks.length}`);
     
     for (const block of blocks) {
