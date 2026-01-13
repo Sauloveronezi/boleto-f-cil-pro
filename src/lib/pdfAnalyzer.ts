@@ -1,7 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
-
-// Configure worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configure worker (use local module path for reliability in Vite)
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url
+).toString();
 
 export interface PDFDimensions {
   larguraMm: number;
