@@ -168,6 +168,23 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
 function detectRecordType(text: string): string | null {
   const lower = text.toLowerCase();
   
+  // Priorizar detecção de segmentos específicos antes do genérico "DETALHE"
+  if (lower.includes('segmento p')) {
+    return 'DETALHE_P';
+  }
+  if (lower.includes('segmento q')) {
+    return 'DETALHE_Q';
+  }
+  if (lower.includes('segmento r')) {
+    return 'DETALHE_R';
+  }
+  if (lower.includes('segmento a')) {
+    return 'DETALHE_A';
+  }
+  if (lower.includes('segmento b')) {
+    return 'DETALHE_B';
+  }
+  
   // Detecção específica para Itaú BBA
   if (lower.includes('header de arquivo') || lower.includes('header arquivo')) {
     return 'HEADER_ARQUIVO';
