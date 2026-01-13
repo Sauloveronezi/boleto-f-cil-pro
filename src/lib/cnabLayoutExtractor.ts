@@ -61,6 +61,8 @@ const RE_FEBRABAN = /^([A-Z]\d{3})\s+(.+?)\s+(\d{1,3})\s+(\d{1,3})(?:\s+(\d{1,3}
 const RE_GENERIC_SPACES = /^(.+?)\s{2,}(\d{1,3})\s+(\d{1,3})\s+([X9V\(\)0-9]+)\s*(.*)$/i;
 const RE_GENERIC_POS = /^(.+?)\s+(\d{1,3})\s*[-–a]\s*(\d{1,3})$/i;
 const RE_GENERIC_POS_FIRST = /^(\d{1,3})\s*[-–a]\s*(\d{1,3})\s+(.+)$/i;
+const RE_POSITIONS_ONLY = /^(.+?)\s{2,}(\d{1,3})\s+(\d{1,3})(?:\s+([A-Z0-9\(\)\/]+))?\s*(.*)$/i;
+const RE_DATE_PIC = /^(ddmmaaaa|ddmmaa)$/i;
 
 // === PADRÃO LINHA MARKDOWN ===
 // Formato: "| CAMPO | DESCRIÇÃO | 001 003 | 9(03) | CONTEÚDO |"
@@ -275,7 +277,9 @@ function inferDataType(picture: string, fieldName: string): CnabDataType {
   const lower = fieldName.toLowerCase();
   const picLower = picture?.toLowerCase() || '';
   
-  // Por picture
+  if (RE_DATE_PIC.test(picLower)) {
+    return 'date';
+  }
   if (picLower.includes('v') || /9\([^)]+\)v9/i.test(picture)) {
     return 'decimal';
   }
@@ -493,6 +497,31 @@ function parseGenericSpaces(line: string): ParsedTableRow | null {
   return null;
 }
 
+function parsePositionsOnly(line: string): ParsedTableRow | null {
+  if (isTableHeader(line)) return null;
+  if (!looksLikeField(line)) return null;
+  const match = line.match(RE_POSITIONS_ONLY);
+  if (match) {
+    const field = match[1].trim();
+    const start = parseInt(match[2]);
+    const end = parseInt(match[3]);
+    const picture = match[4]?.trim();
+    const content = match[5]?.trim() || undefined;
+    if (isNaN(start) || isNaN(end) || start > end || end > 500) {
+      return null;
+    }
+    return {
+      field,
+      description: field,
+      start,
+      end,
+      picture,
+      content,
+    };
+  }
+  return null;
+}
+
 /**
  * Estratégia 4: Parser Bradesco
  */
@@ -568,6 +597,10 @@ function parseTableRow(line: string): ParsedTableRow | null {
   
   // 5. Genérico
   result = parseGenericSpaces(line);
+  if (result) return finalizeRow(result);
+  
+  // 6. Apenas posições, com picture opcional
+  result = parsePositionsOnly(line);
   if (result) return finalizeRow(result);
   
   return null;
