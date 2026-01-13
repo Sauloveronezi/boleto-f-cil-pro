@@ -55,6 +55,104 @@ function converterValorCNAB(valor: string): number {
   return isNaN(num) ? 0 : num / 100;
 }
 
+// Fallback FEBRABAN básico para CNAB 240 (Segmentos P e Q)
+function parseCNAB240Fallback(conteudo: string): DadosCNAB {
+  const linhas = conteudo.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim());
+  const clientes: Cliente[] = [];
+  const notas: NotaFiscal[] = [];
+  const clientesMap = new Map<string, Cliente>();
+  let seqTemp = 0;
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    if (l.length < 160) continue;
+    const tipoRegistro = l.charAt(7);
+    const segmento = l.charAt(13)?.toUpperCase();
+    if (tipoRegistro === '3' && segmento === 'P') {
+      const numeroDocumento = l.substring(62, 77).trim();
+      const dataVenc = l.substring(77, 85).trim();
+      const valorTitulo = l.substring(85, 100).trim();
+      const dataEmissao = l.substring(109, 117).trim();
+      const nossoNumero = l.substring(37, 57).trim();
+      // Procurar o próximo Q
+      let sacado: {
+        cnpj?: string; nome?: string; endereco?: string; bairro?: string; cep?: string; cidade?: string; uf?: string;
+      } = {};
+      for (let j = i + 1; j < Math.min(i + 6, linhas.length); j++) {
+        const q = linhas[j];
+        if (q.length < 160) continue;
+        if (q.charAt(7) === '3' && q.charAt(13)?.toUpperCase() === 'Q') {
+          const tipoInscricao = q.substring(17, 18).trim();
+          const cnpjCpf = q.substring(18, 33).trim();
+          const nome = q.substring(33, 73).trim();
+          const endereco = q.substring(73, 113).trim();
+          const bairro = q.substring(113, 128).trim();
+          const cep1 = q.substring(128, 133).trim();
+          const cep2 = q.substring(133, 136).trim();
+          const cidade = q.substring(136, 151).trim();
+          const uf = q.substring(151, 153).trim();
+          sacado = {
+            cnpj: tipoInscricao === '2' ? cnpjCpf : cnpjCpf,
+            nome,
+            endereco,
+            bairro,
+            cep: `${cep1}${cep2}`,
+            cidade,
+            uf,
+          };
+          break;
+        }
+      }
+      const cnpjKey = sacado.cnpj || `TMP${++seqTemp}`;
+      if (!clientesMap.has(cnpjKey)) {
+        const clienteId = `cli_${cnpjKey}`;
+        const cliente: Cliente = {
+          id: clienteId,
+          business_partner: `BP${(clientesMap.size + 1).toString().padStart(3, '0')}`,
+          razao_social: (sacado.nome || 'CLIENTE').toUpperCase(),
+          cnpj: sacado.cnpj || '',
+          lzone: 'Importado CNAB',
+          estado: sacado.uf || '',
+          cidade: sacado.cidade || '',
+          parceiro_negocio: 'CNAB',
+          agente_frete: 'N/A',
+          endereco: sacado.endereco || '',
+          cep: sacado.cep || '',
+        };
+        clientesMap.set(cnpjKey, cliente);
+        clientes.push(cliente);
+      }
+      const cliente = clientesMap.get(cnpjKey)!;
+      notas.push({
+        id: `nf_${notas.length + 1}`,
+        numero_nota: numeroDocumento || `RAW-${notas.length + 1}`,
+        serie: '1',
+        data_emissao: converterDataCNAB(dataEmissao),
+        data_vencimento: converterDataCNAB(dataVenc),
+        valor_titulo: converterValorCNAB(valorTitulo),
+        moeda: 'BRL',
+        codigo_cliente: cliente.id,
+        status: 'aberta',
+        referencia_interna: nossoNumero || `CNAB-${notas.length + 1}`,
+        // @ts-ignore
+        dados_api: {
+          pagador_nome: sacado.nome || '',
+          pagador_cnpj: sacado.cnpj || '',
+          sacado_endereco: sacado.endereco || '',
+          sacado_bairro: sacado.bairro || '',
+          sacado_cep: sacado.cep || '',
+          sacado_cidade: sacado.cidade || '',
+          sacado_uf: sacado.uf || '',
+          numero_documento: numeroDocumento,
+          data_vencimento: dataVenc,
+          valor: valorTitulo,
+          nosso_numero: nossoNumero,
+        } as Partial<DadosBoleto>,
+      } as NotaFiscal);
+    }
+  }
+  return { clientes, notas };
+}
+
 // Parser configurável usando as definições do usuário
 function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): DadosCNAB {
   const registros = lerArquivoCNAB(conteudo, config);
@@ -147,7 +245,13 @@ function parseCNABConfiguravel(conteudo: string, config: ConfiguracaoCNAB): Dado
 export function parseCNAB(conteudo: string, tipo: TipoOrigem, config?: ConfiguracaoCNAB | null): DadosCNAB {
   // Se temos configuração, usar o parser configurável
   if (config) {
-    return parseCNABConfiguravel(conteudo, config);
+    const dados = parseCNABConfiguravel(conteudo, config);
+    if (dados.notas.length === 0 && (tipo === 'CNAB_240')) {
+      // Fallback FEBRABAN básico para garantir mapeamento mínimo
+      const fb = parseCNAB240Fallback(conteudo);
+      if (fb.notas.length > 0) return fb;
+    }
+    return dados;
   }
   
   console.warn('CNAB Parser: Nenhuma configuração fornecida');
