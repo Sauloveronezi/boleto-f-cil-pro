@@ -567,19 +567,34 @@ export default function Modelos() {
       }
     }
 
-    // Converter para CampoMapeado para o modelo
-    const camposMapeados: CampoMapeado[] = elementosDetectados.map((el) => ({
+    // Converter TODOS os elementos detectados (campos, textos, linhas, retângulos)
+    const elementosParaSalvar = elementosDetectados.map((el) => ({
       id: el.id,
+      tipo: el.tipo || 'campo',
       nome: el.nome,
       variavel: el.variavel || '',
+      textoFixo: (el as any).textoFixo || '',
       posicao_x: el.x,
       posicao_y: el.y,
       largura: el.largura,
       altura: el.altura,
+      tamanhoFonte: el.tamanhoFonte || 10,
+      alinhamento: el.alinhamento || 'left',
+      corTexto: el.corTexto || '#000000',
+      corFundo: el.corFundo || 'transparent',
+      negrito: (el as any).negrito || false,
+      italico: (el as any).italico || false,
+      bordaSuperior: (el as any).bordaSuperior || false,
+      bordaInferior: (el as any).bordaInferior || false,
+      bordaEsquerda: (el as any).bordaEsquerda || false,
+      bordaDireita: (el as any).bordaDireita || false,
+      espessuraBorda: (el as any).espessuraBorda || 1,
+      corBorda: (el as any).corBorda || '#000000',
+      visivel: el.visivel !== false,
     }));
 
     // Se houver campos detectados, salva automaticamente o modelo e anexa o PDF
-    if (camposMapeados.length > 0) {
+    if (elementosParaSalvar.length > 0) {
       try {
         await createModelo.mutateAsync({
           nome_modelo: result.nomeModelo,
@@ -587,13 +602,13 @@ export default function Modelos() {
           bancos_compativeis: result.bancosCompativeis,
           tipo_layout: 'CNAB_400',
           texto_instrucoes: '',
-          campos_mapeados: camposMapeados,
+          campos_mapeados: elementosParaSalvar,
           template_pdf_id: null,
           pdfFile: result.file,
         });
         toast({
           title: 'Modelo importado',
-          description: `O PDF foi importado, ${camposMapeados.length} campos mapeados e o modelo salvo.`,
+          description: `O PDF foi importado, ${elementosParaSalvar.length} elemento(s) mapeado(s) e o modelo salvo.`,
         });
         setImportarPDFOpen(false);
         return;
@@ -614,7 +629,7 @@ export default function Modelos() {
       tipo_layout: 'CNAB_400',
       texto_instrucoes: '',
       padrao: false,
-      campos_mapeados: camposMapeados,
+      campos_mapeados: elementosParaSalvar,
       template_pdf_id: null,
       pdf_storage_path: null,
       pdf_storage_bucket: null,
