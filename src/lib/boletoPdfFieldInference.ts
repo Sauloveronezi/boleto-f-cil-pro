@@ -304,7 +304,7 @@ export async function inferirCamposDoBoletoPDF(
 
     // 4. Converter textos estáticos (não usados como label/valor) para ElementoLayout
     const staticTextElements: ElementoLayout[] = textItems
-      .map((item, index) => {
+      .map((item, index): ElementoLayout | null => {
         if (usedTextIndices.has(index)) return null;
 
         const xPt = item.transform[4];

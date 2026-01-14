@@ -179,6 +179,7 @@ export function EditorLayoutBoleto({
   // PDF background as image
   const [pdfImageUrl, setPdfImageUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   
   // Clipboard for copy/paste
   const [clipboard, setClipboard] = useState<ElementoLayout | null>(null);
@@ -190,21 +191,33 @@ export function EditorLayoutBoleto({
   useEffect(() => {
     if (pdfSource && open) {
       setLoadingPdf(true);
+      setPdfLoadError(null);
       console.log('[Editor] Loading PDF source:', typeof pdfSource === 'string' ? pdfSource : 'File object');
       renderPDFToImage(pdfSource, 2)
         .then(({ dataUrl }) => {
           console.log('[Editor] PDF rendered successfully');
           setPdfImageUrl(dataUrl);
+          setPdfLoadError(null);
         })
         .catch((err) => {
           console.error('[Editor] Error rendering PDF:', err);
           setPdfImageUrl(null);
+          // Detectar se é erro de bucket não encontrado
+          const errorMsg = String(err?.message || err);
+          if (errorMsg.includes('Bucket not found') || errorMsg.includes('404')) {
+            setPdfLoadError('Bucket de armazenamento não configurado. Crie o bucket "boleto_templates" no Supabase Storage.');
+          } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network')) {
+            setPdfLoadError('Não foi possível carregar o PDF. Verifique a conexão ou se o arquivo existe.');
+          } else {
+            setPdfLoadError('Erro ao carregar PDF de fundo.');
+          }
         })
         .finally(() => {
           setLoadingPdf(false);
         });
     } else if (!open) {
       setPdfImageUrl(null);
+      setPdfLoadError(null);
     }
   }, [pdfSource, open]);
 
@@ -919,8 +932,18 @@ export function EditorLayoutBoleto({
               >
                 {/* PDF as background image */}
                 {loadingPdf && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
                     <span className="text-sm text-muted-foreground">Carregando PDF...</span>
+                  </div>
+                )}
+                {pdfLoadError && !loadingPdf && mostrarFundo && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-amber-50 dark:bg-amber-950/30 z-0">
+                    <span className="text-sm text-amber-600 dark:text-amber-400 text-center px-4 max-w-xs">
+                      {pdfLoadError}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-2">
+                      O toggle "Fundo" está ativado mas o PDF não pode ser exibido.
+                    </span>
                   </div>
                 )}
                 {pdfImageUrl && !loadingPdf && mostrarFundo && (
@@ -1004,16 +1027,7 @@ export function EditorLayoutBoleto({
                         </SelectContent>
                       </Select>
                       
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full text-xs h-7 mt-1"
-                        onClick={() => sincronizarEstilos(elementoAtual.id)}
-                        title="Aplica o estilo deste campo a todos os outros com a mesma variável"
-                      >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Sincronizar Estilos
-                      </Button>
+                      {/* Sync styles - handled automatically in atualizarElemento */}
                     </div>
                   )}
 
