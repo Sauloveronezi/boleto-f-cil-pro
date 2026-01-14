@@ -117,20 +117,18 @@ export async function uploadBase64ToStorage(
 }
 
 /**
- * Obter URL pública ou assinada do PDF
+ * Obter URL assinada do PDF (bucket é privado)
  */
 export async function getPdfUrl(storagePath: string): Promise<string | null> {
+  if (!storagePath) {
+    console.warn('[pdfStorage] Empty storage path provided');
+    return null;
+  }
+
   try {
-    // Tenta URL pública primeiro
-    const { data: publicUrl } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(storagePath);
-
-    if (publicUrl?.publicUrl) {
-      return publicUrl.publicUrl;
-    }
-
-    // Se não funcionar, tenta URL assinada
+    console.log('[pdfStorage] Getting signed URL for:', storagePath);
+    
+    // Bucket é privado, usar sempre URL assinada
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
       .createSignedUrl(storagePath, 3600); // 1 hora
@@ -140,7 +138,13 @@ export async function getPdfUrl(storagePath: string): Promise<string | null> {
       return null;
     }
 
-    return data?.signedUrl || null;
+    if (data?.signedUrl) {
+      console.log('[pdfStorage] Signed URL obtained successfully');
+      return data.signedUrl;
+    }
+
+    console.warn('[pdfStorage] No signed URL returned');
+    return null;
   } catch (err) {
     console.error('[pdfStorage] Error getting PDF URL:', err);
     return null;
