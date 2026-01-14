@@ -464,6 +464,9 @@ export default function GerarBoletos() {
             listaDadosBoletos.push(dadosBoleto);
           }
 
+          // Importar função de geração
+          const { gerarBoletosComModelo } = await import('@/lib/pdfModelRenderer');
+          
           if (tipoSaida === 'arquivo_unico') {
              const pdfBytes = await gerarBoletosComModelo(
                modeloDB.pdf_storage_path,

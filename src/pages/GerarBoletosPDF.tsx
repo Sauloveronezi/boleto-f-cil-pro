@@ -47,8 +47,8 @@ export default function GerarBoletosPDF() {
     try {
       if (mode === 'single') {
         for (const id of selecionados) {
-          const bytes = await renderBoletoPDF(templateId, id)
-          const blob = new Blob([bytes], { type: 'application/pdf' })
+        const bytes = await renderBoletoPDF(templateId, id)
+          const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
           a.href = url
@@ -66,7 +66,7 @@ export default function GerarBoletosPDF() {
           pages.forEach(p => merged.addPage(p))
         }
         const out = await merged.save()
-        const blob = new Blob([out], { type: 'application/pdf' })
+        const blob = new Blob([new Uint8Array(out)], { type: 'application/pdf' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -92,8 +92,8 @@ export default function GerarBoletosPDF() {
         } catch {
           toast({ title: 'Aviso', description: 'ZIP não disponível; gerando arquivos individuais.', variant: 'destructive' })
           for (const id of selecionados) {
-            const bytes = await renderBoletoPDF(templateId, id)
-            const blob = new Blob([bytes], { type: 'application/pdf' })
+          const bytes = await renderBoletoPDF(templateId, id)
+            const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
             const url = URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
