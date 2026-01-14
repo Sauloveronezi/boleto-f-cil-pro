@@ -167,6 +167,7 @@ export function EditorLayoutBoleto({
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [tamanhoGrid, setTamanhoGrid] = useState(5);
   const [abaSelecionada, setAbaSelecionada] = useState<'campos' | 'textos' | 'linhas'>('campos');
+  const [mostrarFundo, setMostrarFundo] = useState(true);
   
   // Drag state - stored in refs to avoid stale closures
   const isDraggingRef = useRef(false);
@@ -855,10 +856,14 @@ export function EditorLayoutBoleto({
                   <Switch checked={mostrarGrade} onCheckedChange={setMostrarGrade} id="grade" />
                   <Label htmlFor="grade" className="text-xs">Grade</Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Switch checked={snapToGrid} onCheckedChange={setSnapToGrid} id="snap" />
-                  <Label htmlFor="snap" className="text-xs">Snap</Label>
-                </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={snapToGrid} onCheckedChange={setSnapToGrid} id="snap" />
+                <Label htmlFor="snap" className="text-xs">Snap</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={mostrarFundo} onCheckedChange={setMostrarFundo} id="fundo" />
+                <Label htmlFor="fundo" className="text-xs">Fundo</Label>
+              </div>
                 <Separator orientation="vertical" className="h-6" />
                 {/* Page Format Selector */}
                 <div className="flex items-center gap-2">
@@ -918,7 +923,7 @@ export function EditorLayoutBoleto({
                     <span className="text-sm text-muted-foreground">Carregando PDF...</span>
                   </div>
                 )}
-                {pdfImageUrl && !loadingPdf && (
+                {pdfImageUrl && !loadingPdf && mostrarFundo && (
                   <img
                     src={pdfImageUrl}
                     alt="Modelo PDF"

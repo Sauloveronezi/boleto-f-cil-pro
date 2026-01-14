@@ -101,9 +101,18 @@ export function useBoletosApi(filtros?: {
       let resultado = data || [];
       
       if (filtros?.cnpj) {
-        resultado = resultado.filter((b: any) => 
-          b.taxnumber1?.includes(filtros.cnpj)
-        );
+        const cnpjBuscar = filtros.cnpj.replace(/\D/g,'')
+        resultado = resultado.filter((b: any) => {
+          const candidates = [
+            b.taxnumber1,
+            b.pagador_cnpj,
+            b.cnpj_cliente,
+            b.cnpj,
+            b.cliente?.cnpj,
+            b.cliente?.cpf_cnpj
+          ].filter(Boolean).map((v: any) => String(v).replace(/\D/g,''))
+          return candidates.some((c: string) => c.includes(cnpjBuscar))
+        })
       }
       if (filtros?.estado) {
         // Estado não parece estar mapeado diretamente, talvez dyn_cidade tenha UF ou precise ver outro campo

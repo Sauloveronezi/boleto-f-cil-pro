@@ -11,6 +11,21 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.3.0',
+    date: '2026-01-13',
+    changes: [
+      { type: 'feat', description: 'Templates de Boleto: cadastro, upload de PDF e mapeamento visual' },
+      { type: 'feat', description: 'Pré-visualização com PDF de fundo e edição inline (mover/redimensionar/alinhamento)' },
+      { type: 'feat', description: 'Importar mapeamento por coordenadas (CSV/JSON) com conversão em mm (top-left)' },
+      { type: 'feat', description: 'Botão “Baixar CSV Modelo” para acelerar criação de layouts' },
+      { type: 'feat', description: 'Página “Gerar Boletos (PDF)” com modos individual, merge e zip' },
+      { type: 'fix', description: 'Boletos via API: exibição correta do CNPJ a partir de múltiplos campos' },
+      { type: 'feat', description: 'Editor de Layout: opção para mostrar/ocultar fundo importado' },
+      { type: 'refactor', description: 'Renderização com pdf-lib: shrink‑to‑fit, alinhamento real por largura do texto' },
+      { type: 'docs', description: 'Documentação do layout gerada automaticamente com variáveis e coordenadas' }
+    ]
+  },
+  {
     version: '0.2.0',
     date: '2026-01-13',
     changes: [

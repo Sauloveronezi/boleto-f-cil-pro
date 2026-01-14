@@ -55,6 +55,7 @@ import { uploadPdfToStorage, getPdfUrl } from '@/lib/pdfStorage';
 import { useNavigate } from 'react-router-dom';
 import { inferirCamposDoBoletoPDF } from '@/lib/boletoPdfFieldInference';
 import { gerarDocumentacaoLayout, downloadDocumentacao } from '@/lib/layoutDocumentation';
+import { ModeloPreview } from '@/components/modelos/ModeloPreview';
 import ReactMarkdown from 'react-markdown';
 
 interface CampoMapeado {
@@ -519,6 +520,30 @@ export default function Modelos() {
       }
     } catch (e) {
       console.warn('[Modelos] Falha ao detectar campos do PDF:', e);
+    }
+
+    // Se veio mapeamento por coordenadas, usar como base
+    if (Array.isArray(result.camposCoordenados) && result.camposCoordenados.length > 0) {
+      elementosDetectados = result.camposCoordenados.map((c, i) => ({
+        id: `field_${Date.now()}_${i}`,
+        tipo: (c.tipo || 'campo'),
+        nome: c.nome || (c.variavel || `Campo ${i+1}`),
+        variavel: c.variavel || '',
+        x: c.x || 0,
+        y: c.y || 0,
+        largura: c.largura || 120,
+        altura: c.altura || 20,
+        tamanhoFonte: c.tamanhoFonte || 10,
+        alinhamento: c.alinhamento || 'left',
+        corTexto: '#000000',
+        corFundo: 'transparent',
+        visivel: true,
+        ordem: i,
+      }));
+      toast({
+        title: 'Mapeamento por coordenadas',
+        description: `Carregados ${elementosDetectados.length} campos do arquivo de mapeamento.`,
+      });
     }
 
     // Se não detectou campos, tenta copiar do modelo padrão
@@ -1293,81 +1318,41 @@ export default function Modelos() {
                     </div>
                   </div>
 
-                  {/* Preview visual do layout */}
-                  <div className="border rounded-lg p-4 bg-white dark:bg-zinc-900 min-h-[400px] relative">
-                    <div className="text-center text-sm text-muted-foreground mb-4">
-                      Layout do Boleto (representação simplificada)
-                    </div>
-                    
-                    <div className="space-y-2 font-mono text-xs">
-                      <div className="border-b-2 border-black dark:border-white pb-2 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-8 bg-muted flex items-center justify-center text-[10px]">LOGO</div>
-                          <div>
-                            <div className="font-bold">{'{{banco_nome}}'}</div>
-                            <div>{'{{banco_codigo}}'}</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-sm">{'{{linha_digitavel}}'}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 py-2 border-b">
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Local de Pagamento</Label>
-                          <div>{'{{local_pagamento}}'}</div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Vencimento</Label>
-                          <div>{'{{data_vencimento}}'}</div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Agência/Código</Label>
-                          <div>{'{{agencia_codigo}}'}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 py-2 border-b">
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Beneficiário</Label>
-                          <div>{'{{beneficiario_nome}}'}</div>
-                          <div>{'{{beneficiario_cnpj}}'}</div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Nosso Número</Label>
-                          <div>{'{{nosso_numero}}'}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 py-2 border-b">
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Nº Documento</Label>
-                          <div>{'{{numero_documento}}'}</div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Valor Documento</Label>
-                          <div>{'{{valor_documento}}'}</div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-muted-foreground">Valor Cobrado</Label>
-                          <div>{'{{valor_cobrado}}'}</div>
-                        </div>
-                      </div>
-
-                      <div className="py-2 border-b">
-                        <Label className="text-[10px] text-muted-foreground">Pagador</Label>
-                        <div>{'{{pagador_nome}}'}</div>
-                        <div>{'{{pagador_endereco}}'}</div>
-                        <div>{'{{pagador_cnpj}}'}</div>
-                      </div>
-
-                      <div className="py-4 flex justify-center">
-                        <div className="h-12 w-full max-w-[400px] bg-black dark:bg-white flex items-center justify-center">
-                          <span className="text-white dark:text-black text-[10px]">CÓDIGO DE BARRAS</span>
-                        </div>
-                      </div>
-                    </div>
+                  {/* Preview visual do layout com PDF de fundo */}
+                  <div className="border rounded-lg p-2 bg-white dark:bg-zinc-900 min-h-[400px] relative overflow-auto">
+                    <ModeloPreview 
+                      modelo={modeloVisualizando} 
+                      editable 
+                      onSave={async (elements) => {
+                        try {
+                          const payload = elements.map((el, i) => ({
+                            id: el.id,
+                            tipo: el.tipo,
+                            nome: el.nome,
+                            variavel: el.variavel,
+                            textoFixo: el.textoFixo,
+                            posicao_x: el.x,
+                            posicao_y: el.y,
+                            largura: el.largura,
+                            altura: el.altura,
+                            tamanhoFonte: el.tamanhoFonte,
+                            alinhamento: el.alinhamento,
+                            corTexto: el.corTexto,
+                            corFundo: el.corFundo,
+                            visivel: el.visivel !== false,
+                            ordem: i
+                          }))
+                          const { error } = await supabase
+                            .from('vv_b_modelos_boleto')
+                            .update({ campos_mapeados: payload, updated_at: new Date().toISOString() })
+                            .eq('id', modeloVisualizando.id)
+                          if (error) throw error
+                          toast({ title: 'Layout atualizado', description: 'As alterações foram salvas.' })
+                        } catch (e: any) {
+                          toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' })
+                        }
+                      }}
+                    />
                   </div>
 
                   {/* Lista de campos mapeados */}
@@ -1402,8 +1387,27 @@ export default function Modelos() {
                 Fechar
               </Button>
               <Button variant="secondary" onClick={() => {
-                  setDocVisualizando(modeloVisualizando);
-                  setModeloVisualizando(null);
+                  if (modeloVisualizando) {
+                    const elementos = (modeloVisualizando.campos_mapeados || []).map((c: any, i: number) => ({
+                      id: String(c.id) || `field_${i}`,
+                      tipo: (c.tipo as 'campo'|'texto'|'linha'|'retangulo') || 'campo',
+                      nome: c.nome || '',
+                      variavel: c.variavel || '',
+                      textoFixo: c.textoFixo || '',
+                      x: c.posicao_x ?? c.x ?? 0,
+                      y: c.posicao_y ?? c.y ?? 0,
+                      largura: c.largura || 120,
+                      altura: c.altura || 20,
+                      tamanhoFonte: c.tamanhoFonte || 10,
+                      alinhamento: (c.alinhamento as 'left'|'center'|'right') || 'left',
+                      corTexto: c.corTexto || '#000000',
+                      corFundo: c.corFundo || 'transparent',
+                      visivel: c.visivel !== false
+                    }))
+                    const doc = gerarDocumentacaoLayout(modeloVisualizando.nome_modelo, elementos)
+                    setDocVisualizando({ ...modeloVisualizando, documentacao_layout: doc } as any)
+                    setModeloVisualizando(null);
+                  }
               }}>
                 <FileText className="h-4 w-4 mr-2" />
                 Documentação

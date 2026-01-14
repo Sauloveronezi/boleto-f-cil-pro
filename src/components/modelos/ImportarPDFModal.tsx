@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { useNavigate } from 'react-router-dom';
 import { analisarPDF, PDFDimensions } from '@/lib/pdfAnalyzer';
+import { exemploMapeamentoCSV } from '@/data/examples/mapeamentoCSV';
 
 export interface ImportarPDFResult {
   file: File;
@@ -29,6 +30,18 @@ export interface ImportarPDFResult {
   dimensoes?: PDFDimensions;
   /** Se true, tenta copiar os campos_mapeados do modelo padrão do banco selecionado */
   copiarCamposPadrao?: boolean;
+  /** Campos importados por arquivo de coordenadas (CSV/JSON) em mm, origem top-left */
+  camposCoordenados?: {
+    nome?: string;
+    variavel?: string;
+    x: number;
+    y: number;
+    largura: number;
+    altura: number;
+    tipo?: 'campo' | 'texto';
+    alinhamento?: 'left' | 'center' | 'right';
+    tamanhoFonte?: number;
+  }[];
 }
 
 interface ImportarPDFModalProps {
@@ -51,6 +64,65 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
   const [processando, setProcessando] = useState(false);
   const [dimensoes, setDimensoes] = useState<PDFDimensions | null>(null);
   const [copiarCamposPadrao, setCopiarCamposPadrao] = useState(true);
+  const [mappingFile, setMappingFile] = useState<File | null>(null);
+  const [mappingCount, setMappingCount] = useState<number>(0);
+
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const rows = lines.slice(1);
+    const idx = (k: string) => header.findIndex(h => h === k);
+    const out: any[] = [];
+    for (const row of rows) {
+      const cols = row.split(',').map(c => c.trim());
+      const get = (k: string) => {
+        const i = idx(k);
+        return i >= 0 ? cols[i] : undefined;
+      };
+      const x = parseFloat(get('x') || '0');
+      const y = parseFloat(get('y') || '0');
+      const largura = parseFloat(get('largura') || get('w') || '120');
+      const altura = parseFloat(get('altura') || get('h') || '20');
+      if (!isNaN(x) && !isNaN(y)) {
+        out.push({
+          nome: get('nome'),
+          variavel: get('variavel'),
+          x, y, largura, altura,
+          tipo: (get('tipo') as any) || 'campo',
+          alinhamento: (get('alinhamento') as any) || 'left',
+          tamanhoFonte: parseInt(get('tamanhoFonte') || get('font_size') || '10')
+        });
+      }
+    }
+    return out;
+  };
+
+  const handleMappingSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const mf = e.target.files?.[0];
+    if (!mf) return;
+    setMappingFile(mf);
+    try {
+      let parsed: any[] = [];
+      if (mf.name.toLowerCase().endsWith('.json')) {
+        const txt = await mf.text();
+        const json = JSON.parse(txt);
+        parsed = Array.isArray(json) ? json : (json.fields || []);
+      } else if (mf.name.toLowerCase().endsWith('.csv')) {
+        const txt = await mf.text();
+        parsed = parseCSV(txt);
+      } else {
+        throw new Error('Formato de mapeamento inválido (use CSV ou JSON)');
+      }
+      setMappingCount(parsed.length);
+      toast({ title: 'Mapeamento carregado', description: `${parsed.length} campos importados por coordenadas.` });
+      // Não armazenamos os objetos aqui; vamos repassar para onImportar lendo novamente o arquivo
+    } catch (err: any) {
+      console.error('[ImportarPDF] Erro ao ler mapeamento:', err);
+      toast({ title: 'Erro', description: err.message || 'Falha ao ler arquivo de mapeamento', variant: 'destructive' });
+      setMappingFile(null);
+      setMappingCount(0);
+    }
+  };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -135,6 +207,23 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       return;
     }
 
+    const buildCamposFromMapping = async (): Promise<ImportarPDFResult['camposCoordenados']> => {
+      if (!mappingFile) return undefined;
+      try {
+        if (mappingFile.name.toLowerCase().endsWith('.json')) {
+          const txt = await mappingFile.text();
+          const json = JSON.parse(txt);
+          const arr = Array.isArray(json) ? json : (json.fields || []);
+          return arr;
+        } else {
+          const txt = await mappingFile.text();
+          return parseCSV(txt);
+        }
+      } catch {
+        return undefined;
+      }
+    };
+
     // Passa o arquivo e dados para o componente pai
     onImportar({
       file: arquivo,
@@ -143,6 +232,7 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
       bancosCompativeis,
       dimensoes: dimensoes || undefined,
       copiarCamposPadrao,
+      camposCoordenados: undefined,
     });
     
     handleClose();
@@ -254,6 +344,40 @@ export function ImportarPDFModal({ open, onOpenChange, onImportar }: ImportarPDF
                       placeholder="Ex: Modelo Boleto Padrão"
                       className="mt-1"
                     />
+                  </div>
+                )}
+
+                {/* Importar mapeamento por coordenadas */}
+                {arquivo && (
+                  <div>
+                    <Label>Arquivo de Mapeamento (CSV/JSON)</Label>
+                    <div className="mt-2 border-2 border-dashed border-border rounded-lg p-4">
+                      <input type="file" accept=".csv,.json" onChange={handleMappingSelect} />
+                      {mappingFile && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {mappingFile.name} — {mappingCount} campo(s)
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Colunas esperadas: nome, variavel, x, y, largura, altura, alinhamento, tamanhoFonte (mm, origem top-left)
+                    </p>
+                    <div className="mt-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          const blob = new Blob([exemploMapeamentoCSV], { type: 'text/csv' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = 'mapeamento_modelo.csv'
+                          a.click()
+                          URL.revokeObjectURL(url)
+                        }}
+                      >
+                        Baixar CSV Modelo
+                      </Button>
+                    </div>
                   </div>
                 )}
 

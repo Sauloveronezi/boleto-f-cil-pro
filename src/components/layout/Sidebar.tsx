@@ -42,9 +42,16 @@ export function Sidebar() {
       title: 'Configurações',
       items: [
         ...(canAccess('modelos') ? [{ icon: Palette, label: 'Modelos de Layout', href: '/modelos' }] : []),
+        ...(canAccess('modelos') ? [{ icon: Palette, label: 'Templates de Boleto', href: '/templates-boleto' }] : []),
         ...(canAccess('configuracoes') ? [{ icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' }] : []),
         ...(canAccess('modelos') ? [{ icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' }] : []),
         ...(canAccess('configuracoes') ? [{ icon: Settings, label: 'Configurações', href: '/configuracoes' }] : []),
+      ]
+    },
+    {
+      title: 'Boletos (PDF)',
+      items: [
+        ...(canAccess('boletos') ? [{ icon: FileText, label: 'Gerar Boletos (PDF)', href: '/gerar-boletos-pdf' }] : []),
       ]
     },
     {

@@ -1,0 +1,19 @@
+{
+  "id": "tpl_237_bradesco_v1",
+  "name": "Bradesco Ficha de Caixa",
+  "bank_code": "237",
+  "layout_version": "v1",
+  "background_pdf_url": "https://storage/boleto_templates/bradesco_ficha.pdf",
+  "page_width": 210,
+  "page_height": 297,
+  "requires_calculation": true,
+  "fields": [
+    { "key": "beneficiario_nome", "source_ref": "boletos.beneficiario_nome", "page": 1, "bbox": [12, 30, 110, 36], "font_family": "helvetica", "font_size": 10, "align": "left", "format": "upper" },
+    { "key": "pagador_nome", "source_ref": "boletos.pagador_nome", "page": 1, "bbox": [12, 110, 190, 117], "font_family": "helvetica", "font_size": 10, "align": "left", "format": "upper" },
+    { "key": "vencimento", "source_ref": "boletos.vencimento", "page": 1, "bbox": [170, 22, 200, 28], "font_family": "helvetica", "font_size": 10, "align": "right", "format": "date_ddmmyyyy" },
+    { "key": "valor_documento", "source_ref": "boletos.valor", "page": 1, "bbox": [170, 78, 200, 84], "font_family": "helvetica", "font_size": 10, "align": "right", "format": "currency_ptbr" },
+    { "key": "nosso_numero", "source_ref": "boletos.nosso_numero", "page": 1, "bbox": [150, 50, 200, 56], "font_family": "helvetica", "font_size": 10, "align": "right" },
+    { "key": "linha_digitavel", "source_ref": "boletos.linha_digitavel", "page": 1, "bbox": [74, 5, 190, 10], "font_family": "helvetica", "font_size": 11, "align": "right", "is_digitable_line": true },
+    { "key": "codigo_barras", "source_ref": "boletos.codigo_barras_value", "page": 1, "bbox": [10, 105, 190, 120], "is_barcode": true }
+  ]
+}

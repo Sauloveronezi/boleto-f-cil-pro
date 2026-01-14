@@ -12,6 +12,8 @@ import Clientes from "./pages/Clientes";
 import NotasFiscais from "./pages/NotasFiscais";
 import Bancos from "./pages/Bancos";
 import Modelos from "./pages/Modelos";
+import TemplatesBoleto from "./pages/TemplatesBoleto";
+import GerarBoletosPDF from "./pages/GerarBoletosPDF";
 import ImportarLayout from "./pages/ImportarLayout";
 import Configuracoes from "./pages/Configuracoes";
 import ConfiguracaoCNAB from "./pages/ConfiguracaoCNAB";
@@ -45,6 +47,8 @@ const App = () => (
             <Route path="/notas" element={<ProtectedRoute><Protected modulo="notas" fallback={<AccessDenied />}><NotasFiscais /></Protected></ProtectedRoute>} />
             <Route path="/bancos" element={<ProtectedRoute><Protected modulo="bancos" fallback={<AccessDenied />}><Bancos /></Protected></ProtectedRoute>} />
             <Route path="/modelos" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><Modelos /></Protected></ProtectedRoute>} />
+            <Route path="/templates-boleto" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><TemplatesBoleto /></Protected></ProtectedRoute>} />
+            <Route path="/gerar-boletos-pdf" element={<ProtectedRoute><Protected modulo="boletos" fallback={<AccessDenied />}><GerarBoletosPDF /></Protected></ProtectedRoute>} />
             <Route path="/importar-layout" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><ImportarLayout /></Protected></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><Configuracoes /></Protected></ProtectedRoute>} />
             <Route path="/configuracao-cnab" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><ConfiguracaoCNAB /></Protected></ProtectedRoute>} />

@@ -115,13 +115,50 @@ export default function BoletosApi() {
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (filtros.transportadora) {
-        const transportadora = b.dyn_zonatransporte || b.cliente?.agente_frete || '';
-        return transportadora.toLowerCase().includes(filtros.transportadora.toLowerCase());
+        const transportadora = getTransportadora(b);
+        return String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase());
       }
       return true;
     }) || [];
   }, [boletos, filtros.transportadora]);
 
+  const getNested = (obj: any, path: string): any => {
+    try {
+      return path.split('.').reduce((o, k) => (o && k in o ? o[k] : undefined), obj);
+    } catch {
+      return undefined;
+    }
+  };
+
+  const getCnpj = (b: any) => {
+    const candidates = [
+      b.taxnumber1,
+      getNested(b, 'dados_extras.taxnumber1'),
+      getNested(b, 'dados_extras.cnpj'),
+      getNested(b, 'dados_extras.cpf_cnpj'),
+      getNested(b, 'dados_extras.cnpj_cliente'),
+      getNested(b, 'dados_extras.cnpj_pagador'),
+      getNested(b, 'dados_extras.PAY_BP_TAXNO'),
+      b.pagador_cnpj,
+      b.cnpj_cliente,
+      b.cnpj,
+      b.cliente?.cnpj,
+      b.cliente?.cpf_cnpj
+    ];
+    const val = candidates.find((v) => !!v && String(v).trim().length > 0);
+    return val || '-';
+  };
+
+  const getTransportadora = (b: any) => {
+    const candidates = [
+      b.dyn_zonatransporte,
+      b.cliente?.agente_frete,
+      getNested(b, 'dados_extras.transportadora'),
+      getNested(b, 'dados_extras.agente_frete'),
+    ];
+    const val = candidates.find((v) => !!v && String(v).trim().length > 0);
+    return val || '-';
+  };
   // Controle de seleção
   const todosIds = useMemo(() => boletosFiltrados.map((b: any) => b.id), [boletosFiltrados]);
   const todosSelecionados = todosIds.length > 0 && todosIds.every((id: string) => selecionados.has(id));
@@ -334,7 +371,7 @@ export default function BoletosApi() {
       .map((b: any) => b.cliente || {
         id: b.cliente_id || b.id,
         razao_social: b.dyn_nome_do_cliente || 'Cliente Sem Nome',
-        cnpj: b.taxnumber1 || '',
+        cnpj: (getCnpj(b) === '-' ? '' : getCnpj(b)),
         endereco: b.endereco || '',
         cidade: b.dyn_cidade || '',
         estado: b.uf || '',
@@ -645,8 +682,8 @@ export default function BoletosApi() {
                       <TableCell className="font-mono">{boleto.numero_nota}</TableCell>
                       <TableCell className="font-mono">{boleto.numero_cobranca}</TableCell>
                       <TableCell>{boleto.dyn_nome_do_cliente || boleto.cliente?.razao_social || '-'}</TableCell>
-                      <TableCell className="font-mono text-sm">{boleto.taxnumber1 || boleto.cliente?.cnpj || '-'}</TableCell>
-                      <TableCell>{boleto.dyn_zonatransporte || boleto.cliente?.agente_frete || '-'}</TableCell>
+                      <TableCell className="font-mono text-sm">{getCnpj(boleto)}</TableCell>
+                      <TableCell>{getTransportadora(boleto)}</TableCell>
                       <TableCell>
                         {boleto.data_emissao 
                           ? format(new Date(boleto.data_emissao), 'dd/MM/yyyy', { locale: ptBR })
