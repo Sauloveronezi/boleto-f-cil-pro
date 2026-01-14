@@ -202,14 +202,18 @@ export function EditorLayoutBoleto({
         .catch((err) => {
           console.error('[Editor] Error rendering PDF:', err);
           setPdfImageUrl(null);
-          // Detectar se é erro de bucket não encontrado
+          // Detectar diferentes tipos de erro
           const errorMsg = String(err?.message || err);
           if (errorMsg.includes('Bucket not found') || errorMsg.includes('404')) {
-            setPdfLoadError('Bucket de armazenamento não configurado. Crie o bucket "boleto_templates" no Supabase Storage.');
+            setPdfLoadError('Bucket de armazenamento não encontrado. Verifique se o bucket "boleto_templates" existe.');
+          } else if (errorMsg.includes('Object not found') || errorMsg.includes('not found')) {
+            setPdfLoadError('Arquivo PDF não encontrado no storage. Reimporte o PDF.');
+          } else if (errorMsg.includes('Invalid PDF') || errorMsg.includes('InvalidPDFException')) {
+            setPdfLoadError('O arquivo carregado não é um PDF válido ou está corrompido.');
           } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('network')) {
-            setPdfLoadError('Não foi possível carregar o PDF. Verifique a conexão ou se o arquivo existe.');
+            setPdfLoadError('Erro de rede ao carregar o PDF. Verifique sua conexão.');
           } else {
-            setPdfLoadError('Erro ao carregar PDF de fundo.');
+            setPdfLoadError(`Erro ao carregar PDF: ${errorMsg.substring(0, 100)}`);
           }
         })
         .finally(() => {
