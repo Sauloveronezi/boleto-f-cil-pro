@@ -1375,6 +1375,7 @@ export type Database = {
           billingdocument: string | null
           br_nfenumber: string | null
           br_nfnumber: string | null
+          br_nfpartnercnpj: string | null
           BR_NFPartnerFunction: string | null
           br_nfsourcedocumenttype: string | null
           br_nfsubseries: string | null
@@ -1458,6 +1459,7 @@ export type Database = {
           billingdocument?: string | null
           br_nfenumber?: string | null
           br_nfnumber?: string | null
+          br_nfpartnercnpj?: string | null
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
@@ -1541,6 +1543,7 @@ export type Database = {
           billingdocument?: string | null
           br_nfenumber?: string | null
           br_nfnumber?: string | null
+          br_nfpartnercnpj?: string | null
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
