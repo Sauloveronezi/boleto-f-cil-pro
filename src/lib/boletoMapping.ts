@@ -46,7 +46,7 @@ export function mapearBoletoApiParaModelo(
   empresa: EmpresaData | undefined,
   banco: Partial<Banco>,
   configuracao: Partial<ConfiguracaoBanco> | undefined,
-  dadosCodigoBarras?: { linhaDigitavel: string, codigoBarras: string, nossoNumero?: string }
+  dadosCodigoBarras?: { linhaDigitavel: string, codigoBarras: string, nossoNumero?: string, nossoNumeroFormatado?: string }
 ): DadosBoleto {
   const formatCurrency = (val: number | null | undefined) => {
     if (val === null || val === undefined) return '0,00';
@@ -107,7 +107,7 @@ export function mapearBoletoApiParaModelo(
     data_vencimento: dataVencimentoFormatada,
     data_emissao: dataEmissaoFormatada,
     data_processamento: dataProcessamento,
-    nosso_numero: dadosCodigoBarras?.nossoNumero || boleto.numero_nota, // Usa calculado se disponível
+    nosso_numero: dadosCodigoBarras?.nossoNumeroFormatado || dadosCodigoBarras?.nossoNumero || boleto.numero_nota, // Usa formato visual se disponível
     numero_documento: boleto.numero_cobranca || boleto.numero_nota,
     numero_nota: boleto.numero_nota,
     numero_cobranca: boleto.numero_cobranca,

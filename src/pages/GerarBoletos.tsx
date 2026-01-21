@@ -428,7 +428,7 @@ export default function GerarBoletos() {
                     // Garante campos calculados
                     linha_digitavel: dadosBarcode.linhaDigitavel,
                     codigo_barras: dadosBarcode.codigoBarras,
-                    nosso_numero: dadosBarcode.nossoNumero,
+                    nosso_numero: dadosBarcode.nossoNumeroFormatado || dadosBarcode.nossoNumero,
                     
                     // Garante dados do banco
                     banco_nome: banco.nome_banco || '',
