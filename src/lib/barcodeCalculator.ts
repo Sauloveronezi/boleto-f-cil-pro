@@ -73,9 +73,8 @@ export function gerarNossoNumero(
   const codigoBanco = banco.codigo_banco;
   
   // Cada banco tem seu formato de nosso número
-  // Este é um cálculo genérico - em produção, cada banco tem regras específicas
   const sequencial = nota.numero_nota.replace(/\D/g, '').padStart(8, '0');
-  const carteira = configuracao?.carteira || '17';
+  const carteira = configuracao?.carteira || '109';
   
   switch (codigoBanco) {
     case '001': // Banco do Brasil
@@ -96,14 +95,56 @@ export function gerarNossoNumero(
       return `${carteira.padStart(2, '0')}${sequencial.slice(-11).padStart(11, '0')}`;
     
     case '341': // Itaú
-      // Formato: Agência (4) + Conta (5) + Carteira (3) + Sequencial (8)
-      const agencia = configuracao?.agencia?.replace(/\D/g, '') || '0000';
-      const conta = configuracao?.conta?.replace(/\D/g, '') || '00000';
-      return `${agencia.padStart(4, '0')}${conta.slice(-5).padStart(5, '0')}${carteira.padStart(3, '0')}${sequencial.slice(-8).padStart(8, '0')}`;
+      // Formato Itaú: Carteira (3) + Nosso Número (8)
+      // Ex: 109/00011710-8 -> carteira 109, sequencial 00011710
+      return `${carteira.replace(/\D/g, '').padStart(3, '0')}${sequencial.slice(-8).padStart(8, '0')}`;
     
     default:
       // Formato padrão: 11 dígitos
       return sequencial.padStart(11, '0');
+  }
+}
+
+// Calcula DV do Nosso Número Itaú (Módulo 10 sobre Agência + Conta + Carteira + Nosso Número)
+export function calcularDVNossoNumeroItau(
+  agencia: string,
+  conta: string,
+  carteira: string,
+  nossoNumero: string
+): number {
+  const ag = agencia.replace(/\D/g, '').padStart(4, '0');
+  const ct = conta.replace(/\D/g, '').padStart(5, '0');
+  const car = carteira.replace(/\D/g, '').padStart(3, '0');
+  const nn = nossoNumero.replace(/\D/g, '').padStart(8, '0');
+  const base = `${ag}${ct}${car}${nn}`;
+  return calcularModulo10(base);
+}
+
+// Formata o nosso número no padrão visual do banco (ex: Itaú = "109/00011710-8")
+export function formatarNossoNumeroVisual(
+  banco: Banco,
+  nossoNumero: string,
+  configuracao?: ConfiguracaoBanco
+): string {
+  const codigoBanco = banco.codigo_banco;
+  
+  switch (codigoBanco) {
+    case '341': // Itaú: Carteira/Nosso Número-DV
+      const carteira = configuracao?.carteira?.replace(/\D/g, '') || '109';
+      const agencia = configuracao?.agencia?.replace(/\D/g, '') || '0000';
+      const conta = configuracao?.conta?.replace(/\D/g, '') || '00000';
+      const nn = nossoNumero.slice(-8).padStart(8, '0');
+      const dv = calcularDVNossoNumeroItau(agencia, conta, carteira, nn);
+      return `${carteira}/${nn}-${dv}`;
+    
+    case '237': // Bradesco: Carteira/Nosso Número-DV
+      const cartBrad = configuracao?.carteira?.replace(/\D/g, '') || '09';
+      const nnBrad = nossoNumero.slice(-11).padStart(11, '0');
+      const dvBrad = calcularModulo11(nnBrad);
+      return `${cartBrad.padStart(2, '0')}/${nnBrad}-${dvBrad}`;
+    
+    default:
+      return nossoNumero;
   }
 }
 
@@ -138,9 +179,20 @@ export function gerarCampoLivre(
       return `${agencia}${carteira.padStart(2, '0')}${nossoNumero.slice(-11)}${conta.slice(-7)}0`.slice(0, 25);
     
     case '341': // Itaú
-      // Formato: Carteira + Nosso Número + Dígito + Agência + Conta + Dígito + 000
-      const dvItau = calcularModulo10(`${carteira}${nossoNumero.slice(-8)}`);
-      return `${carteira.padStart(3, '0')}${nossoNumero.slice(-8)}${dvItau}${agencia}${conta.slice(-5)}${calcularModulo10(agencia + conta.slice(-5))}000`.slice(0, 25);
+      // Campo Livre Itaú (25 posições):
+      // Carteira (3) + Nosso Número (8) + DAC[Agência/Conta/Carteira/Nosso Número] (1) + 
+      // Agência (4) + Conta (5) + DAC[Agência/Conta] (1) + Zeros (3)
+      const carteiraItau = carteira.replace(/\D/g, '').padStart(3, '0');
+      const nossoNumItau = nossoNumero.slice(-8).padStart(8, '0');
+      const agenciaItau = agencia.slice(-4).padStart(4, '0');
+      const contaItau = conta.slice(-5).padStart(5, '0');
+      
+      // DAC = Módulo 10 de (Agência + Conta + Carteira + Nosso Número)
+      const dacNossoNumero = calcularModulo10(`${agenciaItau}${contaItau}${carteiraItau}${nossoNumItau}`);
+      // DAC = Módulo 10 de (Agência + Conta)
+      const dacAgenciaConta = calcularModulo10(`${agenciaItau}${contaItau}`);
+      
+      return `${carteiraItau}${nossoNumItau}${dacNossoNumero}${agenciaItau}${contaItau}${dacAgenciaConta}000`;
     
     default:
       // Campo livre genérico
@@ -153,6 +205,7 @@ export interface DadosCodigoBarras {
   codigoBarras: string;
   linhaDigitavel: string;
   nossoNumero: string;
+  nossoNumeroFormatado: string; // Formato visual (ex: "109/00011710-8")
   fatorVencimento: string;
   valorFormatado: string;
   digitoVerificador: number;
@@ -183,10 +236,14 @@ export function gerarCodigoBarras(
   // Gera linha digitável
   const linhaDigitavel = gerarLinhaDigitavel(codigoBarras);
   
+  // Formata nosso número visual
+  const nossoNumeroFormatado = formatarNossoNumeroVisual(banco, nossoNumero, configuracao);
+  
   return {
     codigoBarras,
     linhaDigitavel,
     nossoNumero,
+    nossoNumeroFormatado,
     fatorVencimento,
     valorFormatado: valor,
     digitoVerificador

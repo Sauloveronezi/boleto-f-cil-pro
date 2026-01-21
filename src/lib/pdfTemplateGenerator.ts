@@ -97,7 +97,7 @@ function obterValorCampo(
     
     // Título
     case 'nosso_numero':
-      valor = dadosCodigoBarras.nossoNumero;
+      valor = dadosCodigoBarras.nossoNumeroFormatado || dadosCodigoBarras.nossoNumero;
       break;
     case 'numero_documento':
       valor = `${nota.numero_nota}-${nota.serie}`;

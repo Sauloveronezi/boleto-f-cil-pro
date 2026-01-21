@@ -38,7 +38,8 @@ function desenharBoleto(
   const contentWidth = pageWidth - (margin * 2);
   
   // Usa os dados calculados do código de barras
-  const { codigoBarras, linhaDigitavel, nossoNumero } = dadosCodigoBarras;
+  const { codigoBarras, linhaDigitavel, nossoNumero, nossoNumeroFormatado } = dadosCodigoBarras;
+  const nossoNumeroExibir = nossoNumeroFormatado || nossoNumero;
   
   let y = startY;
 
@@ -166,7 +167,7 @@ function desenharBoleto(
   
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text(nossoNumero, margin + 2, y + 10);
+  doc.text(nossoNumeroExibir, margin + 2, y + 10);
   doc.text(formatarData(nota.data_vencimento), margin + col1Width + 2, y + 10);
   doc.text('', margin + col1Width + col2Width / 2 + 2, y + 10);
   
