@@ -38,6 +38,11 @@ function formatarCpfCnpj(documento: string): string {
   return documento;
 }
 
+// Verifica se um valor é uma variável não resolvida (ex: {{variavel}})
+function isUnresolvedVariable(valor: string): boolean {
+  return /^\{\{[^}]+\}\}$/.test(valor?.trim() || '');
+}
+
 // Obtém o valor de um campo baseado no tipo
 function obterValorCampo(
   campo: CampoTemplateBoleto,
@@ -45,8 +50,8 @@ function obterValorCampo(
 ): string {
   const { nota, cliente, banco, configuracao, dadosCodigoBarras, empresa } = dados;
 
-  // Se tem valor fixo, retorna ele
-  if (campo.valor_fixo) {
+  // Se tem valor fixo, retorna ele (não é uma variável)
+  if (campo.valor_fixo && !isUnresolvedVariable(campo.valor_fixo)) {
     return campo.valor_fixo;
   }
 
@@ -178,7 +183,13 @@ function obterValorCampo(
   if (campo.formato && valor) {
     switch (campo.formato) {
       case 'moeda':
-        valor = formatarMoeda(parseFloat(valor) || 0);
+        const numVal = parseFloat(valor);
+        // Não formatar se o valor for 0 ou NaN para campos opcionais
+        if (!isNaN(numVal) && numVal !== 0) {
+          valor = formatarMoeda(numVal);
+        } else {
+          valor = ''; // Retorna vazio para valores zerados
+        }
         break;
       case 'data':
         valor = formatarData(valor);
@@ -187,6 +198,11 @@ function obterValorCampo(
         valor = formatarCpfCnpj(valor);
         break;
     }
+  }
+
+  // IMPORTANTE: Retorna string vazia se o valor parece ser uma variável não resolvida
+  if (isUnresolvedVariable(valor)) {
+    return '';
   }
 
   return valor;
@@ -200,6 +216,14 @@ function desenharCampo(
   dados: DadosBoletoTemplate,
   offsetY: number = 0
 ): void {
+  // NÃO desenha campos vazios (exceto labels e código de barras)
+  const isLabel = campo.tipo === 'custom' && campo.valor_fixo && !campo.variavel;
+  const isBarcode = campo.tipo === 'codigo_barras';
+  
+  if (!valor && !isLabel && !isBarcode) {
+    return; // Não desenha campos sem valor
+  }
+
   const x = campo.x;
   const y = campo.y + offsetY;
 

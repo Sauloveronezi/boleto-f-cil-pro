@@ -25,26 +25,36 @@ async function loadBoletoData(boletoId: string): Promise<Record<string, any>> {
 }
 
 function normalizeValue(val: any, format?: string): string {
-  if (val == null) return ''
-  if (!format) return String(val)
+  if (val == null || val === '') return ''
+  const strVal = String(val)
+  
+  // Verifica se é uma variável não resolvida
+  if (/^\{\{[^}]+\}\}$/.test(strVal.trim())) {
+    return '' // Não exibe variáveis não resolvidas
+  }
+  
+  if (!format) return strVal
   if (format === 'currency_ptbr') {
     const n = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'))
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(isNaN(n) ? 0 : n)
+    if (isNaN(n) || n === 0) return '' // Não exibe valores zerados
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
   }
   if (format === 'date_ddmmyyyy') {
     const d = new Date(val)
+    if (isNaN(d.getTime())) return '' // Data inválida
     const dd = String(d.getDate()).padStart(2,'0')
     const mm = String(d.getMonth()+1).padStart(2,'0')
     const yyyy = d.getFullYear()
     return `${dd}/${mm}/${yyyy}`
   }
   if (format === 'mask_cnpj') {
-    const s = String(val).replace(/\D/g,'').padStart(14,'0')
+    const s = String(val).replace(/\D/g,'')
+    if (!s || s === '00000000000000') return '' // CNPJ vazio ou zeros
     return `${s.slice(0,2)}.${s.slice(2,5)}.${s.slice(5,8)}/${s.slice(8,12)}-${s.slice(12)}`
   }
-  if (format === 'upper') return String(val).toUpperCase()
-  if (format === 'numeric_only') return String(val).replace(/\D/g,'')
-  return String(val)
+  if (format === 'upper') return strVal.toUpperCase()
+  if (format === 'numeric_only') return strVal.replace(/\D/g,'')
+  return strVal
 }
 
 async function ensureFont(doc: PDFDocument, name?: string) {
