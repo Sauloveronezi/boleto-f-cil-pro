@@ -91,12 +91,16 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
 
 /**
  * Replaces variable placeholders with actual values
+ * Returns empty string for unresolved variables (instead of showing {{variable}})
  */
 function substituirVariaveis(texto: string | undefined, dados: DadosBoleto): string {
   if (!texto) return '';
   
   return texto.replace(/\{\{(\w+)\}\}/g, (match, variavel) => {
-    return dados[variavel] || match;
+    const valor = dados[variavel];
+    // Se não encontrou o valor, retorna vazio em vez da variável
+    if (valor === undefined || valor === null || valor === '') return '';
+    return valor;
   });
 }
 

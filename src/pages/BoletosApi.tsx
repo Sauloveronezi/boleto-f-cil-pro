@@ -324,7 +324,25 @@ export default function BoletosApi() {
 
         // Mapear dados dos boletos para o formato do renderizador
         const dadosBoletos: DadosBoletoModelo[] = boletosSelecionados.map((boleto: any) => {
-          return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao);
+          // Converter boleto API para formato NotaFiscal para calcular código de barras
+          const notaFiscal = {
+            id: boleto.id,
+            numero_nota: boleto.numero_nota || boleto.documento || '',
+            serie: boleto.dados_extras?.serie || '1',
+            data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
+            data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
+            valor_titulo: boleto.valor || 0,
+            moeda: 'BRL',
+            codigo_cliente: boleto.cliente_id || '',
+            status: 'aberta' as const,
+            referencia_interna: boleto.numero_cobranca || ''
+          };
+          
+          // Gerar código de barras
+          const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
+          
+          // Mapear incluindo código de barras
+          return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
         });
 
         const pdfBytes = await gerarBoletosComModelo(
