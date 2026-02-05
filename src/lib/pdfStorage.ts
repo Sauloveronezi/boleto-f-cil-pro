@@ -2,6 +2,10 @@ import { supabase } from '@/integrations/supabase/client';
 
 const BUCKET_NAME = 'boleto_templates';
 
+// Fallback apenas para o modelo padrão do sistema (evita falha quando o objeto ainda não foi anexado ao Storage)
+const DEFAULT_FEBRABAN_STORAGE_PATH = 'modelos/modelo_padrao_febraban/boleto_padrao.pdf';
+const DEFAULT_FALLBACK_PUBLIC_PDF_URL = '/templates/boleto_padrao_bradesco.pdf';
+
 export interface UploadResult {
   success: boolean;
   path?: string;
@@ -135,6 +139,19 @@ export async function getPdfUrl(storagePath: string): Promise<string | null> {
 
     if (error) {
       console.error('[pdfStorage] Error getting signed URL:', error);
+
+      const isNotFound =
+        (error as any)?.statusCode === '404' ||
+        (error as any)?.status === 404 ||
+        /object not found|not found/i.test(error?.message || '');
+
+      if (isNotFound && storagePath === DEFAULT_FEBRABAN_STORAGE_PATH) {
+        console.warn(
+          `[pdfStorage] PDF padrão não encontrado no storage (${storagePath}). Usando fallback público: ${DEFAULT_FALLBACK_PUBLIC_PDF_URL}`
+        );
+        return DEFAULT_FALLBACK_PUBLIC_PDF_URL;
+      }
+
       return null;
     }
 

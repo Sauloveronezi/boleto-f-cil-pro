@@ -103,23 +103,57 @@ function substituirVariaveis(texto: string | undefined, dados: DadosBoleto): str
 /**
  * Loads the base PDF from Supabase Storage
  */
+const DEFAULT_FEBRABAN_STORAGE_PATH = 'modelos/modelo_padrao_febraban/boleto_padrao.pdf';
+const DEFAULT_FALLBACK_PUBLIC_PDF_URL = '/templates/boleto_padrao_bradesco.pdf';
+
+function getFallbackPublicPdfUrl(storagePath: string): string | null {
+  if (storagePath === DEFAULT_FEBRABAN_STORAGE_PATH) return DEFAULT_FALLBACK_PUBLIC_PDF_URL;
+  return null;
+}
+
+async function fetchPdfArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Erro ao baixar PDF: ${response.status} ${response.statusText}`);
+  }
+  return await response.arrayBuffer();
+}
+
 export async function carregarPDFBase(storagePath: string): Promise<ArrayBuffer> {
-  // Get signed URL
   const { data, error } = await supabase.storage
     .from('boleto_templates')
     .createSignedUrl(storagePath, 3600);
-  
+
+  const isNotFound =
+    (error as any)?.statusCode === '404' ||
+    (error as any)?.status === 404 ||
+    /object not found|not found/i.test(error?.message || '');
+
   if (error || !data?.signedUrl) {
+    const fallbackUrl = isNotFound ? getFallbackPublicPdfUrl(storagePath) : null;
+    if (fallbackUrl) {
+      console.warn(
+        `[pdfModelRenderer] PDF base não encontrado no storage (${storagePath}). Usando fallback público: ${fallbackUrl}`
+      );
+      return await fetchPdfArrayBuffer(fallbackUrl);
+    }
+
     throw new Error(`Erro ao obter URL do PDF: ${error?.message || 'URL não disponível'}`);
   }
-  
-  // Fetch PDF
-  const response = await fetch(data.signedUrl);
-  if (!response.ok) {
-    throw new Error(`Erro ao baixar PDF: ${response.statusText}`);
+
+  try {
+    return await fetchPdfArrayBuffer(data.signedUrl);
+  } catch (err: any) {
+    const fallbackUrl = getFallbackPublicPdfUrl(storagePath);
+    if (fallbackUrl) {
+      console.warn(
+        `[pdfModelRenderer] Falha ao baixar PDF assinado (${storagePath}). Usando fallback público: ${fallbackUrl}`,
+        err
+      );
+      return await fetchPdfArrayBuffer(fallbackUrl);
+    }
+    throw err;
   }
-  
-  return await response.arrayBuffer();
 }
 
 /**
