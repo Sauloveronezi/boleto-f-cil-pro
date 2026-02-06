@@ -131,7 +131,7 @@ export default function GerarBoletosPDF() {
             disabled={seedDefault.isPending}
           >
             <Database className="h-4 w-4 mr-2" />
-            {seedDefault.isPending ? 'Criando...' : 'Criar Template Padrão'}
+            {seedDefault.isPending ? 'Atualizando...' : 'Criar/Atualizar Template Padrão'}
           </Button>
         </div>
 
