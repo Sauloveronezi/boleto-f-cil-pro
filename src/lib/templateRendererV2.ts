@@ -175,6 +175,7 @@ export async function renderBoletoV2(
   fields: BoletoTemplateFieldRow[],
   dados: DadosBoleto,
   usarFundo: boolean = true,
+  debugBorders: boolean = false,
 ): Promise<Uint8Array> {
   const pdfBytes = await fetchPdf(template.background_pdf_url);
   let doc: PDFDocument;
@@ -204,6 +205,15 @@ export async function renderBoletoV2(
     const w = mmToPt(x2mm - x1mm);
     const h = mmToPt(y2mm - y1mm);
     const y = pageH - mmToPt(y1mm) - h; // PDF: y from bottom
+
+    // Debug: desenhar bordas e label do campo
+    if (debugBorders) {
+      page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(1, 0, 0), borderWidth: 0.5 });
+      const labelText = field.key || '';
+      const labelFont = fonts.helvetica;
+      const labelSize = 5;
+      page.drawText(labelText, { x: x + 1, y: y + h - labelSize - 1, size: labelSize, font: labelFont, color: rgb(1, 0, 0) });
+    }
 
     // Código de barras
     if (field.is_barcode) {
