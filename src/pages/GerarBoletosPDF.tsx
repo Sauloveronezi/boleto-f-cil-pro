@@ -13,7 +13,7 @@ import { PDFDocument } from 'pdf-lib'
 import JSZip from 'jszip'
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates'
 import { renderBoletoV2, downloadPdfV2 } from '@/lib/templateRendererV2'
-import { mapBoletoApiToDadosBoleto, getBoletoPreviewData } from '@/lib/boletoDataMapper'
+import { mapBoletoApiToDadosBoleto, getBoletoPreviewData, type ConfigBancoParaCalculo } from '@/lib/boletoDataMapper'
 import { Database, Star, Eye, FileDown } from 'lucide-react'
 import type { DadosBoleto } from '@/lib/pdfModelRenderer'
 
@@ -36,14 +36,48 @@ export default function GerarBoletosPDF() {
   const { data: boletos = [] } = useQuery({
     queryKey: ['boletos-list', filtroCliente],
     queryFn: async () => {
-      let q = supabase.from('vv_b_boletos_api').select('id,dyn_nome_do_cliente,valor,data_vencimento,numero_nota,numero_cobranca').is('deleted', null)
+      let q = supabase.from('vv_b_boletos_api').select('id,dyn_nome_do_cliente,valor,data_vencimento,numero_nota,numero_cobranca,banco').is('deleted', null)
       if (filtroCliente) q = q.ilike('dyn_nome_do_cliente', `%${filtroCliente}%`)
       const { data } = await q
       return data || []
     }
   })
 
+  // Carregar configurações de banco para cálculo de código de barras
+  const { data: configsBanco = [] } = useQuery({
+    queryKey: ['configs-banco-calculo'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vv_b_configuracoes_banco')
+        .select('banco_id, agencia, conta, carteira')
+        .is('deleted', null)
+      return data || []
+    }
+  })
+
+  // Carregar bancos para mapear código → banco_id
+  const { data: bancosRef = [] } = useQuery({
+    queryKey: ['bancos-ref'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vv_b_bancos')
+        .select('id, codigo_banco')
+        .is('deleted', null)
+      return data || []
+    }
+  })
+
   const selectedTemplate = templates.find(t => t.id === templateId)
+
+  const getConfigBancoParaBoleto = (bancoField: string | null): ConfigBancoParaCalculo | undefined => {
+    if (!bancoField) return undefined
+    const codigoBanco = bancoField.replace(/\D/g, '').substring(0, 3)
+    const bancoRef = bancosRef.find(b => b.codigo_banco === codigoBanco)
+    if (!bancoRef) return undefined
+    const config = configsBanco.find(c => c.banco_id === bancoRef.id)
+    if (!config) return undefined
+    return { agencia: config.agencia || '', conta: config.conta || '', carteira: config.carteira || '09' }
+  }
 
   const toggleSelecionado = (id: string) => {
     setSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -55,7 +89,9 @@ export default function GerarBoletosPDF() {
       .select('*')
       .eq('id', boletoId)
       .single()
-    return mapBoletoApiToDadosBoleto(data || {})
+    const row = (data || {}) as Record<string, any>
+    const configBanco = getConfigBancoParaBoleto(row.banco)
+    return mapBoletoApiToDadosBoleto(row, configBanco)
   }
 
   const handlePreview = async (boletoId: string) => {
