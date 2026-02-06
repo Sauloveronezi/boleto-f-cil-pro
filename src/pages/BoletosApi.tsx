@@ -36,6 +36,8 @@ import { useQuery } from '@tanstack/react-query';
 import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
+import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates';
+import { renderBoletosV2, downloadPdfV2 } from '@/lib/templateRendererV2';
 
 const ESTADOS_BRASIL = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -76,7 +78,12 @@ export default function BoletosApi() {
     cidade: filtros.cidade || undefined
   });
 
-  // Buscar modelos de layout disponíveis
+  // Buscar templates V2 (tabelas normalizadas)
+  const { data: templatesV2 } = useBoletoTemplates();
+  const { data: templateFieldsV2 } = useBoletoTemplateFields(modeloSelecionado || undefined);
+  const seedDefault = useSeedDefaultTemplate();
+
+  // Buscar modelos legados (vv_b_modelos_boleto) para compatibilidade
   const { data: modelos } = useQuery({
     queryKey: ['modelos-boleto-select'],
     queryFn: async () => {
@@ -259,114 +266,81 @@ export default function BoletosApi() {
     const configuracao = configuracoes?.find(c => c.banco_id === bancoSelecionado);
     const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
 
-    // Se tiver modelo selecionado, usar o renderizador com modelo
+    // Mapear dados dos boletos para DadosBoleto (usado por ambos os renderizadores)
+    const mapearDadosBoletos = (boletosList: any[]) => {
+      return boletosList.map((boleto: any) => {
+        const notaFiscal = {
+          id: boleto.id,
+          numero_nota: boleto.numero_nota || boleto.documento || '',
+          serie: boleto.dados_extras?.serie || '1',
+          data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
+          data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
+          valor_titulo: boleto.valor || 0,
+          moeda: 'BRL',
+          codigo_cliente: boleto.cliente_id || '',
+          status: 'aberta' as const,
+          referencia_interna: boleto.numero_cobranca || ''
+        };
+        const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
+        return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
+      });
+    };
+
+    // Tentar usar template V2 (tabelas normalizadas)
+    const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
+    if (templateV2 && templateFieldsV2 && templateFieldsV2.length > 0) {
+      try {
+        toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
+        const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
+        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, imprimirFundo);
+        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
+        toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${templateV2.name}"` });
+      } catch (error: any) {
+        console.error('[BoletosApi] Erro V2:', error);
+        toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
+      }
+      return;
+    }
+
+    // Fallback: usar modelo legado (vv_b_modelos_boleto)
     if (modeloSelecionado) {
       const modelo = modelos?.find(m => m.id === modeloSelecionado);
-      
       if (!modelo) {
-        toast({
-          title: 'Modelo não encontrado',
-          description: 'Selecione um modelo válido',
-          variant: 'destructive'
-        });
+        toast({ title: 'Modelo não encontrado', description: 'Selecione um modelo válido', variant: 'destructive' });
         return;
       }
-
       if (!modelo.pdf_storage_path) {
-        toast({
-          title: 'Modelo sem PDF',
-          description: 'Este modelo não possui PDF base. Selecione outro modelo ou reanexe o PDF.',
-          variant: 'destructive'
-        });
+        toast({ title: 'Modelo sem PDF', description: 'Este modelo não possui PDF base.', variant: 'destructive' });
         return;
       }
-
       try {
-        toast({
-          title: 'Gerando boletos...',
-          description: 'Aguarde enquanto os boletos são processados.',
-        });
-
-        // Buscar campos mapeados do modelo
+        toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
         const { data: modeloCompleto, error: modeloError } = await supabase
           .from('vv_b_modelos_boleto')
           .select('campos_mapeados')
           .eq('id', modeloSelecionado)
           .single();
-
         if (modeloError) throw new Error('Erro ao carregar modelo');
-
         const elementos: ElementoParaRender[] = (modeloCompleto?.campos_mapeados as any[])?.map((c: any) => ({
-          id: c.id || `field_${Date.now()}`,
-          tipo: c.tipo || 'campo',
-          nome: c.nome || '',
-          x: c.posicao_x ?? c.x ?? 0,
-          y: c.posicao_y ?? c.y ?? 0,
-          largura: c.largura || 100,
-          altura: c.altura || 20,
-          variavel: c.variavel || '',
-          textoFixo: c.textoFixo,
-          fonte: c.fonte,
-          tamanhoFonte: c.tamanhoFonte,
-          negrito: c.negrito,
-          italico: c.italico,
-          alinhamento: c.alinhamento,
-          corTexto: c.corTexto,
-          corFundo: c.corFundo,
-          bordaSuperior: c.bordaSuperior,
-          bordaInferior: c.bordaInferior,
-          bordaEsquerda: c.bordaEsquerda,
-          bordaDireita: c.bordaDireita,
-          espessuraBorda: c.espessuraBorda,
-          corBorda: c.corBorda,
-          visivel: c.visivel ?? true,
+          id: c.id || `field_${Date.now()}`, tipo: c.tipo || 'campo', nome: c.nome || '',
+          x: c.posicao_x ?? c.x ?? 0, y: c.posicao_y ?? c.y ?? 0,
+          largura: c.largura || 100, altura: c.altura || 20,
+          variavel: c.variavel || '', textoFixo: c.textoFixo, fonte: c.fonte,
+          tamanhoFonte: c.tamanhoFonte, negrito: c.negrito, italico: c.italico,
+          alinhamento: c.alinhamento, corTexto: c.corTexto, corFundo: c.corFundo,
+          bordaSuperior: c.bordaSuperior, bordaInferior: c.bordaInferior,
+          bordaEsquerda: c.bordaEsquerda, bordaDireita: c.bordaDireita,
+          espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
         })) || [];
-
-        // Mapear dados dos boletos para o formato do renderizador
-        const dadosBoletos: DadosBoletoModelo[] = boletosSelecionados.map((boleto: any) => {
-          // Converter boleto API para formato NotaFiscal para calcular código de barras
-          const notaFiscal = {
-            id: boleto.id,
-            numero_nota: boleto.numero_nota || boleto.documento || '',
-            serie: boleto.dados_extras?.serie || '1',
-            data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
-            data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
-            valor_titulo: boleto.valor || 0,
-            moeda: 'BRL',
-            codigo_cliente: boleto.cliente_id || '',
-            status: 'aberta' as const,
-            referencia_interna: boleto.numero_cobranca || ''
-          };
-          
-          // Gerar código de barras
-          const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
-          
-          // Mapear incluindo código de barras
-          return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
-        });
-
-        const pdfBytes = await gerarBoletosComModelo(
-          modelo.pdf_storage_path,
-          elementos,
-          dadosBoletos,
-          undefined,
-          imprimirFundo
-        );
-
+        const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
+        const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosBoletos, undefined, imprimirFundo);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-
-        toast({
-          title: 'PDF gerado com sucesso',
-          description: `${selecionados.size} boleto(s) gerado(s) com o modelo "${modelo.nome_modelo}"`,
-        });
+        toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${modelo.nome_modelo}"` });
       } catch (error: any) {
-        console.error('[BoletosApi] Erro ao gerar boletos com modelo:', error);
-        toast({
-          title: 'Erro ao gerar PDF',
-          description: error.message,
-          variant: 'destructive'
-        });
+        console.error('[BoletosApi] Erro legado:', error);
+        toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
       }
       return;
     }
@@ -487,10 +461,14 @@ export default function BoletosApi() {
                 <SelectValue placeholder="Modelo de layout" />
               </SelectTrigger>
               <SelectContent>
-                {modelos?.map((m) => (
+                {templatesV2?.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} {t.is_default && '⭐'}
+                  </SelectItem>
+                ))}
+                {modelos?.filter(m => !templatesV2?.some(t => t.id === m.id)).map((m) => (
                   <SelectItem key={m.id} value={m.id}>
-                    {m.nome_modelo}
-                    {m.pdf_storage_path && ' (PDF)'}
+                    {m.nome_modelo} (legado)
                   </SelectItem>
                 ))}
               </SelectContent>
