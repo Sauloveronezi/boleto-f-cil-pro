@@ -11,7 +11,9 @@ import { PDFDocument } from 'pdf-lib'
 import JSZip from 'jszip'
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates'
 import { renderBoletoV2, downloadPdfV2 } from '@/lib/templateRendererV2'
-import { Database, Star } from 'lucide-react'
+import { mapBoletoApiToDadosBoleto, getBoletoPreviewData } from '@/lib/boletoDataMapper'
+import { Database, Star, Eye, FileDown } from 'lucide-react'
+import type { DadosBoleto } from '@/lib/pdfModelRenderer'
 
 export default function GerarBoletosPDF() {
   const { toast } = useToast()
@@ -21,6 +23,8 @@ export default function GerarBoletosPDF() {
   const [filtroCliente, setFiltroCliente] = useState('')
   const [selecionados, setSelecionados] = useState<string[]>([])
   const [gerando, setGerando] = useState(false)
+  const [previewBoletoId, setPreviewBoletoId] = useState<string | null>(null)
+  const [previewDados, setPreviewDados] = useState<DadosBoleto | null>(null)
 
   const { data: templates = [] } = useBoletoTemplates()
   const { data: fields = [] } = useBoletoTemplateFields(templateId || undefined)
@@ -41,13 +45,23 @@ export default function GerarBoletosPDF() {
     setSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  const carregarDadosBoleto = async (boletoId: string) => {
+  const carregarDadosBoleto = async (boletoId: string): Promise<DadosBoleto> => {
     const { data } = await supabase
       .from('vv_b_boletos_api')
       .select('*')
       .eq('id', boletoId)
       .single()
-    return data || {}
+    return mapBoletoApiToDadosBoleto(data || {})
+  }
+
+  const handlePreview = async (boletoId: string) => {
+    try {
+      const dados = await carregarDadosBoleto(boletoId)
+      setPreviewBoletoId(boletoId)
+      setPreviewDados(dados)
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' })
+    }
   }
 
   const handleGerar = async () => {
@@ -101,6 +115,8 @@ export default function GerarBoletosPDF() {
     }
   }
 
+  const previewItems = previewDados ? getBoletoPreviewData(previewDados) : []
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -129,12 +145,14 @@ export default function GerarBoletosPDF() {
                 <SelectContent>
                   {templates.map(t => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.is_default && <Star className="h-3 w-3 inline mr-1 text-yellow-500" />}
-                      {t.name}
+                      {t.is_default && '⭐ '}{t.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {templateId && fields.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{fields.length} campos mapeados</p>
+              )}
             </div>
             <div>
               <label className="text-sm">Modo</label>
@@ -154,45 +172,190 @@ export default function GerarBoletosPDF() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Boletos ({boletos.length})</span>
-              {selecionados.length > 0 && (
-                <span className="text-sm font-normal text-muted-foreground">
-                  {selecionados.length} selecionado(s)
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {boletos.length === 0 ? (
-              <p className="text-muted-foreground text-sm">Nenhum boleto encontrado.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {(boletos as any[]).map(b => (
-                  <div key={b.id} className={`border rounded p-2 flex items-center justify-between cursor-pointer transition-colors ${selecionados.includes(b.id) ? 'bg-muted border-primary' : 'hover:bg-muted/50'}`} onClick={() => toggleSelecionado(b.id)}>
-                    <div className="text-sm">
-                      <div className="font-medium">{b.dyn_nome_do_cliente || '—'}</div>
-                      <div className="text-muted-foreground text-xs">NF: {b.numero_nota} | R$ {b.valor}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Lista de boletos */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Boletos ({boletos.length})</span>
+                {selecionados.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {selecionados.length} selecionado(s)
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {boletos.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Nenhum boleto encontrado.</p>
+              ) : (
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {(boletos as any[]).map(b => (
+                    <div
+                      key={b.id}
+                      className={`border rounded p-3 flex items-center justify-between transition-colors ${selecionados.includes(b.id) ? 'bg-muted border-primary' : 'hover:bg-muted/50'}`}
+                    >
+                      <div className="text-sm flex-1 cursor-pointer" onClick={() => toggleSelecionado(b.id)}>
+                        <div className="font-medium">{b.dyn_nome_do_cliente || '—'}</div>
+                        <div className="text-muted-foreground text-xs">
+                          NF: {b.numero_nota} | Cob: {b.numero_cobranca} | R$ {b.valor}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <Button variant="ghost" size="sm" onClick={() => handlePreview(b.id)} title="Pré-visualizar dados">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant={selecionados.includes(b.id) ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => toggleSelecionado(b.id)}
+                        >
+                          {selecionados.includes(b.id) ? '✓' : 'Sel.'}
+                        </Button>
+                      </div>
                     </div>
-                    <Button variant={selecionados.includes(b.id) ? 'default' : 'outline'} size="sm" onClick={(e) => { e.stopPropagation(); toggleSelecionado(b.id) }}>
-                      {selecionados.includes(b.id) ? '✓' : 'Sel.'}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <Button onClick={handleGerar} disabled={!templateId || selecionados.length === 0 || gerando}>
-                {gerando ? 'Gerando...' : 'Gerar'}
-              </Button>
-              {selecionados.length > 0 && (
-                <Button variant="outline" onClick={() => setSelecionados([])}>Limpar seleção</Button>
+                  ))}
+                </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
+              <div className="mt-4 flex gap-2">
+                <Button onClick={handleGerar} disabled={!templateId || selecionados.length === 0 || gerando}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  {gerando ? 'Gerando...' : 'Gerar PDF'}
+                </Button>
+                {selecionados.length > 0 && (
+                  <Button variant="outline" onClick={() => setSelecionados([])}>Limpar seleção</Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Preview */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5" />
+                Pré-visualização
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!previewDados ? (
+                <p className="text-muted-foreground text-sm">Clique no ícone <Eye className="h-4 w-4 inline" /> de um boleto para ver os dados mapeados.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Simulação visual do boleto */}
+                  <div className="border rounded-lg p-4 bg-background text-xs font-mono space-y-3">
+                    {/* Cabeçalho */}
+                    <div className="flex justify-between border-b pb-2">
+                      <span className="font-bold">Banco: {previewDados.banco_codigo || '—'}</span>
+                      <span className="text-[10px]">{previewDados.linha_digitavel || 'Linha digitável não disponível'}</span>
+                    </div>
+
+                    {/* Local de pagamento / Vencimento */}
+                    <div className="grid grid-cols-3 gap-2 border-b pb-2">
+                      <div className="col-span-2">
+                        <div className="text-muted-foreground text-[9px]">Local de Pagamento</div>
+                        <div>{previewDados.local_pagamento || '—'}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-muted-foreground text-[9px]">Vencimento</div>
+                        <div className="font-bold text-sm">{previewDados.data_vencimento || '—'}</div>
+                      </div>
+                    </div>
+
+                    {/* Beneficiário */}
+                    <div className="grid grid-cols-3 gap-2 border-b pb-2">
+                      <div className="col-span-2">
+                        <div className="text-muted-foreground text-[9px]">Beneficiário</div>
+                        <div>{previewDados.beneficiario_nome || '(não configurado)'}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-muted-foreground text-[9px]">Agência/Código</div>
+                        <div>{previewDados.agencia_codigo || '—'}</div>
+                      </div>
+                    </div>
+
+                    {/* Linha de dados do documento */}
+                    <div className="grid grid-cols-6 gap-1 border-b pb-2 text-[10px]">
+                      <div>
+                        <div className="text-muted-foreground text-[8px]">Data Doc.</div>
+                        <div>{previewDados.data_documento || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-[8px]">Nº Doc.</div>
+                        <div>{previewDados.numero_documento || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-[8px]">Espécie</div>
+                        <div>{previewDados.especie_documento || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-[8px]">Aceite</div>
+                        <div>{previewDados.aceite || '—'}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground text-[8px]">Processam.</div>
+                        <div>{previewDados.data_processamento || '—'}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-muted-foreground text-[8px]">Nosso Número</div>
+                        <div className="font-bold">{previewDados.nosso_numero || '—'}</div>
+                      </div>
+                    </div>
+
+                    {/* Valor */}
+                    <div className="grid grid-cols-3 gap-2 border-b pb-2">
+                      <div className="col-span-2">
+                        <div className="text-muted-foreground text-[9px]">Instruções</div>
+                        <div className="text-[9px]">{previewDados.instrucoes || '—'}</div>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <div>
+                          <div className="text-muted-foreground text-[8px]">(=) Valor Documento</div>
+                          <div className="font-bold">{previewDados.valor_documento ? `R$ ${Number(previewDados.valor_documento).toFixed(2)}` : '—'}</div>
+                        </div>
+                        {previewDados.valor_desconto && (
+                          <div>
+                            <div className="text-muted-foreground text-[8px]">(-) Desconto</div>
+                            <div>R$ {Number(previewDados.valor_desconto).toFixed(2)}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pagador */}
+                    <div className="border-b pb-2">
+                      <div className="text-muted-foreground text-[9px]">Pagador</div>
+                      <div className="font-bold">{previewDados.pagador_nome || '—'}</div>
+                      <div>{previewDados.pagador_cnpj || '—'}</div>
+                      <div>{previewDados.pagador_endereco || '—'}</div>
+                      <div>{previewDados.pagador_cidade_uf || '—'} {previewDados.pagador_cep ? `- ${previewDados.pagador_cep}` : ''}</div>
+                    </div>
+
+                    {/* Barcode placeholder */}
+                    <div className="text-center py-2 bg-muted rounded">
+                      <div className="text-[9px] text-muted-foreground">
+                        {previewDados.codigo_barras ? '▐▐▐▐ CÓDIGO DE BARRAS ▐▐▐▐' : 'Código de barras não disponível'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabela de campos mapeados */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Campos mapeados ({previewItems.length})</h4>
+                    <div className="text-xs space-y-1 max-h-[200px] overflow-y-auto">
+                      {previewItems.map(item => (
+                        <div key={item.key} className="flex justify-between border-b border-dashed py-1">
+                          <span className="text-muted-foreground">{item.label}</span>
+                          <span className="font-medium text-right max-w-[60%] truncate">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </MainLayout>
   )
