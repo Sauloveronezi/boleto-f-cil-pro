@@ -1360,6 +1360,143 @@ export type Database = {
         }
         Relationships: []
       }
+      vv_b_boleto_template_fields: {
+        Row: {
+          align: string | null
+          bbox: Json
+          bg_color: string | null
+          bold: boolean | null
+          color: string | null
+          created_at: string | null
+          data_delete: string | null
+          deleted: string | null
+          display_order: number | null
+          font_family: string | null
+          font_size: number | null
+          format: string | null
+          id: string
+          is_barcode: boolean | null
+          is_digitable_line: boolean | null
+          key: string
+          label: string | null
+          page: number | null
+          source_ref: string | null
+          template_id: string
+          updated_at: string | null
+          usuario_delete_id: string | null
+          visible: boolean | null
+        }
+        Insert: {
+          align?: string | null
+          bbox: Json
+          bg_color?: string | null
+          bold?: boolean | null
+          color?: string | null
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          display_order?: number | null
+          font_family?: string | null
+          font_size?: number | null
+          format?: string | null
+          id?: string
+          is_barcode?: boolean | null
+          is_digitable_line?: boolean | null
+          key: string
+          label?: string | null
+          page?: number | null
+          source_ref?: string | null
+          template_id: string
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+          visible?: boolean | null
+        }
+        Update: {
+          align?: string | null
+          bbox?: Json
+          bg_color?: string | null
+          bold?: boolean | null
+          color?: string | null
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          display_order?: number | null
+          font_family?: string | null
+          font_size?: number | null
+          format?: string | null
+          id?: string
+          is_barcode?: boolean | null
+          is_digitable_line?: boolean | null
+          key?: string
+          label?: string | null
+          page?: number | null
+          source_ref?: string | null
+          template_id?: string
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+          visible?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vv_b_boleto_template_fields_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "vv_b_boleto_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vv_b_boleto_templates: {
+        Row: {
+          background_pdf_url: string
+          bank_code: string | null
+          created_at: string | null
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          is_default: boolean | null
+          layout_version: string | null
+          name: string
+          page_height: number
+          page_width: number
+          requires_calculation: boolean | null
+          updated_at: string | null
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          background_pdf_url: string
+          bank_code?: string | null
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          is_default?: boolean | null
+          layout_version?: string | null
+          name: string
+          page_height?: number
+          page_width?: number
+          requires_calculation?: boolean | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          background_pdf_url?: string
+          bank_code?: string | null
+          created_at?: string | null
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          is_default?: boolean | null
+          layout_version?: string | null
+          name?: string
+          page_height?: number
+          page_width?: number
+          requires_calculation?: boolean | null
+          updated_at?: string | null
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
       vv_b_boletos_api: {
         Row: {
           accountingdocument: string | null
