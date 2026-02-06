@@ -117,13 +117,13 @@ export function useBoletoTemplateFields(templateId: string | undefined) {
 
 // ===== Seed do template padrão =====
 
-/** Verifica e cria o template padrão se não existir */
+/** Cria ou recria o template padrão (deleta campos antigos e reinsere com coordenadas atualizadas) */
 export function useSeedDefaultTemplate() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      // Verifica se já existe
+      // Verifica se o template já existe
       const { data: existing } = await supabase
         .from(TEMPLATES_TABLE)
         .select('id')
@@ -131,31 +131,32 @@ export function useSeedDefaultTemplate() {
         .is('deleted', null)
         .maybeSingle();
 
-      if (existing) {
-        console.log('[seed] Template padrão já existe');
-        return existing;
+      if (!existing) {
+        // Cria o template
+        const { error: tplError } = await supabase
+          .from(TEMPLATES_TABLE)
+          .insert({
+            id: DEFAULT_TEMPLATE_ID,
+            name: 'Modelo Padrão Bradesco',
+            bank_code: '237',
+            layout_version: 'v1',
+            background_pdf_url: '/templates/modelo_padrao_bradesco.pdf',
+            page_width: 210,
+            page_height: 297,
+            requires_calculation: true,
+            is_default: true,
+          });
+
+        if (tplError) throw tplError;
       }
 
-      // Cria o template
-      const { data: template, error: tplError } = await supabase
-        .from(TEMPLATES_TABLE)
-        .insert({
-          id: DEFAULT_TEMPLATE_ID,
-          name: 'Modelo Padrão Bradesco',
-          bank_code: '237',
-          layout_version: 'v1',
-          background_pdf_url: '/templates/modelo_padrao_bradesco.pdf',
-          page_width: 210,
-          page_height: 297,
-          requires_calculation: true,
-          is_default: true,
-        })
-        .select('id')
-        .single();
+      // Sempre deleta campos existentes e reinsere (para atualizar coordenadas)
+      await supabase
+        .from(FIELDS_TABLE)
+        .delete()
+        .eq('template_id', DEFAULT_TEMPLATE_ID);
 
-      if (tplError) throw tplError;
-
-      // Inserir campos
+      // Inserir campos atualizados
       const fields = getDefaultTemplateFields();
       const fieldsToInsert = fields.map(f => ({
         template_id: DEFAULT_TEMPLATE_ID,
@@ -181,12 +182,13 @@ export function useSeedDefaultTemplate() {
 
       if (fieldsError) throw fieldsError;
 
-      console.log(`[seed] Template padrão criado com ${fieldsToInsert.length} campos`);
-      return template;
+      console.log(`[seed] Template padrão criado/atualizado com ${fieldsToInsert.length} campos`);
+      return { id: DEFAULT_TEMPLATE_ID };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['boleto_templates'] });
       queryClient.invalidateQueries({ queryKey: ['boleto_template_default'] });
+      queryClient.invalidateQueries({ queryKey: ['boleto_template_fields'] });
     },
   });
 }
