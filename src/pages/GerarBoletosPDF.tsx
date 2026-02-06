@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/integrations/supabase/client'
@@ -25,6 +27,8 @@ export default function GerarBoletosPDF() {
   const [gerando, setGerando] = useState(false)
   const [previewBoletoId, setPreviewBoletoId] = useState<string | null>(null)
   const [previewDados, setPreviewDados] = useState<DadosBoleto | null>(null)
+  const [usarFundo, setUsarFundo] = useState(true)
+  const [debugBorders, setDebugBorders] = useState(false)
 
   const { data: templates = [] } = useBoletoTemplates()
   const { data: fields = [] } = useBoletoTemplateFields(templateId || undefined)
@@ -75,7 +79,7 @@ export default function GerarBoletosPDF() {
       if (mode === 'single') {
         for (const id of selecionados) {
           const dados = await carregarDadosBoleto(id)
-          const bytes = await renderBoletoV2(selectedTemplate, fields, dados)
+          const bytes = await renderBoletoV2(selectedTemplate, fields, dados, usarFundo, debugBorders)
           downloadPdfV2(bytes, `boleto_${id}.pdf`)
         }
         toast({ title: 'Concluído', description: `${selecionados.length} PDFs gerados` })
@@ -83,7 +87,7 @@ export default function GerarBoletosPDF() {
         const merged = await PDFDocument.create()
         for (const id of selecionados) {
           const dados = await carregarDadosBoleto(id)
-          const bytes = await renderBoletoV2(selectedTemplate, fields, dados)
+          const bytes = await renderBoletoV2(selectedTemplate, fields, dados, usarFundo, debugBorders)
           const src = await PDFDocument.load(bytes)
           const pages = await merged.copyPages(src, src.getPageIndices())
           pages.forEach(p => merged.addPage(p))
@@ -95,7 +99,7 @@ export default function GerarBoletosPDF() {
         const zip = new JSZip()
         for (const id of selecionados) {
           const dados = await carregarDadosBoleto(id)
-          const bytes = await renderBoletoV2(selectedTemplate, fields, dados)
+          const bytes = await renderBoletoV2(selectedTemplate, fields, dados, usarFundo, debugBorders)
           zip.file(`boleto_${id}.pdf`, bytes)
         }
         const out = await zip.generateAsync({ type: 'blob' })
@@ -168,6 +172,16 @@ export default function GerarBoletosPDF() {
             <div>
               <label className="text-sm">Filtro cliente</label>
               <Input value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} placeholder="Nome do cliente" />
+            </div>
+            <div className="flex items-center gap-4 col-span-full">
+              <div className="flex items-center gap-2">
+                <Switch id="usarFundo" checked={usarFundo} onCheckedChange={setUsarFundo} />
+                <Label htmlFor="usarFundo" className="text-sm">Com fundo PDF</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="debugBorders" checked={debugBorders} onCheckedChange={setDebugBorders} />
+                <Label htmlFor="debugBorders" className="text-sm">Mostrar bordas dos campos (debug)</Label>
+              </div>
             </div>
           </CardContent>
         </Card>
