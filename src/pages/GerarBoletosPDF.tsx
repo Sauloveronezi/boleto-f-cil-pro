@@ -12,9 +12,12 @@ import { supabase } from '@/integrations/supabase/client'
 import { renderBoletoPDF } from '@/lib/templateRenderer'
 import { PDFDocument } from 'pdf-lib'
 import JSZip from 'jszip'
+import { useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates'
+import { Database } from 'lucide-react'
 
 export default function GerarBoletosPDF() {
   const { toast } = useToast()
+  const seedDefault = useSeedDefaultTemplate()
   const [templateId, setTemplateId] = useState<string>('')
   const [mode, setMode] = useState<'single'|'merge'|'zip'>('single')
   const [filtroCliente, setFiltroCliente] = useState('')
@@ -111,7 +114,20 @@ export default function GerarBoletosPDF() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Gerar Boletos (PDF)</h1>
+         <div className="flex items-center justify-between">
+           <h1 className="text-2xl font-bold">Gerar Boletos (PDF)</h1>
+           <Button
+             variant="outline"
+             onClick={() => seedDefault.mutate(undefined, {
+               onSuccess: () => toast({ title: 'Sucesso', description: 'Template padrão Bradesco criado/verificado.' }),
+               onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+             })}
+             disabled={seedDefault.isPending}
+           >
+             <Database className="h-4 w-4 mr-2" />
+             {seedDefault.isPending ? 'Criando...' : 'Criar Template Padrão'}
+           </Button>
+         </div>
         <Card>
           <CardHeader><CardTitle>Seleção</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
