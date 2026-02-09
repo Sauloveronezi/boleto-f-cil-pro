@@ -76,6 +76,17 @@ export function TemplateFieldEditor({ fields, templateId }: Props) {
 
   const isEditing = (id: string) => editingId === id
 
+  if (fields.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <p>Nenhum campo cadastrado para este template.</p>
+          <p className="text-sm mt-2">Use o botão "Criar/Atualizar Template Padrão" na tela de Gerar Boletos para popular os campos.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -86,10 +97,10 @@ export function TemplateFieldEditor({ fields, templateId }: Props) {
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left p-2 font-medium">Campo (key)</th>
+                <th className="text-left p-2 font-medium">Campo</th>
+                <th className="text-left p-2 font-medium">Label</th>
                 <th className="text-left p-2 font-medium">Source Ref</th>
                 <th className="text-left p-2 font-medium">Formato</th>
-                <th className="text-center p-2 font-medium">Fonte</th>
                 <th className="text-center p-2 font-medium">Tam.</th>
                 <th className="text-center p-2 font-medium">Alinhamento</th>
                 <th className="text-center p-2 font-medium">Bold</th>
@@ -102,6 +113,9 @@ export function TemplateFieldEditor({ fields, templateId }: Props) {
               {fields.map(field => (
                 <tr key={field.id} className="border-b hover:bg-muted/30 transition-colors">
                   <td className="p-2 font-mono text-[11px]">{field.key}</td>
+
+                  {/* Label */}
+                  <td className="p-2 text-muted-foreground text-[11px]">{field.label || '—'}</td>
 
                   {/* Source Ref */}
                   <td className="p-2">
@@ -136,23 +150,7 @@ export function TemplateFieldEditor({ fields, templateId }: Props) {
                     )}
                   </td>
 
-                  {/* Font family */}
-                  <td className="p-2 text-center">
-                    {isEditing(field.id) ? (
-                      <Select value={editValues.font_family || 'helvetica'} onValueChange={v => setEditValues(prev => ({ ...prev, font_family: v }))}>
-                        <SelectTrigger className="h-7 text-xs w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="helvetica">Helvetica</SelectItem>
-                          <SelectItem value="times">Times</SelectItem>
-                          <SelectItem value="courier">Courier</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span>{field.font_family || 'helvetica'}</span>
-                    )}
-                  </td>
+                  {/* Font family - simplified display only */}
 
                   {/* Font size */}
                   <td className="p-2 text-center">
