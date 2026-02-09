@@ -170,13 +170,33 @@ async function fetchPdf(url: string): Promise<ArrayBuffer> {
 
 // ===== Renderização principal =====
 
+export interface RenderOptions {
+  usarFundo?: boolean;
+  debugBorders?: boolean;
+  borderColor?: { r: number; g: number; b: number };
+  showFieldLabels?: boolean;
+  labelFontSize?: number;
+}
+
 export async function renderBoletoV2(
   template: BoletoTemplateRow,
   fields: BoletoTemplateFieldRow[],
   dados: DadosBoleto,
-  usarFundo: boolean = true,
+  usarFundoOrOptions: boolean | RenderOptions = true,
   debugBorders: boolean = false,
 ): Promise<Uint8Array> {
+  // Support both old signature and new options object
+  let opts: RenderOptions;
+  if (typeof usarFundoOrOptions === 'boolean') {
+    opts = { usarFundo: usarFundoOrOptions, debugBorders };
+  } else {
+    opts = usarFundoOrOptions;
+  }
+  const usarFundo = opts.usarFundo ?? true;
+  const showBorders = opts.debugBorders ?? false;
+  const borderCol = opts.borderColor ?? { r: 1, g: 0, b: 0 };
+  const showLabels = opts.showFieldLabels ?? showBorders;
+  const labelSize = opts.labelFontSize ?? 5;
   const pdfBytes = await fetchPdf(template.background_pdf_url);
   let doc: PDFDocument;
   let page: PDFPage;
@@ -206,13 +226,14 @@ export async function renderBoletoV2(
     const h = mmToPt(y2mm - y1mm);
     const y = pageH - mmToPt(y1mm) - h; // PDF: y from bottom
 
-    // Debug: desenhar bordas e label do campo
-    if (debugBorders) {
-      page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(1, 0, 0), borderWidth: 0.5 });
-      const labelText = field.key || '';
-      const labelFont = fonts.helvetica;
-      const labelSize = 5;
-      page.drawText(labelText, { x: x + 1, y: y + h - labelSize - 1, size: labelSize, font: labelFont, color: rgb(1, 0, 0) });
+    // Debug/Layout: desenhar bordas e label do campo
+    if (showBorders) {
+      page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
+      if (showLabels) {
+        const labelText = field.key || '';
+        const labelFont = fonts.helvetica;
+        page.drawText(labelText, { x: x + 1, y: y + h - labelSize - 1, size: labelSize, font: labelFont, color: rgb(borderCol.r, borderCol.g, borderCol.b) });
+      }
     }
 
     // Código de barras
