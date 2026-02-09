@@ -12,9 +12,9 @@ import { supabase } from '@/integrations/supabase/client'
 import { PDFDocument } from 'pdf-lib'
 import JSZip from 'jszip'
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates'
-import { renderBoletoV2, downloadPdfV2 } from '@/lib/templateRendererV2'
+import { renderBoletoV2, downloadPdfV2, type RenderOptions } from '@/lib/templateRendererV2'
 import { mapBoletoApiToDadosBoleto, getBoletoPreviewData, type ConfigBancoParaCalculo } from '@/lib/boletoDataMapper'
-import { Database, Star, Eye, FileDown } from 'lucide-react'
+import { Database, Star, Eye, FileDown, LayoutTemplate } from 'lucide-react'
 import type { DadosBoleto } from '@/lib/pdfModelRenderer'
 
 export default function GerarBoletosPDF() {
@@ -267,10 +267,37 @@ export default function GerarBoletosPDF() {
                   ))}
                 </div>
               )}
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex gap-2 flex-wrap">
                 <Button onClick={handleGerar} disabled={!templateId || selecionados.length === 0 || gerando}>
                   <FileDown className="h-4 w-4 mr-2" />
                   {gerando ? 'Gerando...' : 'Gerar PDF'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!selectedTemplate || selecionados.length === 0) return
+                    setGerando(true)
+                    try {
+                      const dados = await carregarDadosBoleto(selecionados[0])
+                      const layoutOpts: RenderOptions = {
+                        usarFundo: false,
+                        debugBorders: true,
+                        borderColor: { r: 0, g: 0, b: 0 },
+                        showFieldLabels: true,
+                        labelFontSize: 6,
+                      }
+                      const bytes = await renderBoletoV2(selectedTemplate, fields, dados, layoutOpts)
+                      downloadPdfV2(bytes, `layout_${selectedTemplate.name}.pdf`)
+                    } catch (e: any) {
+                      toast({ title: 'Erro', description: e.message, variant: 'destructive' })
+                    } finally {
+                      setGerando(false)
+                    }
+                  }}
+                  disabled={!templateId || selecionados.length === 0 || gerando}
+                >
+                  <LayoutTemplate className="h-4 w-4 mr-2" />
+                  Gerar Layout (sem fundo)
                 </Button>
                 {selecionados.length > 0 && (
                   <Button variant="outline" onClick={() => setSelecionados([])}>Limpar seleção</Button>
