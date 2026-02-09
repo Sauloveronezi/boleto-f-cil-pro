@@ -8,15 +8,21 @@
 import { Banco, NotaFiscal, ConfiguracaoBanco } from '@/types/boleto';
 
 // Calcula o fator de vencimento (dias desde 07/10/1997)
+// Após 21/02/2025 (fator 9999), reinicia em 1000 conforme FEBRABAN
 export function calcularFatorVencimento(dataVencimento: string): string {
-  const dataBase = new Date('1997-10-07');
-  const dataVenc = new Date(dataVencimento);
+  const dataBase = new Date('1997-10-07T00:00:00');
+  const dataVenc = new Date(dataVencimento + 'T00:00:00');
+  if (isNaN(dataVenc.getTime())) return '0000';
   const diffTime = dataVenc.getTime() - dataBase.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   
-  // Fator de vencimento é limitado a 4 dígitos (até 9999)
-  // Após 21/02/2025, reinicia a contagem
-  const fator = diffDays > 9999 ? diffDays % 9999 + 1000 : diffDays;
+  // Fator de vencimento: até 9999, após isso reinicia a partir de 1000
+  let fator: number;
+  if (diffDays <= 9999) {
+    fator = diffDays;
+  } else {
+    fator = ((diffDays - 1000) % 9000) + 1000;
+  }
   return fator.toString().padStart(4, '0');
 }
 

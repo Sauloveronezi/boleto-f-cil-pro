@@ -238,13 +238,13 @@ export async function renderBoletoV2(
 
     // Código de barras
     if (field.is_barcode) {
-      const barValue = resolveValue(field.source_ref, dados);
+      const barValue = resolveValue(field.source_ref, dados) || resolveValue(field.key, dados);
       if (barValue) drawBarcodeI25(page, barValue, x, y, w, h);
       continue;
     }
 
-    // Texto
-    const rawValue = resolveValue(field.source_ref, dados);
+    // Texto - try source_ref first, then key as fallback
+    const rawValue = resolveValue(field.source_ref, dados) || resolveValue(field.key, dados);
     const value = formatValue(rawValue, field.format);
     if (!value) continue;
 

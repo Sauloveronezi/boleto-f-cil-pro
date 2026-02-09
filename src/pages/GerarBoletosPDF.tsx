@@ -74,9 +74,14 @@ export default function GerarBoletosPDF() {
     const codigoBanco = bancoField.replace(/\D/g, '').substring(0, 3)
     const bancoRef = bancosRef.find(b => b.codigo_banco === codigoBanco)
     if (!bancoRef) return undefined
-    const config = configsBanco.find(c => c.banco_id === bancoRef.id)
+    const config = (configsBanco as any[]).find(c => c.banco_id === bancoRef.id)
     if (!config) return undefined
-    return { agencia: config.agencia || '', conta: config.conta || '', carteira: config.carteira || '09' }
+    return {
+      agencia: config.agencia || '',
+      conta: config.conta || '',
+      carteira: config.carteira || '09',
+      nomeBanco: (bancoRef as any).nome_banco || '',
+    }
   }
 
   const toggleSelecionado = (id: string) => {

@@ -88,6 +88,10 @@ export interface ConfigBancoParaCalculo {
   agencia: string;
   conta: string;
   carteira: string;
+  nomeBanco?: string;
+  beneficiarioNome?: string;
+  beneficiarioCnpj?: string;
+  beneficiarioEndereco?: string;
 }
 
 /**
@@ -128,17 +132,24 @@ export function mapBoletoApiToDadosBoleto(
   // Banco / Beneficiário
   const codigoBanco = extractBankCode(row.banco);
   dados.banco_codigo = codigoBanco;
-  dados.banco_nome = '';
-  dados.beneficiario_nome = '';
-  dados.beneficiario_cnpj = '';
-  dados.beneficiario_endereco = '';
+  dados.banco_nome = configBanco?.nomeBanco || '';
+  dados.beneficiario_nome = configBanco?.beneficiarioNome || '';
+  dados.beneficiario_cnpj = configBanco?.beneficiarioCnpj || '';
+  dados.beneficiario_endereco = configBanco?.beneficiarioEndereco || '';
 
   // Nosso número (vem do campo numero_cobranca)
   const nossoNumeroRaw = row.numero_cobranca || '';
   dados.nosso_numero = nossoNumeroRaw;
 
-  // Campos fixos padrão
-  dados.local_pagamento = 'PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO.';
+  // Campos fixos padrão - determina local de pagamento pelo banco
+  const localPagamentoMap: Record<string, string> = {
+    '237': 'PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO OU BRADESCO EXPRESSO.',
+    '341': 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.',
+    '001': 'PAGÁVEL EM QUALQUER AGÊNCIA BANCÁRIA ATÉ O VENCIMENTO.',
+    '033': 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.',
+    '104': 'PAGÁVEL PREFERENCIALMENTE NAS CASAS LOTÉRICAS ATÉ O VALOR LIMITE.',
+  };
+  dados.local_pagamento = localPagamentoMap[codigoBanco] || 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.';
   dados.especie_documento = 'DM';
   dados.aceite = 'N';
   dados.especie_moeda = 'R$';
