@@ -12,6 +12,8 @@ import { listTemplates, createTemplate, updateTemplate, saveTemplateFields } fro
 import { EditorLayoutBoleto, ElementoLayout } from '@/components/modelos/EditorLayoutBoleto'
 import { uploadPdfToStorage } from '@/lib/pdfStorage'
 import { useBancos } from '@/hooks/useBancos'
+import { useBoletoTemplateFields } from '@/hooks/useBoletoTemplates'
+import { TemplateFieldEditor } from '@/components/boleto/TemplateFieldEditor'
 import { Eye, Plus, Upload } from 'lucide-react'
 
 export default function TemplatesBoleto() {
@@ -27,6 +29,8 @@ export default function TemplatesBoleto() {
   const [pageSize, setPageSize] = useState<{ w: number; h: number }>({ w: 210, h: 297 })
   const [pdfSource, setPdfSource] = useState<File | string | null>(null)
   const { data: bancos = [] } = useBancos()
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const { data: selectedFields = [] } = useBoletoTemplateFields(selectedTemplateId || undefined)
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['boleto-templates'],
@@ -169,12 +173,22 @@ export default function TemplatesBoleto() {
                 <div>Banco: {tpl.bank_code || '—'}</div>
                 <div>Tamanho: {tpl.page_width} × {tpl.page_height} mm</div>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={()=>openEditor(tpl)}>Editar</Button>
+                  <Button variant="outline" onClick={()=>openEditor(tpl)}>Layout</Button>
+                  <Button
+                    variant={selectedTemplateId === tpl.id ? 'default' : 'secondary'}
+                    onClick={() => setSelectedTemplateId(selectedTemplateId === tpl.id ? null : tpl.id)}
+                  >
+                    Campos
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        {selectedTemplateId && selectedFields.length > 0 && (
+          <TemplateFieldEditor fields={selectedFields} templateId={selectedTemplateId} />
+        )}
 
         <EditorLayoutBoleto
           open={editorOpen}
