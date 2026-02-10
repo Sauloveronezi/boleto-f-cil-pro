@@ -652,8 +652,24 @@ export default function ImportarLayout() {
     }
 
     try {
+      const tamanhoMaximo = tipoCNAB === 'CNAB_240' ? 240 : 400;
+      
+      // Filtrar campos que excedem o tamanho do registro e deduplicar
+      const camposValidos = camposDetectados.filter(c => c.posicaoFim <= tamanhoMaximo);
+      const camposUnicos = camposValidos.filter((c, index, self) => 
+        index === self.findIndex(t => t.tipoLinha === c.tipoLinha && t.posicaoInicio === c.posicaoInicio && t.posicaoFim === c.posicaoFim)
+      );
+      
+      if (camposValidos.length < camposDetectados.length) {
+        const removidos = camposDetectados.length - camposValidos.length;
+        toast({
+          title: 'Campos inválidos removidos',
+          description: `${removidos} campo(s) com posição > ${tamanhoMaximo} foram removidos antes de salvar.`,
+        });
+      }
+      
       // Reconstruir campos com todos os dados necessários, incluindo tipo_linha e cor
-      const camposCompletos: CampoCNAB[] = camposDetectados.map((c, index) => ({
+      const camposCompletos: CampoCNAB[] = camposUnicos.map((c, index) => ({
         id: `campo_${index + 1}`,
         nome: c.nome,
         campo_destino: mapDestino(c.destino),
@@ -730,22 +746,30 @@ export default function ImportarLayout() {
 
   // Agrupar campos por segmento
   const camposPorSegmento = useMemo(() => {
-    const grupos: Record<string, CampoDetectado[]> = {
-      'header_arquivo': [],
-      'header_lote': [],
-      'detalhe': [], 
-      'detalhe_segmento_p': [],
-      'detalhe_segmento_q': [],
-      'detalhe_segmento_r': [],
-      'trailer_lote': [],
-      'trailer_arquivo': []
-    };
+    const grupos: Record<string, CampoDetectado[]> = {};
+
+    // Pre-populate standard keys so they appear in order
+    const standardKeys = [
+      'header_arquivo', 'header_lote', 'detalhe',
+      'detalhe_segmento_p', 'detalhe_segmento_q', 'detalhe_segmento_r',
+      'trailer_lote', 'trailer_arquivo'
+    ];
+    for (const key of standardKeys) {
+      grupos[key] = [];
+    }
 
     camposDetectados.forEach(campo => {
       const tipo = campo.tipoLinha || 'detalhe';
       if (!grupos[tipo]) grupos[tipo] = [];
       grupos[tipo].push(campo);
     });
+
+    // Remove empty non-standard groups, keep empty standard ones for CNAB 240 tabs
+    for (const key of Object.keys(grupos)) {
+      if (grupos[key].length === 0 && !standardKeys.includes(key)) {
+        delete grupos[key];
+      }
+    }
 
     return grupos;
   }, [camposDetectados]);
@@ -1356,18 +1380,26 @@ export default function ImportarLayout() {
                          <div className="col-span-2">Tipo</div>
                        </div>
                       
-                      {(camposPorSegmento[segmentoAtual] || []).map((campo) => (
+                      {(camposPorSegmento[segmentoAtual] || []).map((campo) => {
+                        const tamanhoMaximo = tipoCNAB === 'CNAB_240' ? 240 : 400;
+                        const excedeLimite = campo.posicaoFim > tamanhoMaximo;
+                        
+                        return (
                         <div 
                             key={campo.id}
                             id={`field-row-${campo.id}`}
                             className={`
                               grid grid-cols-12 gap-2 items-center p-2 rounded-md border text-sm transition-colors
-                              ${campoFocado === campo.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50'}
+                              ${excedeLimite ? 'border-destructive bg-destructive/5' : ''}
+                              ${campoFocado === campo.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : !excedeLimite ? 'border-border hover:border-primary/50' : ''}
                             `}
                             onMouseEnter={() => setCampoFocado(campo.id)}
                             onMouseLeave={() => setCampoFocado(null)}
                           >
-                          <div className="col-span-1 font-mono text-xs text-muted-foreground">#{campo.id}</div>
+                          <div className="col-span-1 font-mono text-xs text-muted-foreground">
+                            #{campo.id}
+                            {excedeLimite && <span className="inline-block ml-1"><AlertCircle className="h-3 w-3 text-destructive inline" /></span>}
+                          </div>
                           
                           <div className="col-span-4">
                             <Input 
@@ -1391,7 +1423,7 @@ export default function ImportarLayout() {
                               type="number"
                               value={campo.posicaoFim} 
                               onChange={(e) => handleUpdateCampo(campo.id, { posicaoFim: parseInt(e.target.value) })}
-                              className="h-7 text-xs"
+                              className={`h-7 text-xs ${excedeLimite ? 'border-destructive text-destructive' : ''}`}
                             />
                           </div>
                           
@@ -1416,7 +1448,8 @@ export default function ImportarLayout() {
                              </Select>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       
                       {(camposPorSegmento[segmentoAtual] || []).length === 0 && (
                         <div className="text-center py-8 text-muted-foreground">

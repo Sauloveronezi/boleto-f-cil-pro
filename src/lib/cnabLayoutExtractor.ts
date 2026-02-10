@@ -183,10 +183,31 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
 /**
  * Detectar tipo de registro a partir do texto
  */
+/**
+ * Detectar se a tabela é de remessa ou retorno
+ */
+function detectFlowType(text: string): 'remessa' | 'retorno' | null {
+  const lower = text.toLowerCase();
+  if (lower.includes('remessa')) return 'remessa';
+  if (lower.includes('retorno')) return 'retorno';
+  return null;
+}
+
 function detectRecordType(text: string): string | null {
   const lower = text.toLowerCase();
   
   // Priorizar detecção de segmentos específicos antes do genérico "DETALHE"
+  // Segmentos Y com sub-tipo (Y03, Y53, etc.)
+  const segYMatch = lower.match(/segmento\s+y\s*[-–]?\s*(\d{2})/);
+  if (segYMatch) {
+    return `DETALHE_Y${segYMatch[1]}`;
+  }
+  if (lower.includes('segmento y') && !segYMatch) {
+    return 'DETALHE_Y';
+  }
+  if (lower.includes('segmento s')) {
+    return 'DETALHE_S';
+  }
   if (lower.includes('segmento p')) {
     return 'DETALHE_P';
   }
@@ -793,6 +814,8 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
   let recordSize: 240 | 400 = 240;
   let lastRecordType: string | null = null;
   
+  let currentFlowType: 'remessa' | 'retorno' | null = null;
+
   for (const page of pages) {
     const allLines = page.lines.map(l => l.text);
     
@@ -805,6 +828,12 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
     for (const line of page.lines) {
       const text = line.text;
       
+      // Detectar remessa/retorno a qualquer momento
+      const flow = detectFlowType(text);
+      if (flow) {
+        currentFlowType = flow;
+      }
+      
       // Detectar início de novo bloco
       const recordType = detectRecordType(text);
       if (recordType && recordType !== lastRecordType) {
@@ -813,10 +842,13 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
           blocks.push(currentBlock);
         }
         
+        // Anexar tipo de fluxo ao nome do registro para distinguir remessa/retorno
+        const flowSuffix = currentFlowType ? `_${currentFlowType.toUpperCase()}` : '';
+        
         // Iniciar novo bloco
         currentBlock = {
           page: page.pageNumber,
-          record_name: recordType,
+          record_name: `${recordType}${flowSuffix}`,
           record_size: recordSize,
           rows: [],
           raw_lines: [],
@@ -831,6 +863,12 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
         
         const row = parseTableRowWithPrefs(text, bankCode);
         if (row) {
+          // Validar que posição final não excede o tamanho do registro
+          if (row.end > recordSize) {
+            console.warn(`[CNAB Extractor] Campo "${row.field}" ignorado: posição final ${row.end} excede tamanho do registro ${recordSize}`);
+            continue;
+          }
+          
           // Evitar duplicatas (mesmo campo na mesma posição)
           const isDuplicate = currentBlock.rows.some(
             r => r.start === row.start && r.end === row.end
@@ -842,14 +880,15 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
       } else {
         // Heurística: se ainda não detectamos cabeçalho do bloco, iniciar um bloco quando a primeira linha de campo aparecer
         const row = parseTableRowWithPrefs(text, bankCode);
-        if (row) {
+        if (row && row.end <= recordSize) {
           const inferredType =
             row.start === 1 && row.field.toLowerCase().includes('banco')
               ? 'HEADER_ARQUIVO'
               : 'DETALHE';
+          const flowSuffix = currentFlowType ? `_${currentFlowType.toUpperCase()}` : '';
           currentBlock = {
             page: page.pageNumber,
-            record_name: inferredType,
+            record_name: `${inferredType}${flowSuffix}`,
             record_size: recordSize,
             rows: [row],
             raw_lines: [text],
@@ -865,9 +904,21 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
     blocks.push(currentBlock);
   }
   
-  // Ordenar campos dentro de cada bloco por posição inicial
+  // Validar e limpar campos dentro de cada bloco
   for (const block of blocks) {
+    // Remover campos com posição > recordSize
+    block.rows = block.rows.filter(r => r.end <= block.record_size);
+    // Ordenar por posição inicial
     block.rows.sort((a, b) => a.start - b.start);
+    // Remover sobreposições: se dois campos começam na mesma posição, manter o com end mais próximo
+    const deduped: ParsedTableRow[] = [];
+    for (const row of block.rows) {
+      const existing = deduped.find(r => r.start === row.start);
+      if (!existing) {
+        deduped.push(row);
+      }
+    }
+    block.rows = deduped;
   }
   
   return blocks;
@@ -922,8 +973,11 @@ function blockToLayoutRecord(block: DetectedLayoutBlock, fillGaps: boolean = tru
     tipo_registro_pos: { start: block.record_size === 240 ? 8 : 1, value: '0' },
   };
   
+  // Strip _REMESSA/_RETORNO suffix for match_keys logic
+  const baseName = block.record_name.replace(/_REMESSA$/, '').replace(/_RETORNO$/, '');
+  
   // Configurar match_keys baseado no tipo de registro
-  switch (block.record_name) {
+  switch (baseName) {
     case 'HEADER_ARQUIVO':
       matchKeys.tipo_registro_pos = { start: block.record_size === 240 ? 8 : 1, value: '0' };
       break;
@@ -946,9 +1000,12 @@ function blockToLayoutRecord(block: DetectedLayoutBlock, fillGaps: boolean = tru
       matchKeys.tipo_registro_pos = { start: 8, value: '3' };
       matchKeys.segmento_pos = { start: 14, value: 'A' };
       break;
+    case 'DETALHE_B':
+      matchKeys.tipo_registro_pos = { start: 8, value: '3' };
+      matchKeys.segmento_pos = { start: 14, value: 'B' };
+      break;
     case 'DETALHE':
       matchKeys.tipo_registro_pos = { start: 8, value: '3' };
-      // Para Itaú BBA, o segmento A está na posição 14
       matchKeys.segmento_pos = { start: 14, value: 'A' };
       break;
     case 'TRAILER_LOTE':
@@ -956,6 +1013,14 @@ function blockToLayoutRecord(block: DetectedLayoutBlock, fillGaps: boolean = tru
       break;
     case 'TRAILER_ARQUIVO':
       matchKeys.tipo_registro_pos = { start: block.record_size === 240 ? 8 : 1, value: '9' };
+      break;
+    default:
+      // Segmentos Y, S e outros
+      if (baseName.startsWith('DETALHE_Y') || baseName.startsWith('DETALHE_S')) {
+        matchKeys.tipo_registro_pos = { start: 8, value: '3' };
+        const segCode = baseName.replace('DETALHE_', '');
+        matchKeys.segmento_pos = { start: 14, value: segCode.charAt(0) };
+      }
       break;
   }
   
@@ -1175,12 +1240,56 @@ export async function extractCnabLayoutFromPdf(file: File): Promise<PdfAnalysisR
 }
 
 /**
+ * Mapear record_name (com possível sufixo _REMESSA/_RETORNO) para TipoLinha base
+ */
+function mapRecordNameToTipoLinha(recordName: string): import('@/components/cnab/CnabTextEditor').TipoLinha {
+  // Remover sufixo _REMESSA ou _RETORNO para o mapeamento base
+  const baseName = recordName.replace(/_REMESSA$/, '').replace(/_RETORNO$/, '');
+  
+  switch (baseName) {
+    case 'HEADER_ARQUIVO':
+      return 'header_arquivo';
+    case 'HEADER_LOTE':
+      return 'header_lote';
+    case 'DETALHE_P':
+      return 'detalhe_segmento_p';
+    case 'DETALHE_Q':
+      return 'detalhe_segmento_q';
+    case 'DETALHE_R':
+      return 'detalhe_segmento_r';
+    case 'DETALHE_A':
+      return 'detalhe_segmento_a';
+    case 'DETALHE_B':
+      return 'detalhe_segmento_b';
+    case 'TRAILER_LOTE':
+      return 'trailer_lote';
+    case 'TRAILER_ARQUIVO':
+      return 'trailer_arquivo';
+    case 'DETALHE':
+    default:
+      // Segmentos Y, S e outros mapeiam para 'detalhe' genérico
+      return 'detalhe';
+  }
+}
+
+/**
  * Converter LayoutSpec para CampoDetectado[] (compatibilidade)
  */
 export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/lib/pdfLayoutParser').CampoDetectado[] {
   const campos: import('@/lib/pdfLayoutParser').CampoDetectado[] = [];
   let idCounter = 0;
+  
+  // Conjunto para rastrear campos já adicionados por (tipoLinha, posicaoInicio, posicaoFim)
+  const camposAdicionados = new Set<string>();
+  
   const addCampo = (c: import('@/lib/pdfLayoutParser').CampoDetectado) => {
+    // Deduplicar: não adicionar se já existe campo no mesmo tipoLinha+posição
+    const key = `${c.tipoLinha}:${c.posicaoInicio}:${c.posicaoFim}`;
+    if (camposAdicionados.has(key)) {
+      return;
+    }
+    camposAdicionados.add(key);
+    
     idCounter++;
     campos.push({ ...c, id: String(idCounter), cor: c.cor || LAYOUT_FIELD_COLORS[idCounter % LAYOUT_FIELD_COLORS.length] });
   };
@@ -1204,39 +1313,22 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
     };
   };
   
+  const recordSize = layoutSpec.layouts[0]?.record_size || 240;
+  
   for (const layout of layoutSpec.layouts) {
     for (const record of layout.records) {
-      // Mapear record_name para TipoLinha
-      let tipoLinha: import('@/components/cnab/CnabTextEditor').TipoLinha = 'detalhe';
-      switch (record.record_name) {
-        case 'HEADER_ARQUIVO':
-          tipoLinha = 'header_arquivo';
-          break;
-        case 'HEADER_LOTE':
-          tipoLinha = 'header_lote';
-          break;
-        case 'DETALHE_P':
-          tipoLinha = 'detalhe_segmento_p';
-          break;
-        case 'DETALHE_Q':
-          tipoLinha = 'detalhe_segmento_q';
-          break;
-        case 'DETALHE_R':
-          tipoLinha = 'detalhe_segmento_r';
-          break;
-        case 'DETALHE':
-        case 'DETALHE_A':
-          tipoLinha = 'detalhe';
-          break;
-        case 'TRAILER_LOTE':
-          tipoLinha = 'trailer_lote';
-          break;
-        case 'TRAILER_ARQUIVO':
-          tipoLinha = 'trailer_arquivo';
-          break;
-      }
+      const tipoLinha = mapRecordNameToTipoLinha(record.record_name);
+      
+      // Detectar se é retorno (para info/label mas segue mesmo tipo)
+      const isRetorno = record.record_name.includes('_RETORNO');
       
       for (const field of record.fields) {
+        // Validar que posição final não excede tamanho do registro
+        if (field.end_pos > recordSize) {
+          console.warn(`[CNAB Extractor] Campo "${field.field_name_original}" ignorado na conversão: posição ${field.end_pos} > ${recordSize}`);
+          continue;
+        }
+        
         let tipo: 'numerico' | 'alfanumerico' | 'data' | 'valor' = 'alfanumerico';
         switch (field.data_type) {
           case 'num': tipo = 'numerico'; break;
@@ -1244,9 +1336,13 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
           case 'date': tipo = 'data'; break;
           default: tipo = 'alfanumerico'; break;
         }
+        
+        // Adicionar indicação de retorno no nome se for registro de retorno
+        const nomeField = isRetorno ? `${field.field_name_original} (Retorno)` : field.field_name_original;
+        
         addCampo({
           id: '0',
-          nome: field.field_name_original,
+          nome: nomeField,
           posicaoInicio: field.start_pos,
           posicaoFim: field.end_pos,
           tamanho: field.length,
@@ -1260,8 +1356,9 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
       }
       
       // Fallback: se o segmento possui poucos campos, completar com definição conhecida
-      const segmentoCount = (tl: typeof tipoLinha) => campos.filter(c => c.tipoLinha === tl).length;
-      const ensureDefaults = () => {
+      // Mas APENAS se não estamos em retorno (defaults são para remessa)
+      if (!isRetorno) {
+        const segmentoCount = (tl: typeof tipoLinha) => campos.filter(c => c.tipoLinha === tl).length;
         if (tipoLinha === 'detalhe_segmento_p' && segmentoCount('detalhe_segmento_p') < 10) {
           for (const f of gerarCamposDetalheP240()) addCampo(convertCampoCompleto(f, 'detalhe_segmento_p'));
         }
@@ -1283,8 +1380,7 @@ export function layoutSpecToCamposDetectados(layoutSpec: LayoutSpec): import('@/
         if (tipoLinha === 'trailer_arquivo' && segmentoCount('trailer_arquivo') < 3) {
           for (const f of gerarCamposTrailerArquivo240()) addCampo(convertCampoCompleto(f, 'trailer_arquivo'));
         }
-      };
-      ensureDefaults();
+      }
     }
   }
   
