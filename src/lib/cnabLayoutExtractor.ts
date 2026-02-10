@@ -945,40 +945,76 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
 
 /**
  * Preencher gaps no layout com campos BRANCOS/ZEROS
+ * IMPORTANTE: Se um gap é muito grande (>50 posições), provavelmente o parser
+ * perdeu a referência. Nesse caso, NÃO preenche o gap para evitar dados inconsistentes.
+ * Gaps pequenos (<= 50 posições) são preenchidos normalmente.
  */
 function fillLayoutGaps(rows: ParsedTableRow[], recordSize: number): ParsedTableRow[] {
   const filledRows: ParsedTableRow[] = [];
   let expectedStart = 1;
   
-  const sortedRows = [...rows].sort((a, b) => a.start - b.start);
+  // Filtrar rows inválidos (start > recordSize ou end > recordSize sem motivo)
+  const validRows = rows.filter(r => r.start >= 1 && r.start <= recordSize);
+  const sortedRows = [...validRows].sort((a, b) => a.start - b.start);
   
+  // Detectar e remover overlaps - quando dois campos têm posições sobrepostas,
+  // manter o mais específico (menor)
+  const deduplicatedRows: ParsedTableRow[] = [];
   for (const row of sortedRows) {
-    // Se há um gap, preencher com BRANCOS
+    // Limitar end ao recordSize
+    const clampedRow = { ...row, end: Math.min(row.end, recordSize) };
+    
+    // Verificar se sobrepõe com o último campo adicionado
+    const last = deduplicatedRows[deduplicatedRows.length - 1];
+    if (last && clampedRow.start <= last.end) {
+      // Overlap detectado - manter ambos mas ajustar se necessário
+      // Se o campo anterior é um BRANCOS grande, substituir
+      if (last.field === 'BRANCOS' && (last.end - last.start + 1) > 50) {
+        last.end = clampedRow.start - 1;
+        if (last.end < last.start) {
+          deduplicatedRows.pop();
+        }
+      }
+    }
+    deduplicatedRows.push(clampedRow);
+  }
+  
+  for (const row of deduplicatedRows) {
+    // Se há um gap, preencher com BRANCOS apenas se for razoável
     if (row.start > expectedStart) {
-      filledRows.push({
-        field: 'BRANCOS',
-        description: 'Complemento de registro (gap preenchido)',
-        start: expectedStart,
-        end: row.start - 1,
-        picture: `X(${row.start - expectedStart})`,
-        data_type: 'cnab_filler',
-      });
+      const gapSize = row.start - expectedStart;
+      // Apenas preencher gaps <= 50 posições automaticamente
+      // Gaps maiores indicam que o parser perdeu referência
+      if (gapSize <= 50) {
+        filledRows.push({
+          field: 'BRANCOS',
+          description: 'Complemento de registro (gap preenchido)',
+          start: expectedStart,
+          end: row.start - 1,
+          picture: `X(${gapSize})`,
+          data_type: 'cnab_filler',
+        });
+      }
+      // Para gaps grandes, não preencher - será mostrado como gap na UI
     }
     
     filledRows.push(row);
     expectedStart = row.end + 1;
   }
   
-  // Preencher até o final do registro
+  // Preencher até o final do registro apenas se o gap restante for razoável
   if (expectedStart <= recordSize) {
-    filledRows.push({
-      field: 'BRANCOS',
-      description: 'Complemento de registro (final)',
-      start: expectedStart,
-      end: recordSize,
-      picture: `X(${recordSize - expectedStart + 1})`,
-      data_type: 'cnab_filler',
-    });
+    const remainingGap = recordSize - expectedStart + 1;
+    if (remainingGap <= 50) {
+      filledRows.push({
+        field: 'BRANCOS',
+        description: 'Complemento de registro (final)',
+        start: expectedStart,
+        end: recordSize,
+        picture: `X(${remainingGap})`,
+        data_type: 'cnab_filler',
+      });
+    }
   }
   
   return filledRows;
