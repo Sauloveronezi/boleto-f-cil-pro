@@ -1,109 +1,87 @@
 
-# Plano: Corrigir Mapeamento de Valores do Título para Impressão de Boletos
+
+# Plano: Separacao Remessa/Retorno, Novos Segmentos e Validacao de Leitura
 
 ## Problema Identificado
 
-Ao imprimir boletos na tela "Boletos API", os valores do título selecionado não estão sendo preenchidos no PDF. Isso ocorre porque:
+O importador de layout CNAB atualmente:
+- Nao reconhece segmentos de **retorno** (T, U, Y-04) como tipos distintos - mapeia tudo para "detalhe" generico
+- Nao separa visualmente campos de **remessa** e **retorno** em abas/secoes diferentes  
+- Falta suporte para segmentos Y03, Y53, S como tipos de registro proprios no TypeScript
+- Campos de retorno (ex: #282 "Agencia doBeneficiario (Retorno)") aparecem misturados com campos de remessa na mesma aba
+- Nao existe validacao de leitura para verificar integridade dos campos importados
 
-1. **Código de barras não está sendo gerado** - A função `gerarCodigoBarras` existe mas **não está sendo chamada** antes de mapear os dados do boleto
-2. **Variáveis não resolvidas aparecem como texto** - Quando um valor não é encontrado, a variável `{{nome_variavel}}` aparece literalmente no PDF em vez de ficar vazia
-3. **Dados do boleto API não estão mapeados corretamente** - Alguns campos retornados pela API (como `numero_nota`, `valor`, `data_vencimento`) não estão sendo extraídos corretamente
+## Estrutura do Manual Santander (referencia)
 
-## Arquivos Envolvidos
+O manual define claramente:
 
-- `src/pages/BoletosApi.tsx` - Tela principal de impressão
-- `src/lib/boletoMapping.ts` - Função de mapeamento de dados
-- `src/lib/pdfModelRenderer.ts` - Renderizador de PDF
+**REMESSA:** Header Arquivo, Header Lote, Segmento P, Q, R, S, Y03, Y53, Trailer Lote, Trailer Arquivo
 
-## Solução Proposta
+**RETORNO:** Header Arquivo, Header Lote, Segmento T, U, Y03, Y04, Trailer Lote, Trailer Arquivo
 
-### Etapa 1: Gerar código de barras para cada boleto
+## Alteracoes Planejadas
 
-Modificar a função `handleImprimirSelecionados` em `BoletosApi.tsx` para:
-- Converter os dados do boleto API para o formato `NotaFiscal` esperado
-- Chamar `gerarCodigoBarras()` antes de mapear os dados
-- Passar os dados de código de barras para `mapearBoletoApiParaModelo()`
+### 1. Expandir tipos de registro (`src/types/boleto.ts`)
 
-### Etapa 2: Melhorar a resolução de variáveis
+Adicionar novos valores ao tipo `TipoRegistroCNAB`:
+- `detalhe_segmento_t` (retorno)
+- `detalhe_segmento_u` (retorno)
+- `detalhe_segmento_s` (remessa)
+- `detalhe_segmento_y03` (remessa/retorno)
+- `detalhe_segmento_y53` (remessa)
+- `detalhe_segmento_y04` (retorno)
+- `detalhe_segmento_y` (generico)
 
-Atualizar `pdfModelRenderer.ts` para:
-- Não exibir variáveis que não foram resolvidas (retornar string vazia em vez de `{{variavel}}`)
-- Tratar valores zerados e datas inválidas
+### 2. Corrigir mapeamento de nomes de registro (`src/lib/cnabLayoutExtractor.ts`)
 
-### Etapa 3: Validar mapeamento de campos dinâmicos
+- Atualizar `detectRecordType` para reconhecer segmentos T e U (retorno)
+- Atualizar `mapRecordNameToTipoLinha` para mapear corretamente:
+  - `DETALHE_T` -> `detalhe_segmento_t`
+  - `DETALHE_U` -> `detalhe_segmento_u`
+  - `DETALHE_S` -> `detalhe_segmento_s`
+  - `DETALHE_Y03` -> `detalhe_segmento_y03`
+  - `DETALHE_Y53` -> `detalhe_segmento_y53`
+  - `DETALHE_Y04` -> `detalhe_segmento_y04`
+- Atualizar `blockToLayoutRecord` para configurar match_keys dos novos segmentos
 
-Os dados da API SAP incluem campos como:
-- `valor` → `valor_documento`, `valor_titulo`
-- `numero_nota` → `numero_documento`
-- `data_vencimento` → data formatada dd/MM/yyyy
-- `dyn_nome_do_cliente` → `pagador_nome`
+### 3. Separar remessa e retorno na interface (`src/pages/ImportarLayout.tsx`)
 
-## Detalhes Técnicos
+- Reformular `camposPorSegmento` para agrupar por fluxo (remessa/retorno) e segmento
+- Adicionar nivel superior de tabs: **REMESSA** | **RETORNO**
+- Dentro de cada tab, mostrar os segmentos correspondentes:
+  - Remessa: Header Arquivo, Header Lote, P, Q, R, S, Y03, Y53, Trailer Lote, Trailer Arquivo
+  - Retorno: Header Arquivo, Header Lote, T, U, Y03, Y04, Trailer Lote, Trailer Arquivo
+- Usar sufixo `_REMESSA`/`_RETORNO` dos nomes de registro para classificar
 
-### Mudança em BoletosApi.tsx (linhas 325-328)
+### 4. Validacao de leitura (`src/lib/cnabLayoutExtractor.ts` e `src/pages/ImportarLayout.tsx`)
 
-```text
-// ANTES:
-const dadosBoletos = boletosSelecionados.map((boleto) => {
-  return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao);
-});
+Adicionar funcao `validateImportedLayout` que verifica:
+- Campos com posicao final > tamanho do registro (240/400)
+- Sobreposicao de campos dentro do mesmo segmento
+- Gaps nao preenchidos (campos faltantes)
+- Campos duplicados (mesma posicao inicio/fim no mesmo segmento)
+- Segmentos obrigatorios ausentes (Header, P, Q para remessa; T, U para retorno)
+- Total de bytes cobertos vs tamanho do registro
 
-// DEPOIS:
-const dadosBoletos = boletosSelecionados.map((boleto) => {
-  // Converter boleto API para formato NotaFiscal para calcular código de barras
-  const notaFiscal: NotaFiscal = {
-    id: boleto.id,
-    numero_nota: boleto.numero_nota || boleto.documento || '',
-    serie: boleto.dados_extras?.serie || '1',
-    data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
-    data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
-    valor_titulo: boleto.valor || 0,
-    moeda: 'BRL',
-    codigo_cliente: boleto.cliente_id || '',
-    status: 'aberta',
-    referencia_interna: boleto.numero_cobranca || ''
-  };
-  
-  // Gerar código de barras
-  const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
-  
-  // Mapear incluindo código de barras
-  return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
-});
-```
+Exibir painel de validacao na UI com:
+- Indicadores verde/amarelo/vermelho por segmento
+- Lista de avisos e erros encontrados
+- Contagem de campos por segmento
 
-### Mudança em pdfModelRenderer.ts (função substituirVariaveis)
+### 5. Salvar informacao de fluxo (`src/pages/ImportarLayout.tsx`)
 
-```text
-// ANTES:
-function substituirVariaveis(texto: string | undefined, dados: DadosBoleto): string {
-  if (!texto) return '';
-  return texto.replace(/\{\{(\w+)\}\}/g, (match, variavel) => {
-    return dados[variavel] || match;
-  });
-}
+Ao salvar o padrao CNAB, incluir metadado `fluxo: 'remessa' | 'retorno' | 'ambos'` no campo de cada registro para que ao gerar/ler arquivos futuramente o sistema saiba quais campos usar.
 
-// DEPOIS:
-function substituirVariaveis(texto: string | undefined, dados: DadosBoleto): string {
-  if (!texto) return '';
-  return texto.replace(/\{\{(\w+)\}\}/g, (match, variavel) => {
-    const valor = dados[variavel];
-    // Se não encontrou o valor, retorna vazio em vez da variável
-    if (valor === undefined || valor === null || valor === '') return '';
-    return valor;
-  });
-}
-```
+## Detalhes Tecnicos
 
-### Adicionar import em BoletosApi.tsx
+### Arquivos modificados:
+1. **`src/types/boleto.ts`** - Expandir `TipoRegistroCNAB` com novos segmentos
+2. **`src/lib/cnabLayoutExtractor.ts`** - Corrigir `detectRecordType`, `mapRecordNameToTipoLinha`, `blockToLayoutRecord`, adicionar `validateImportedLayout`
+3. **`src/pages/ImportarLayout.tsx`** - Reestruturar tabs com nivel remessa/retorno, adicionar painel de validacao
+4. **`src/components/cnab/CnabTextEditor.tsx`** - Verificar compatibilidade com novos TipoLinha (TipoLinha = TipoRegistroCNAB, entao herda automaticamente)
 
-O import `gerarCodigoBarras` já existe na linha 37, apenas não está sendo utilizado.
-
-## Resultado Esperado
-
-Após as alterações:
-- Valores do título (valor, vencimento, número da nota) serão preenchidos corretamente
-- Código de barras e linha digitável serão calculados conforme padrão FEBRABAN
-- Variáveis sem dados não aparecerão no PDF (ficarão vazias)
-- O nosso número será formatado conforme padrão do banco selecionado
+### Compatibilidade:
+- `TipoLinha` eh alias de `TipoRegistroCNAB`, entao expandir o tipo base atualiza automaticamente todas as referencias
+- Campos existentes salvos com tipos antigos continuam funcionando (retrocompativel)
+- A funcao `mapTipoRegistroParaTipoLinha` em ImportarLayout precisa ser atualizada para os novos tipos
 
