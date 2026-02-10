@@ -188,8 +188,16 @@ async function extractPdfLines(file: File): Promise<{ pages: { pageNumber: numbe
  */
 function detectFlowType(text: string): 'remessa' | 'retorno' | null {
   const lower = text.toLowerCase();
-  if (lower.includes('remessa')) return 'remessa';
-  if (lower.includes('retorno')) return 'retorno';
+  // Detect flow from section headers in bank manuals
+  // Common patterns: "Arquivo de Remessa", "Arquivo Retorno", "Registro Detalhe - Segmento T (Retorno)"
+  if (/arquivo\s+de?\s*remessa/i.test(lower) || /remessa\s*[-–]\s*layout/i.test(lower)) return 'remessa';
+  if (/arquivo\s+de?\s*retorno/i.test(lower) || /retorno\s*[-–]\s*layout/i.test(lower)) return 'retorno';
+  // Segment-based flow inference
+  if (/segmento\s+[tuTU]\b/.test(text)) return 'retorno';
+  if (/segmento\s+[pqrsPQRS]\b/.test(text) && !/retorno/i.test(text)) return 'remessa';
+  // Simple keyword match as fallback
+  if (lower.includes('remessa') && !lower.includes('retorno')) return 'remessa';
+  if (lower.includes('retorno') && !lower.includes('remessa')) return 'retorno';
   return null;
 }
 
@@ -197,12 +205,17 @@ function detectRecordType(text: string): string | null {
   const lower = text.toLowerCase();
   
   // Priorizar detecção de segmentos específicos antes do genérico "DETALHE"
-  // Segmentos Y com sub-tipo (Y03, Y53, Y04, etc.)
+  // Segmentos Y com sub-tipo (Y03, Y53, Y04, Y-03, Y - 53, etc.)
   const segYMatch = lower.match(/segmento\s+y\s*[-–]?\s*(\d{2})/);
   if (segYMatch) {
     return `DETALHE_Y${segYMatch[1]}`;
   }
-  if (lower.includes('segmento y') && !segYMatch) {
+  // Also match "Y – 03" or "Y-03" standalone (without "segmento" prefix)
+  const yStandalone = lower.match(/\by\s*[-–]\s*(\d{2})\b/);
+  if (yStandalone && !lower.includes('header') && !lower.includes('trailer')) {
+    return `DETALHE_Y${yStandalone[1]}`;
+  }
+  if ((lower.includes('segmento y') || lower.includes('segmento  y')) && !segYMatch && !yStandalone) {
     return 'DETALHE_Y';
   }
   if (lower.includes('segmento s')) {

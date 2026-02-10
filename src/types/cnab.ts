@@ -85,16 +85,23 @@ export function identificarTipoLinha(linha: string, tipoCNAB: 'CNAB_240' | 'CNAB
             return 'detalhe_segmento_q';
           case 'R':
             return 'detalhe_segmento_r';
+          case 'S':
+            return 'detalhe_segmento_s';
+          case 'T':
+            return 'detalhe_segmento_t';
+          case 'U':
+            return 'detalhe_segmento_u';
           case 'A':
             return 'detalhe_segmento_a';
           case 'B':
             return 'detalhe_segmento_b';
+          case 'Y':
+            return 'detalhe_segmento_y';
           default:
             return 'detalhe';
         }
       case '5':
-        // Conforme solicitado, tipo 5 tratado como detalhe neste contexto específico
-        return 'detalhe';
+        return 'trailer_lote';
       case '9':
         return 'trailer_arquivo';
       default:
