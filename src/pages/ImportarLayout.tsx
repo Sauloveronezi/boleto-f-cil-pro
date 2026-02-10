@@ -237,6 +237,26 @@ export default function ImportarLayout() {
     return linha;
   }, [camposPorSegmento, segmentoAtual, tipoCNAB, conteudoRemessa]);
 
+  const handleDropRemessa = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      setArquivoRemessa(file);
+      const texto = await file.text();
+      setConteudoRemessa(texto);
+      toast({ title: 'Arquivo de remessa carregado', description: file.name });
+    }
+  }, [toast]);
+
+  const handleDropPDF = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') {
+      setArquivoPDF(file);
+      toast({ title: 'Arquivo PDF carregado', description: file.name });
+    }
+  }, [toast]);
+
   // === EARLY RETURNS AFTER ALL HOOKS ===
   if (isLoadingPermissoes) {
     return (
@@ -352,26 +372,6 @@ export default function ImportarLayout() {
       }
     }
   };
-
-  const handleDropRemessa = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file) {
-      setArquivoRemessa(file);
-      const texto = await file.text();
-      setConteudoRemessa(texto);
-      toast({ title: 'Arquivo de remessa carregado', description: file.name });
-    }
-  }, [toast]);
-
-  const handleDropPDF = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const file = event.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      setArquivoPDF(file);
-      toast({ title: 'Arquivo PDF carregado', description: file.name });
-    }
-  }, [toast]);
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
