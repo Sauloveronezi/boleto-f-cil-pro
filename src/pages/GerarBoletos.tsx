@@ -144,19 +144,19 @@ export default function GerarBoletos() {
         return [];
       }
       
-      return (data || []).map((t: any): ModeloBoleto => ({
+      return (data || []).map((t: any) => ({
         id: `tplv2_${t.id}`,
         nome_modelo: `layout_${t.name}`,
         banco_id: t.bank_code || '',
-        bancos_compativeis: [],
-        tipo_layout: t.layout_version || 'v2',
+        bancos_compativeis: [] as string[],
+        tipo_layout: 'API_CDS' as const,
         padrao: t.is_default || false,
-        campos_mapeados: [],
+        campos_mapeados: [] as any[],
         texto_instrucoes: '',
         template_pdf_id: undefined,
-        criado_em: t.created_at,
-        atualizado_em: t.updated_at,
-      }));
+        criado_em: t.created_at || '',
+        atualizado_em: t.updated_at || '',
+      } satisfies ModeloBoleto));
     }
   });
 
@@ -301,18 +301,24 @@ export default function GerarBoletos() {
   // Selecionar modelo padrão quando o banco é selecionado
   useEffect(() => {
     if (bancoSelecionado) {
-      const modeloPadrao = modelos.find(m => (m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado)) && m.padrao);
+      const bancoObj = bancos.find(b => b.id === bancoSelecionado);
+      const codigoBanco = bancoObj?.codigo_banco || '';
+      
+      const modeloPadrao = modelos.find(m => 
+        (m.banco_id === bancoSelecionado || m.banco_id === codigoBanco || m.bancos_compativeis?.includes(bancoSelecionado)) && m.padrao
+      );
       if (modeloPadrao) {
         setModeloSelecionado(modeloPadrao.id);
       } else {
-        // Se não houver modelo padrão, seleciona o primeiro disponível para o banco
-        const primeiroModelo = modelos.find(m => m.banco_id === bancoSelecionado || m.bancos_compativeis?.includes(bancoSelecionado));
+        const primeiroModelo = modelos.find(m => 
+          m.banco_id === bancoSelecionado || m.banco_id === codigoBanco || m.bancos_compativeis?.includes(bancoSelecionado)
+        );
         if (primeiroModelo) {
           setModeloSelecionado(primeiroModelo.id);
         }
       }
     }
-  }, [bancoSelecionado, modelos]);
+  }, [bancoSelecionado, modelos, bancos]);
 
   // Limpar dados CNAB ao trocar tipo de origem
   useEffect(() => {
