@@ -948,6 +948,12 @@ function detectLayoutBlocks(pages: { pageNumber: number; lines: PdfTextLine[] }[
  * IMPORTANTE: Se um gap é muito grande (>50 posições), provavelmente o parser
  * perdeu a referência. Nesse caso, NÃO preenche o gap para evitar dados inconsistentes.
  * Gaps pequenos (<= 50 posições) são preenchidos normalmente.
+ *
+ * VALIDAÇÃO DE CONSISTÊNCIA:
+ * - Campos cujo `end` é exatamente o recordSize e cujo tamanho excede 50 são
+ *   considerados leitura incorreta (parser confundiu recordSize com posição final).
+ * - Campos com saltos de posição > 50 em relação ao campo anterior são removidos
+ *   quando seu tamanho é desproporcional ao contexto.
  */
 function fillLayoutGaps(rows: ParsedTableRow[], recordSize: number): ParsedTableRow[] {
   const filledRows: ParsedTableRow[] = [];
@@ -957,10 +963,44 @@ function fillLayoutGaps(rows: ParsedTableRow[], recordSize: number): ParsedTable
   const validRows = rows.filter(r => r.start >= 1 && r.start <= recordSize);
   const sortedRows = [...validRows].sort((a, b) => a.start - b.start);
   
-  // Detectar e remover overlaps - quando dois campos têm posições sobrepostas,
-  // manter o mais específico (menor)
+  // ── Passo 1: Remover campos com posições suspeitas ──
+  // Calcular tamanho mediano dos campos para detectar outliers
+  const sizes = sortedRows.map(r => r.end - r.start + 1).filter(s => s > 0);
+  sizes.sort((a, b) => a - b);
+  const medianSize = sizes.length > 0 ? sizes[Math.floor(sizes.length / 2)] : 10;
+  const maxReasonableSize = Math.max(medianSize * 5, 50);
+  
+  const sanitizedRows: ParsedTableRow[] = [];
+  for (let i = 0; i < sortedRows.length; i++) {
+    const row = sortedRows[i];
+    const fieldSize = row.end - row.start + 1;
+    
+    // Suspeito 1: end == recordSize e tamanho desproporcional
+    // Ex: campo "14 - 240" quando deveria ser "14 - 20"
+    if (row.end === recordSize && fieldSize > maxReasonableSize && sortedRows.length > 3) {
+      console.warn(`[CNAB Extractor] Campo "${row.field}" removido: end=${row.end} == recordSize e tamanho ${fieldSize} > ${maxReasonableSize} (suspeita de leitura incorreta)`);
+      continue;
+    }
+    
+    // Suspeito 2: Salto enorme de posição em relação ao campo anterior
+    // Se o campo anterior terminou em 14 e este começa em 200, provavelmente o parser
+    // perdeu a referência
+    if (sanitizedRows.length > 0) {
+      const prev = sanitizedRows[sanitizedRows.length - 1];
+      const gap = row.start - prev.end - 1;
+      // Se o gap é > 50 E o campo atual tem tamanho desproporcional
+      if (gap > 50 && fieldSize > maxReasonableSize) {
+        console.warn(`[CNAB Extractor] Campo "${row.field}" removido: gap de ${gap} posições e tamanho ${fieldSize} desproporcional`);
+        continue;
+      }
+    }
+    
+    sanitizedRows.push(row);
+  }
+  
+  // ── Passo 2: Limitar end e remover overlaps ──
   const deduplicatedRows: ParsedTableRow[] = [];
-  for (const row of sortedRows) {
+  for (const row of sanitizedRows) {
     // Limitar end ao recordSize
     const clampedRow = { ...row, end: Math.min(row.end, recordSize) };
     
@@ -979,6 +1019,7 @@ function fillLayoutGaps(rows: ParsedTableRow[], recordSize: number): ParsedTable
     deduplicatedRows.push(clampedRow);
   }
   
+  // ── Passo 3: Preencher gaps razoáveis ──
   for (const row of deduplicatedRows) {
     // Se há um gap, preencher com BRANCOS apenas se for razoável
     if (row.start > expectedStart) {
