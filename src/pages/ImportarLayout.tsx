@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette, HelpCircle, ArrowUpDown, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette, HelpCircle, ArrowUpDown, ShieldCheck, ShieldAlert, ShieldX, Plus, Trash2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -236,6 +236,38 @@ export default function ImportarLayout() {
     });
     return linha;
   }, [camposPorSegmento, segmentoAtual, tipoCNAB, conteudoRemessa]);
+
+  // Detectar gaps entre campos ordenados de um segmento
+  const gapsNoSegmento = useMemo(() => {
+    const campos = camposPorSegmento[segmentoAtual] || [];
+    if (campos.length === 0) return [];
+    
+    const sorted = [...campos].sort((a, b) => a.posicaoInicio - b.posicaoInicio);
+    const tamanhoMax = tipoCNAB === 'CNAB_240' ? 240 : 400;
+    const gaps: { afterId: string; inicio: number; fim: number; tamanho: number }[] = [];
+    
+    // Gap antes do primeiro campo
+    if (sorted[0].posicaoInicio > 1) {
+      gaps.push({ afterId: '__start__', inicio: 1, fim: sorted[0].posicaoInicio - 1, tamanho: sorted[0].posicaoInicio - 1 });
+    }
+    
+    // Gaps entre campos
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const fimAtual = sorted[i].posicaoFim;
+      const inicioProximo = sorted[i + 1].posicaoInicio;
+      if (inicioProximo > fimAtual + 1) {
+        gaps.push({ afterId: sorted[i].id, inicio: fimAtual + 1, fim: inicioProximo - 1, tamanho: inicioProximo - fimAtual - 1 });
+      }
+    }
+    
+    // Gap no final
+    const ultimo = sorted[sorted.length - 1];
+    if (ultimo.posicaoFim < tamanhoMax) {
+      gaps.push({ afterId: ultimo.id, inicio: ultimo.posicaoFim + 1, fim: tamanhoMax, tamanho: tamanhoMax - ultimo.posicaoFim });
+    }
+    
+    return gaps;
+  }, [camposPorSegmento, segmentoAtual, tipoCNAB]);
 
   const handleDropRemessa = useCallback(async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -893,7 +925,8 @@ export default function ImportarLayout() {
     setCamposDetectados(prev => prev.map(c => {
       if (c.id === id) {
         const novo = { ...c, ...updates };
-        if (updates.posicaoInicio || updates.posicaoFim) {
+        // Always recalculate tamanho when positions change
+        if (updates.posicaoInicio !== undefined || updates.posicaoFim !== undefined) {
           novo.tamanho = novo.posicaoFim - novo.posicaoInicio + 1;
         }
         return novo;
@@ -901,6 +934,53 @@ export default function ImportarLayout() {
       return c;
     }));
   };
+
+  // Adicionar novo campo após um campo existente
+  const handleAdicionarCampo = (afterId?: string) => {
+    const camposSegmento = camposPorSegmento[segmentoAtual] || [];
+    let novaPosInicio = 1;
+    let novaPosFim = 10;
+    
+    if (afterId) {
+      const campoRef = camposSegmento.find(c => c.id === afterId);
+      if (campoRef) {
+        novaPosInicio = campoRef.posicaoFim + 1;
+        // Encontrar o próximo campo para determinar o fim
+        const sorted = [...camposSegmento].sort((a, b) => a.posicaoInicio - b.posicaoInicio);
+        const idx = sorted.findIndex(c => c.id === afterId);
+        const proximo = sorted[idx + 1];
+        novaPosFim = proximo ? proximo.posicaoInicio - 1 : Math.min(novaPosInicio + 9, tipoCNAB === 'CNAB_240' ? 240 : 400);
+      }
+    } else if (camposSegmento.length > 0) {
+      const ultimo = [...camposSegmento].sort((a, b) => b.posicaoFim - a.posicaoFim)[0];
+      novaPosInicio = ultimo.posicaoFim + 1;
+      novaPosFim = Math.min(novaPosInicio + 9, tipoCNAB === 'CNAB_240' ? 240 : 400);
+    }
+    
+    if (novaPosInicio > (tipoCNAB === 'CNAB_240' ? 240 : 400)) return;
+    
+    const novoId = String(Date.now());
+    setCamposDetectados(prev => [...prev, {
+      id: novoId,
+      nome: 'Novo Campo',
+      posicaoInicio: novaPosInicio,
+      posicaoFim: novaPosFim,
+      tamanho: novaPosFim - novaPosInicio + 1,
+      tipo: 'alfanumerico',
+      destino: '',
+      valor: '',
+      confianca: 100,
+      tipoLinha: segmentoAtual as any,
+      cor: CORES_CAMPOS[Math.floor(Math.random() * CORES_CAMPOS.length)]
+    }]);
+  };
+
+  // Remover campo
+  const handleRemoverCampo = (id: string) => {
+    setCamposDetectados(prev => prev.filter(c => c.id !== id));
+  };
+
+
 
   const handleTestarPadrao = () => {
     if (!padraoGerado || !conteudoRemessa) {
@@ -1430,87 +1510,151 @@ export default function ImportarLayout() {
                     </div>
                   </CardHeader>
                   
-                  <CardContent className="flex-1 overflow-y-auto pr-2">
-                     <div className="space-y-2">
-                       <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground mb-2 px-2 sticky top-0 bg-background z-10 py-2 border-b">
-                         <div className="col-span-1">ID</div>
-                         <div className="col-span-4">Nome do Campo</div>
-                         <div className="col-span-2">Início</div>
-                         <div className="col-span-2">Fim</div>
-                         <div className="col-span-1">Tam.</div>
-                         <div className="col-span-2">Tipo</div>
+                   <CardContent className="flex-1 overflow-y-auto pr-2">
+                     <div className="space-y-1">
+                       <div className="grid grid-cols-[40px_1fr_80px_80px_50px_100px_60px] gap-2 text-xs font-medium text-muted-foreground mb-2 px-2 sticky top-0 bg-background z-10 py-2 border-b">
+                         <div>ID</div>
+                         <div>Nome do Campo</div>
+                         <div>Início</div>
+                         <div>Fim</div>
+                         <div>Tam.</div>
+                         <div>Tipo</div>
+                         <div className="text-center">Ações</div>
                        </div>
                       
-                      {(camposPorSegmento[segmentoAtual] || []).map((campo) => {
+                      {(() => {
+                        const camposSegmento = [...(camposPorSegmento[segmentoAtual] || [])].sort((a, b) => a.posicaoInicio - b.posicaoInicio);
                         const tamanhoMaximo = tipoCNAB === 'CNAB_240' ? 240 : 400;
-                        const excedeLimite = campo.posicaoFim > tamanhoMaximo;
+                        const elements: React.ReactNode[] = [];
                         
-                        return (
-                        <div 
-                            key={campo.id}
-                            id={`field-row-${campo.id}`}
-                            className={`
-                              grid grid-cols-12 gap-2 items-center p-2 rounded-md border text-sm transition-colors
-                              ${excedeLimite ? 'border-destructive bg-destructive/5' : ''}
-                              ${campoFocado === campo.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : !excedeLimite ? 'border-border hover:border-primary/50' : ''}
-                            `}
-                            onMouseEnter={() => setCampoFocado(campo.id)}
-                            onMouseLeave={() => setCampoFocado(null)}
-                          >
-                          <div className="col-span-1 font-mono text-xs text-muted-foreground">
-                            #{campo.id}
-                            {excedeLimite && <span className="inline-block ml-1"><AlertCircle className="h-3 w-3 text-destructive inline" /></span>}
-                          </div>
+                        // Gap before first field
+                        const gapInicio = gapsNoSegmento.find(g => g.afterId === '__start__');
+                        if (gapInicio) {
+                          elements.push(
+                            <div key="gap-start" className="grid grid-cols-[40px_1fr_80px_80px_50px_100px_60px] gap-2 items-center p-1.5 rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-700 text-xs">
+                              <div></div>
+                              <div className="text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                GAP - posições {gapInicio.inicio} a {gapInicio.fim} ({gapInicio.tamanho} bytes)
+                              </div>
+                              <div className="text-orange-600 dark:text-orange-400">{gapInicio.inicio}</div>
+                              <div className="text-orange-600 dark:text-orange-400">{gapInicio.fim}</div>
+                              <div className="text-center text-orange-600 dark:text-orange-400">{gapInicio.tamanho}</div>
+                              <div></div>
+                              <div className="text-center">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAdicionarCampo()} title="Preencher gap">
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        camposSegmento.forEach((campo, idx) => {
+                          const excedeLimite = campo.posicaoFim > tamanhoMaximo;
+                          const tamanhoInvalido = campo.tamanho <= 0 || campo.posicaoInicio > campo.posicaoFim;
                           
-                          <div className="col-span-4">
-                            <Input 
-                              value={campo.nome} 
-                              onChange={(e) => handleUpdateCampo(campo.id, { nome: e.target.value })}
-                              className="h-7 text-xs"
-                            />
-                          </div>
+                          elements.push(
+                            <div 
+                              key={campo.id}
+                              id={`field-row-${campo.id}`}
+                              className={`
+                                grid grid-cols-[40px_1fr_80px_80px_50px_100px_60px] gap-2 items-center p-1.5 rounded-md border text-sm transition-colors
+                                ${excedeLimite || tamanhoInvalido ? 'border-destructive bg-destructive/5' : ''}
+                                ${campoFocado === campo.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : !excedeLimite && !tamanhoInvalido ? 'border-border hover:border-primary/50' : ''}
+                              `}
+                              onMouseEnter={() => setCampoFocado(campo.id)}
+                              onMouseLeave={() => setCampoFocado(null)}
+                            >
+                              <div className="font-mono text-xs text-muted-foreground">
+                                #{campo.id}
+                                {(excedeLimite || tamanhoInvalido) && <span className="inline-block ml-1"><AlertCircle className="h-3 w-3 text-destructive inline" /></span>}
+                              </div>
+                              
+                              <div>
+                                <Input 
+                                  value={campo.nome} 
+                                  onChange={(e) => handleUpdateCampo(campo.id, { nome: e.target.value })}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Input 
+                                  type="number"
+                                  value={campo.posicaoInicio} 
+                                  onChange={(e) => handleUpdateCampo(campo.id, { posicaoInicio: parseInt(e.target.value) || 0 })}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Input 
+                                  type="number"
+                                  value={campo.posicaoFim} 
+                                  onChange={(e) => handleUpdateCampo(campo.id, { posicaoFim: parseInt(e.target.value) || 0 })}
+                                  className={`h-7 text-xs ${excedeLimite ? 'border-destructive text-destructive' : ''}`}
+                                />
+                              </div>
+                              
+                              <div className={`text-center font-mono text-xs ${tamanhoInvalido ? 'text-destructive font-bold' : ''}`}>
+                                {campo.tamanho}
+                              </div>
+                              
+                              <div>
+                                <Select 
+                                  value={campo.tipo} 
+                                  onValueChange={(v) => handleUpdateCampo(campo.id, { tipo: v as any })}
+                                >
+                                  <SelectTrigger className="h-7 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="alfanumerico">Texto</SelectItem>
+                                    <SelectItem value="numerico">Numérico</SelectItem>
+                                    <SelectItem value="data">Data</SelectItem>
+                                    <SelectItem value="valor">Valor</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div className="flex items-center justify-center gap-0.5">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => handleAdicionarCampo(campo.id)} title="Adicionar campo após">
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoverCampo(campo.id)} title="Remover campo">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
                           
-                          <div className="col-span-2">
-                            <Input 
-                              type="number"
-                              value={campo.posicaoInicio} 
-                              onChange={(e) => handleUpdateCampo(campo.id, { posicaoInicio: parseInt(e.target.value) })}
-                              className="h-7 text-xs"
-                            />
-                          </div>
-                          
-                          <div className="col-span-2">
-                            <Input 
-                              type="number"
-                              value={campo.posicaoFim} 
-                              onChange={(e) => handleUpdateCampo(campo.id, { posicaoFim: parseInt(e.target.value) })}
-                              className={`h-7 text-xs ${excedeLimite ? 'border-destructive text-destructive' : ''}`}
-                            />
-                          </div>
-                          
-                          <div className="col-span-1 text-center font-mono text-xs">
-                            {campo.tamanho}
-                          </div>
-                          
-                          <div className="col-span-2">
-                             <Select 
-                               value={campo.tipo} 
-                               onValueChange={(v) => handleUpdateCampo(campo.id, { tipo: v as any })}
-                             >
-                               <SelectTrigger className="h-7 text-xs">
-                                 <SelectValue />
-                               </SelectTrigger>
-                               <SelectContent>
-                                 <SelectItem value="alfanumerico">Texto</SelectItem>
-                                 <SelectItem value="numerico">Numérico</SelectItem>
-                                 <SelectItem value="data">Data</SelectItem>
-                                 <SelectItem value="valor">Valor</SelectItem>
-                               </SelectContent>
-                             </Select>
-                          </div>
-                        </div>
-                        );
-                      })}
+                          // Check for gap after this field
+                          const gap = gapsNoSegmento.find(g => g.afterId === campo.id);
+                          if (gap) {
+                            elements.push(
+                              <div key={`gap-${campo.id}`} className="grid grid-cols-[40px_1fr_80px_80px_50px_100px_60px] gap-2 items-center p-1.5 rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-700 text-xs">
+                                <div></div>
+                                <div className="text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  GAP - posições {gap.inicio} a {gap.fim} ({gap.tamanho} bytes)
+                                </div>
+                                <div className="text-orange-600 dark:text-orange-400">{gap.inicio}</div>
+                                <div className="text-orange-600 dark:text-orange-400">{gap.fim}</div>
+                                <div className="text-center text-orange-600 dark:text-orange-400">{gap.tamanho}</div>
+                                <div></div>
+                                <div className="text-center">
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAdicionarCampo(campo.id)} title="Preencher gap">
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          }
+                        });
+                        
+                        return elements;
+                      })()}
                       
                       {(camposPorSegmento[segmentoAtual] || []).length === 0 && (
                         <div className="text-center py-8 text-muted-foreground">
@@ -1518,24 +1662,24 @@ export default function ImportarLayout() {
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            className="mt-2"
-                            onClick={() => {
-                              const novoId = String(camposDetectados.length + 1);
-                              setCamposDetectados([...camposDetectados, {
-                                id: novoId,
-                                nome: 'Novo Campo',
-                                posicaoInicio: 1,
-                                posicaoFim: 10,
-                                tamanho: 10,
-                                tipo: 'alfanumerico',
-                                destino: '',
-                                valor: '',
-                                confianca: 100,
-                                tipoLinha: segmentoAtual as any,
-                                cor: CORES_CAMPOS[camposDetectados.length % CORES_CAMPOS.length]
-                              }]);
-                            }}
+                            className="mt-2 gap-1"
+                            onClick={() => handleAdicionarCampo()}
                           >
+                            <Plus className="h-3 w-3" />
+                            Adicionar Campo
+                          </Button>
+                        </div>
+                      )}
+
+                      {(camposPorSegmento[segmentoAtual] || []).length > 0 && (
+                        <div className="flex justify-center pt-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="gap-1 text-xs"
+                            onClick={() => handleAdicionarCampo()}
+                          >
+                            <Plus className="h-3 w-3" />
                             Adicionar Campo
                           </Button>
                         </div>
