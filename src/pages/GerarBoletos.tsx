@@ -89,8 +89,8 @@ export default function GerarBoletos() {
     }
   });
 
-  // Carregar modelos do Supabase
-  const { data: modelos = [] } = useQuery({
+  // Carregar modelos do Supabase (tabela antiga)
+  const { data: modelosAntigos = [] } = useQuery({
     queryKey: ['modelos-boleto-geracao'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -127,6 +127,41 @@ export default function GerarBoletos() {
       }));
     }
   });
+
+  // Carregar templates V2 (tabela normalizada vv_b_boleto_templates)
+  const { data: templatesV2 = [] } = useQuery({
+    queryKey: ['boleto-templates-v2-geracao'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_boleto_templates')
+        .select('*')
+        .is('deleted', null)
+        .order('is_default', { ascending: false })
+        .order('name');
+      
+      if (error) {
+        console.error('[GerarBoletos] Erro ao carregar templates V2:', error);
+        return [];
+      }
+      
+      return (data || []).map((t: any): ModeloBoleto => ({
+        id: `tplv2_${t.id}`,
+        nome_modelo: `layout_${t.name}`,
+        banco_id: t.bank_code || '',
+        bancos_compativeis: [],
+        tipo_layout: t.layout_version || 'v2',
+        padrao: t.is_default || false,
+        campos_mapeados: [],
+        texto_instrucoes: '',
+        template_pdf_id: undefined,
+        criado_em: t.created_at,
+        atualizado_em: t.updated_at,
+      }));
+    }
+  });
+
+  // Combinar modelos antigos + templates V2
+  const modelos = [...modelosAntigos, ...templatesV2];
 
   // Buscar dados da empresa para preencher o beneficiário
   const { data: empresa } = useQuery({

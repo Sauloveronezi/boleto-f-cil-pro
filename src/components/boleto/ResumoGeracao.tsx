@@ -71,12 +71,13 @@ export function ResumoGeracao({
   const valorTotal = notasSelecionadasData.reduce((acc, n) => acc + n.valor_titulo, 0);
 
   // Inclui modelos que:
-  // 1. Têm o banco_id igual ao banco selecionado
+  // 1. Têm o banco_id igual ao banco selecionado (por UUID ou código)
   // 2. Têm o banco em bancos_compativeis
-  // 3. Não têm banco associado (modelo genérico)
+  // 3. Não têm banco associado (modelo genérico/universal)
   const modelosDisponiveis = modelos.filter(
     (m) =>
       m.banco_id === banco?.id ||
+      m.banco_id === banco?.codigo_banco ||
       m.bancos_compativeis?.includes(banco?.id || '') ||
       !m.banco_id // Modelos sem banco definido são universais
   );
