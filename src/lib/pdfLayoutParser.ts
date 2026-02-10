@@ -114,12 +114,30 @@ async function parseCnabPdfFallback(file: File): Promise<CampoDetectado[]> {
         currentSegment = 'trailer_lote';
       } else if ((text.includes('TRAILER') && text.includes('ARQUIVO')) || text.includes('REGISTRO 9')) {
         currentSegment = 'trailer_arquivo';
+      } else if (text.match(/SEGMENTO\s+Y\s*[-–]?\s*03/) || text.match(/Y\s*[-–]?\s*03/)) {
+        currentSegment = 'detalhe_segmento_y03';
+      } else if (text.match(/SEGMENTO\s+Y\s*[-–]?\s*53/) || text.match(/Y\s*[-–]?\s*53/)) {
+        currentSegment = 'detalhe_segmento_y53';
+      } else if (text.match(/SEGMENTO\s+Y\s*[-–]?\s*04/) || text.match(/Y\s*[-–]?\s*04/)) {
+        currentSegment = 'detalhe_segmento_y04';
+      } else if (text.includes('SEGMENTO Y') && !text.match(/Y\s*[-–]?\s*\d{2}/)) {
+        currentSegment = 'detalhe_segmento_y';
+      } else if (text.includes('SEGMENTO S') || (text.includes('DETALHE') && text.includes(' S '))) {
+        currentSegment = 'detalhe_segmento_s';
+      } else if (text.includes('SEGMENTO T') || (text.includes('DETALHE') && text.includes(' T '))) {
+        currentSegment = 'detalhe_segmento_t';
+      } else if (text.includes('SEGMENTO U') || (text.includes('DETALHE') && text.includes(' U '))) {
+        currentSegment = 'detalhe_segmento_u';
       } else if (text.includes('SEGMENTO P') || (text.includes('DETALHE') && text.includes(' P '))) {
         currentSegment = 'detalhe_segmento_p';
       } else if (text.includes('SEGMENTO Q') || (text.includes('DETALHE') && text.includes(' Q '))) {
         currentSegment = 'detalhe_segmento_q';
       } else if (text.includes('SEGMENTO R') || (text.includes('DETALHE') && text.includes(' R '))) {
         currentSegment = 'detalhe_segmento_r';
+      } else if (text.includes('SEGMENTO A') || (text.includes('DETALHE') && text.includes(' A '))) {
+        currentSegment = 'detalhe_segmento_a';
+      } else if (text.includes('SEGMENTO B') || (text.includes('DETALHE') && text.includes(' B '))) {
+        currentSegment = 'detalhe_segmento_b';
       } else if (text.includes('DETALHE') && !text.includes('SEGMENTO')) {
         currentSegment = 'detalhe';
       }
@@ -156,6 +174,15 @@ async function parseCnabPdfFallback(file: File): Promise<CampoDetectado[]> {
          'detalhe_segmento_p': 4,
          'detalhe_segmento_q': 5,
          'detalhe_segmento_r': 6,
+         'detalhe_segmento_s': 7,
+         'detalhe_segmento_t': 8,
+         'detalhe_segmento_u': 9,
+         'detalhe_segmento_a': 10,
+         'detalhe_segmento_b': 11,
+         'detalhe_segmento_y': 12,
+         'detalhe_segmento_y03': 13,
+         'detalhe_segmento_y04': 14,
+         'detalhe_segmento_y53': 15,
          'trailer_lote': 98,
          'trailer_arquivo': 99
        };
