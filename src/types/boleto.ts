@@ -184,6 +184,13 @@ export type TipoRegistroCNAB =
   | 'detalhe_segmento_r' 
   | 'detalhe_segmento_a'
   | 'detalhe_segmento_b'
+  | 'detalhe_segmento_s'    // Remessa
+  | 'detalhe_segmento_t'    // Retorno
+  | 'detalhe_segmento_u'    // Retorno
+  | 'detalhe_segmento_y'    // Genérico Y
+  | 'detalhe_segmento_y03'  // Remessa/Retorno
+  | 'detalhe_segmento_y04'  // Retorno
+  | 'detalhe_segmento_y53'  // Remessa
   | 'detalhe'  // CNAB 400 - registro tipo 1
   | 'trailer_lote' 
   | 'trailer_arquivo';

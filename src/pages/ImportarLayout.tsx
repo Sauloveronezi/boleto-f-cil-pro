@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette, HelpCircle } from 'lucide-react';
+import { Upload, FileText, FileImage, Sparkles, CheckCircle2, Loader2, ArrowRight, Save, AlertCircle, PlayCircle, FileJson, Download, Eye, Edit, Palette, HelpCircle, ArrowUpDown, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { CnabTextEditor, CampoMapeado, TipoLinha } from '@/components/cnab/CnabTextEditor';
 import { parseCnabPdf, CampoDetectado } from '@/lib/pdfLayoutParser';
 import { gerarLinhasCNAB240, gerarCamposHeaderArquivo240, gerarCamposDetalheP240, gerarCamposDetalheQ240, gerarCamposDetalheR240, gerarCamposTrailerLote240, gerarCamposTrailerArquivo240 } from '@/types/cnab';
+import { validateImportedLayout, type LayoutValidationResult } from '@/lib/cnabLayoutExtractor';
 
 // Mapeia destinos específicos para campos do boleto, mantém outros inalterados
 const mapDestino = (destino: string): string => {
@@ -73,6 +74,13 @@ function mapTipoRegistroParaTipoLinha(tipo: TipoRegistroCNAB): TipoLinhaCNAB {
   }
 }
 
+// Determinar fluxo de um segmento
+function getFluxoSegmento(tipo: string): 'remessa' | 'retorno' | 'ambos' {
+  if (['detalhe_segmento_t', 'detalhe_segmento_u', 'detalhe_segmento_y04'].includes(tipo)) return 'retorno';
+  if (['detalhe_segmento_p', 'detalhe_segmento_q', 'detalhe_segmento_r', 'detalhe_segmento_s', 'detalhe_segmento_y53'].includes(tipo)) return 'remessa';
+  return 'ambos';
+}
+
 // Helper para mapear TipoLinha para código de registro (0, 1, 3, etc)
 function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 'CNAB_400'): string {
   if (tipoCNAB === 'CNAB_240') {
@@ -82,6 +90,13 @@ function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 
       case 'detalhe_segmento_p':
       case 'detalhe_segmento_q':
       case 'detalhe_segmento_r':
+      case 'detalhe_segmento_s':
+      case 'detalhe_segmento_t':
+      case 'detalhe_segmento_u':
+      case 'detalhe_segmento_y':
+      case 'detalhe_segmento_y03':
+      case 'detalhe_segmento_y04':
+      case 'detalhe_segmento_y53':
       case 'detalhe':
         return '3';
       case 'trailer_lote': return '5';
@@ -98,6 +113,23 @@ function mapTipoLinhaParaCodigoRegistro(tipo: TipoLinha, tipoCNAB: 'CNAB_240' | 
     }
   }
 }
+
+// Definições de quais segmentos pertencem a cada fluxo
+const SEGMENTOS_REMESSA = [
+  'header_arquivo', 'header_lote',
+  'detalhe_segmento_p', 'detalhe_segmento_q', 'detalhe_segmento_r',
+  'detalhe_segmento_s', 'detalhe_segmento_y03', 'detalhe_segmento_y53',
+  'trailer_lote', 'trailer_arquivo'
+];
+
+const SEGMENTOS_RETORNO = [
+  'header_arquivo', 'header_lote',
+  'detalhe_segmento_t', 'detalhe_segmento_u',
+  'detalhe_segmento_y03', 'detalhe_segmento_y04',
+  'trailer_lote', 'trailer_arquivo'
+];
+
+const SEGMENTOS_COMPARTILHADOS = ['header_arquivo', 'header_lote', 'trailer_lote', 'trailer_arquivo', 'detalhe_segmento_y03'];
 
 export default function ImportarLayout() {
   // === ALL HOOKS MUST BE DECLARED UNCONDITIONALLY AT THE TOP ===
@@ -125,6 +157,85 @@ export default function ImportarLayout() {
   const [arquivoLayoutPDF, setArquivoLayoutPDF] = useState<File | null>(null);
   const [mostrarEditorVisual, setMostrarEditorVisual] = useState(false);
   const [errosLeitura, setErrosLeitura] = useState<{ campo: string; mensagem: string }[]>([]);
+  const [segmentoAtual, setSegmentoAtual] = useState<string>('header_arquivo');
+  const [campoFocado, setCampoFocado] = useState<string | null>(null);
+  const [resultadoTeste, setResultadoTeste] = useState<{ campo: string; valor: string }[] | null>(null);
+  const [fluxoAtual, setFluxoAtual] = useState<'remessa' | 'retorno'>('remessa');
+
+  // Agrupar campos por segmento (must be before early returns)
+  const camposPorSegmento = useMemo(() => {
+    const grupos: Record<string, CampoDetectado[]> = {};
+    const allKeys = [
+      'header_arquivo', 'header_lote', 'detalhe',
+      'detalhe_segmento_p', 'detalhe_segmento_q', 'detalhe_segmento_r',
+      'detalhe_segmento_s', 'detalhe_segmento_t', 'detalhe_segmento_u',
+      'detalhe_segmento_y', 'detalhe_segmento_y03', 'detalhe_segmento_y04', 'detalhe_segmento_y53',
+      'trailer_lote', 'trailer_arquivo'
+    ];
+    for (const key of allKeys) grupos[key] = [];
+    camposDetectados.forEach(campo => {
+      const tipo = campo.tipoLinha || 'detalhe';
+      if (!grupos[tipo]) grupos[tipo] = [];
+      grupos[tipo].push(campo);
+    });
+    for (const key of Object.keys(grupos)) {
+      if (grupos[key].length === 0) {
+        const isRelevant = fluxoAtual === 'remessa' ? SEGMENTOS_REMESSA.includes(key) : SEGMENTOS_RETORNO.includes(key);
+        if (!isRelevant && key !== 'detalhe') delete grupos[key];
+      }
+    }
+    return grupos;
+  }, [camposDetectados, fluxoAtual]);
+
+  const segmentosFluxoAtual = useMemo(() => {
+    const segmentos = fluxoAtual === 'remessa' ? SEGMENTOS_REMESSA : SEGMENTOS_RETORNO;
+    return Object.entries(camposPorSegmento).filter(([key]) => segmentos.includes(key) || key === 'detalhe');
+  }, [camposPorSegmento, fluxoAtual]);
+
+  const validacaoLayout = useMemo(() => {
+    if (camposDetectados.length === 0) return [];
+    const recordSize = tipoCNAB === 'CNAB_240' ? 240 : 400;
+    return validateImportedLayout(camposDetectados, recordSize);
+  }, [camposDetectados, tipoCNAB]);
+
+  // Gerar linha de visualização para o segmento atual
+  const linhaVisualizacao = useMemo(() => {
+    const tamanho = tipoCNAB === 'CNAB_240' ? 240 : 400;
+    if (conteudoRemessa) {
+        const linhas = conteudoRemessa.split('\n');
+        let linhaReal = '';
+        if (segmentoAtual === 'header_arquivo') {
+            linhaReal = linhas.find(l => { if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '0'; return l.length >= 1 && l[0] === '0'; }) || '';
+        } else if (segmentoAtual === 'header_lote') {
+            linhaReal = linhas.find(l => { if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '1'; return false; }) || '';
+        } else if (segmentoAtual.startsWith('detalhe')) {
+            if (tipoCNAB === 'CNAB_240') {
+               if (segmentoAtual.includes('segmento')) {
+                   const segLetra = segmentoAtual.split('_').pop()?.toUpperCase();
+                   linhaReal = linhas.find(l => l.length >= 14 && l[7] === '3' && l[13] === segLetra) || '';
+               } else {
+                   linhaReal = linhas.find(l => l.length >= 8 && l[7] === '3') || '';
+               }
+            } else {
+               linhaReal = linhas.find(l => l.length >= 1 && l[0] === '1') || '';
+            }
+        } else if (segmentoAtual === 'trailer_lote') {
+            linhaReal = linhas.find(l => { if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '5'; return false; }) || '';
+        } else if (segmentoAtual === 'trailer_arquivo') {
+            linhaReal = linhas.find(l => { if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '9'; return l.length >= 1 && l[0] === '9'; }) || '';
+        }
+        if (linhaReal) return linhaReal.padEnd(tamanho, ' ').substring(0, tamanho).split('');
+        return null;
+    }
+    let linha = Array(tamanho).fill(' ');
+    const camposDoSegmento = camposPorSegmento[segmentoAtual] || [];
+    camposDoSegmento.forEach(campo => {
+      const inicio = campo.posicaoInicio - 1;
+      const valor = campo.valor === '(do PDF)' ? (campo.tipo === 'numerico' ? '9'.repeat(campo.tamanho) : 'X'.repeat(campo.tamanho)) : campo.valor;
+      for (let i = 0; i < campo.tamanho; i++) { if (inicio + i < tamanho) linha[inicio + i] = valor[i] || (campo.tipo === 'numerico' ? '0' : ' '); }
+    });
+    return linha;
+  }, [camposPorSegmento, segmentoAtual, tipoCNAB, conteudoRemessa]);
 
   // === EARLY RETURNS AFTER ALL HOOKS ===
   if (isLoadingPermissoes) {
@@ -740,108 +851,6 @@ export default function ImportarLayout() {
     setCamposExtraidos({});
   };
 
-  const [segmentoAtual, setSegmentoAtual] = useState<string>('header_arquivo');
-  const [campoFocado, setCampoFocado] = useState<string | null>(null);
-  const [resultadoTeste, setResultadoTeste] = useState<{ campo: string; valor: string }[] | null>(null);
-
-  // Agrupar campos por segmento
-  const camposPorSegmento = useMemo(() => {
-    const grupos: Record<string, CampoDetectado[]> = {};
-
-    // Pre-populate standard keys so they appear in order
-    const standardKeys = [
-      'header_arquivo', 'header_lote', 'detalhe',
-      'detalhe_segmento_p', 'detalhe_segmento_q', 'detalhe_segmento_r',
-      'trailer_lote', 'trailer_arquivo'
-    ];
-    for (const key of standardKeys) {
-      grupos[key] = [];
-    }
-
-    camposDetectados.forEach(campo => {
-      const tipo = campo.tipoLinha || 'detalhe';
-      if (!grupos[tipo]) grupos[tipo] = [];
-      grupos[tipo].push(campo);
-    });
-
-    // Remove empty non-standard groups, keep empty standard ones for CNAB 240 tabs
-    for (const key of Object.keys(grupos)) {
-      if (grupos[key].length === 0 && !standardKeys.includes(key)) {
-        delete grupos[key];
-      }
-    }
-
-    return grupos;
-  }, [camposDetectados]);
-
-  // Gerar linha de visualização para o segmento atual
-  const linhaVisualizacao = useMemo(() => {
-    const tamanho = tipoCNAB === 'CNAB_240' ? 240 : 400;
-
-    // Tentar pegar linha real do arquivo se existir
-    if (conteudoRemessa) {
-        const linhas = conteudoRemessa.split('\n');
-        let linhaReal = '';
-        
-        // Lógica de busca de linha por tipo
-        if (segmentoAtual === 'header_arquivo') {
-            linhaReal = linhas.find(l => {
-              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '0';
-              return l.length >= 1 && l[0] === '0';
-            }) || '';
-        } else if (segmentoAtual === 'header_lote') {
-            linhaReal = linhas.find(l => {
-              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '1';
-              return false; // CNAB 400 não tem header de lote
-            }) || '';
-        } else if (segmentoAtual.startsWith('detalhe')) {
-            if (tipoCNAB === 'CNAB_240') {
-               if (segmentoAtual.includes('segmento')) {
-                   const segLetra = segmentoAtual.split('_').pop()?.toUpperCase();
-                   linhaReal = linhas.find(l => l.length >= 14 && l[7] === '3' && l[13] === segLetra) || '';
-               } else {
-                   // Generic detail or fallback
-                   linhaReal = linhas.find(l => l.length >= 8 && l[7] === '3') || '';
-               }
-            } else {
-               linhaReal = linhas.find(l => l.length >= 1 && l[0] === '1') || '';
-            }
-        } else if (segmentoAtual === 'trailer_lote') {
-            linhaReal = linhas.find(l => {
-              if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '5';
-              return false;
-            }) || '';
-        } else if (segmentoAtual === 'trailer_arquivo') {
-            linhaReal = linhas.find(l => {
-               if (tipoCNAB === 'CNAB_240') return l.length >= 8 && l[7] === '9';
-               return l.length >= 1 && l[0] === '9';
-            }) || '';
-        }
-
-        if (linhaReal) {
-            return linhaReal.padEnd(tamanho, ' ').substring(0, tamanho).split('');
-        } else {
-           // Retornar array vazio ou marcador para indicar "não encontrado"
-           return null;
-        }
-    }
-
-    let linha = Array(tamanho).fill(' ');
-    const camposDoSegmento = camposPorSegmento[segmentoAtual] || [];
-    
-    camposDoSegmento.forEach(campo => {
-      const inicio = campo.posicaoInicio - 1;
-      const valor = campo.valor === '(do PDF)' ? (campo.tipo === 'numerico' ? '9'.repeat(campo.tamanho) : 'X'.repeat(campo.tamanho)) : campo.valor;
-      for (let i = 0; i < campo.tamanho; i++) {
-        if (inicio + i < tamanho) {
-          linha[inicio + i] = valor[i] || (campo.tipo === 'numerico' ? '0' : ' ');
-        }
-      }
-    });
-
-    return linha;
-  }, [camposPorSegmento, segmentoAtual, tipoCNAB, conteudoRemessa]);
-
   // Handle text selection in visualizer to focus field
   const handleVisualizerSelection = () => {
      const selection = window.getSelection();
@@ -1343,16 +1352,68 @@ export default function ImportarLayout() {
           {etapa === 'resultado' && (
             <div className="flex flex-col h-[calc(100vh-180px)]">
               
+              {/* Painel de Validação */}
+              {validacaoLayout.length > 0 && (
+                <Card className="mb-4 flex-none">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4" />
+                      Validação do Layout
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-0 pb-3">
+                    <div className="flex flex-wrap gap-2">
+                      {validacaoLayout.map((v) => (
+                        <div key={v.segmento} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border ${
+                          v.status === 'ok' ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300' :
+                          v.status === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-300' :
+                          'bg-red-50 border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300'
+                        }`}>
+                          {v.status === 'ok' ? <ShieldCheck className="h-3 w-3" /> : v.status === 'warning' ? <ShieldAlert className="h-3 w-3" /> : <ShieldX className="h-3 w-3" />}
+                          <span className="font-medium">{v.segmento.replace(/_/g, ' ').toUpperCase()}</span>
+                          <span>({v.campos} campos, {v.cobertura}%)</span>
+                          {v.erros.length > 0 && (
+                            <Tooltip>
+                              <TooltipTrigger><AlertCircle className="h-3 w-3" /></TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                {v.erros.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
+                                {v.avisos.map((a, i) => <p key={`w${i}`} className="text-xs text-yellow-600">{a}</p>)}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Tabs Remessa / Retorno */}
+              <div className="flex-none mb-3">
+                <Tabs value={fluxoAtual} onValueChange={(v) => { setFluxoAtual(v as 'remessa' | 'retorno'); setSegmentoAtual('header_arquivo'); }}>
+                  <TabsList className="w-auto">
+                    <TabsTrigger value="remessa" className="gap-1.5">
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                      REMESSA
+                    </TabsTrigger>
+                    <TabsTrigger value="retorno" className="gap-1.5">
+                      <ArrowUpDown className="h-3.5 w-3.5 rotate-180" />
+                      RETORNO
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+
               {/* Topo: Editor de Campos (Scrollável) */}
               <div className="flex-1 overflow-hidden min-h-0 mb-4">
                 <Card className="h-full flex flex-col">
                   <CardHeader className="pb-3 flex-none">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">Editor de Campos</CardTitle>
-                      {/* Tabs de Segmento */}
+                      <CardTitle className="text-lg">Editor de Campos ({fluxoAtual.toUpperCase()})</CardTitle>
+                      {/* Tabs de Segmento filtradas pelo fluxo */}
                       <Tabs value={segmentoAtual} onValueChange={setSegmentoAtual} className="w-auto">
-                        <TabsList className="grid grid-cols-4 w-full h-auto flex-wrap justify-start gap-1 bg-transparent">
-                          {Object.entries(camposPorSegmento).map(([key, campos]) => {
+                        <TabsList className="h-auto flex-wrap justify-start gap-1 bg-transparent">
+                          {segmentosFluxoAtual.map(([key, campos]) => {
                             if (campos.length === 0 && !['header_arquivo', 'detalhe', 'trailer_arquivo'].includes(key)) return null;
                             return (
                               <TabsTrigger 
