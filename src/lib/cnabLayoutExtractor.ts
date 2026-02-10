@@ -197,7 +197,7 @@ function detectRecordType(text: string): string | null {
   const lower = text.toLowerCase();
   
   // Priorizar detecção de segmentos específicos antes do genérico "DETALHE"
-  // Segmentos Y com sub-tipo (Y03, Y53, etc.)
+  // Segmentos Y com sub-tipo (Y03, Y53, Y04, etc.)
   const segYMatch = lower.match(/segmento\s+y\s*[-–]?\s*(\d{2})/);
   if (segYMatch) {
     return `DETALHE_Y${segYMatch[1]}`;
@@ -216,6 +216,12 @@ function detectRecordType(text: string): string | null {
   }
   if (lower.includes('segmento r')) {
     return 'DETALHE_R';
+  }
+  if (lower.includes('segmento t')) {
+    return 'DETALHE_T';
+  }
+  if (lower.includes('segmento u')) {
+    return 'DETALHE_U';
   }
   if (lower.includes('segmento a')) {
     return 'DETALHE_A';
@@ -1015,8 +1021,8 @@ function blockToLayoutRecord(block: DetectedLayoutBlock, fillGaps: boolean = tru
       matchKeys.tipo_registro_pos = { start: block.record_size === 240 ? 8 : 1, value: '9' };
       break;
     default:
-      // Segmentos Y, S e outros
-      if (baseName.startsWith('DETALHE_Y') || baseName.startsWith('DETALHE_S')) {
+      // Segmentos T, U, S, Y e outros
+      if (baseName.startsWith('DETALHE_')) {
         matchKeys.tipo_registro_pos = { start: 8, value: '3' };
         const segCode = baseName.replace('DETALHE_', '');
         matchKeys.segmento_pos = { start: 14, value: segCode.charAt(0) };
@@ -1130,6 +1136,95 @@ function validateLayout(records: LayoutRecord[], recordSize: number): string[] {
   }
   
   return warnings;
+}
+
+/**
+ * Validação completa de layout importado
+ */
+export interface LayoutValidationResult {
+  segmento: string;
+  status: 'ok' | 'warning' | 'error';
+  campos: number;
+  cobertura: number; // % do registro coberto
+  erros: string[];
+  avisos: string[];
+}
+
+export function validateImportedLayout(
+  campos: import('@/lib/pdfLayoutParser').CampoDetectado[],
+  recordSize: number
+): LayoutValidationResult[] {
+  const results: LayoutValidationResult[] = [];
+  
+  // Agrupar campos por tipoLinha
+  const grupos: Record<string, typeof campos> = {};
+  for (const c of campos) {
+    const tipo = c.tipoLinha || 'detalhe';
+    if (!grupos[tipo]) grupos[tipo] = [];
+    grupos[tipo].push(c);
+  }
+  
+  for (const [tipo, camposGrupo] of Object.entries(grupos)) {
+    const erros: string[] = [];
+    const avisos: string[] = [];
+    const sorted = [...camposGrupo].sort((a, b) => a.posicaoInicio - b.posicaoInicio);
+    
+    // 1. Campos com posição > recordSize
+    for (const c of sorted) {
+      if (c.posicaoFim > recordSize) {
+        erros.push(`"${c.nome}" excede limite: pos ${c.posicaoFim} > ${recordSize}`);
+      }
+    }
+    
+    // 2. Sobreposição
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].posicaoFim >= sorted[i + 1].posicaoInicio) {
+        avisos.push(`Sobreposição: "${sorted[i].nome}" (${sorted[i].posicaoInicio}-${sorted[i].posicaoFim}) e "${sorted[i + 1].nome}" (${sorted[i + 1].posicaoInicio}-${sorted[i + 1].posicaoFim})`);
+      }
+    }
+    
+    // 3. Duplicatas
+    const posKeys = new Set<string>();
+    for (const c of sorted) {
+      const key = `${c.posicaoInicio}:${c.posicaoFim}`;
+      if (posKeys.has(key)) {
+        avisos.push(`Duplicata: "${c.nome}" em ${c.posicaoInicio}-${c.posicaoFim}`);
+      }
+      posKeys.add(key);
+    }
+    
+    // 4. Cobertura
+    let cobertos = 0;
+    const validFields = sorted.filter(c => c.posicaoFim <= recordSize);
+    for (const c of validFields) {
+      cobertos += (c.posicaoFim - c.posicaoInicio + 1);
+    }
+    const cobertura = Math.min(100, Math.round((cobertos / recordSize) * 100));
+    
+    // 5. Gaps grandes
+    if (validFields.length > 0) {
+      if (validFields[0].posicaoInicio > 1) {
+        avisos.push(`Gap no início: posições 1-${validFields[0].posicaoInicio - 1} sem campo`);
+      }
+      const last = validFields[validFields.length - 1];
+      if (last.posicaoFim < recordSize) {
+        avisos.push(`Gap no final: posições ${last.posicaoFim + 1}-${recordSize} sem campo`);
+      }
+    }
+    
+    const status = erros.length > 0 ? 'error' : avisos.length > 0 ? 'warning' : 'ok';
+    
+    results.push({
+      segmento: tipo,
+      status,
+      campos: camposGrupo.length,
+      cobertura,
+      erros,
+      avisos,
+    });
+  }
+  
+  return results;
 }
 
 /**
@@ -1257,17 +1352,30 @@ function mapRecordNameToTipoLinha(recordName: string): import('@/components/cnab
       return 'detalhe_segmento_q';
     case 'DETALHE_R':
       return 'detalhe_segmento_r';
+    case 'DETALHE_S':
+      return 'detalhe_segmento_s';
+    case 'DETALHE_T':
+      return 'detalhe_segmento_t';
+    case 'DETALHE_U':
+      return 'detalhe_segmento_u';
     case 'DETALHE_A':
       return 'detalhe_segmento_a';
     case 'DETALHE_B':
       return 'detalhe_segmento_b';
+    case 'DETALHE_Y':
+      return 'detalhe_segmento_y';
+    case 'DETALHE_Y03':
+      return 'detalhe_segmento_y03';
+    case 'DETALHE_Y04':
+      return 'detalhe_segmento_y04';
+    case 'DETALHE_Y53':
+      return 'detalhe_segmento_y53';
     case 'TRAILER_LOTE':
       return 'trailer_lote';
     case 'TRAILER_ARQUIVO':
       return 'trailer_arquivo';
     case 'DETALHE':
     default:
-      // Segmentos Y, S e outros mapeiam para 'detalhe' genérico
       return 'detalhe';
   }
 }
