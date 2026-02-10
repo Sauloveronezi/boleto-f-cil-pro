@@ -74,8 +74,10 @@ export function ResumoGeracao({
   // 1. Têm o banco_id igual ao banco selecionado (por UUID ou código)
   // 2. Têm o banco em bancos_compativeis
   // 3. Não têm banco associado (modelo genérico/universal)
+  // 4. Templates V2 (id começa com tplv2_) são sempre exibidos
   const modelosDisponiveis = modelos.filter(
     (m) =>
+      m.id.startsWith('tplv2_') ||
       m.banco_id === banco?.id ||
       m.banco_id === banco?.codigo_banco ||
       m.bancos_compativeis?.includes(banco?.id || '') ||
