@@ -660,6 +660,7 @@ export default function BoletosApi() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>CNPJ</TableHead>
                     <TableHead>Transportadora</TableHead>
+                    <TableHead>Banco</TableHead>
                     <TableHead>Emissão</TableHead>
                     <TableHead>Vencimento</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
@@ -680,6 +681,15 @@ export default function BoletosApi() {
                       <TableCell>{boleto.dyn_nome_do_cliente || boleto.cliente?.razao_social || '-'}</TableCell>
                       <TableCell className="font-mono text-sm">{getCnpj(boleto)}</TableCell>
                       <TableCell>{getTransportadora(boleto)}</TableCell>
+                      <TableCell className="text-sm">
+                        {(() => {
+                          const codigoBanco = boleto.banco?.replace(/\D/g, '').substring(0, 3);
+                          const bancoInfo = bancos?.find(b => b.codigo_banco.trim() === codigoBanco);
+                          return bancoInfo 
+                            ? <span>{bancoInfo.codigo_banco.trim()} - {bancoInfo.nome_banco}</span>
+                            : <span className="text-muted-foreground">{boleto.banco || '-'}</span>;
+                        })()}
+                      </TableCell>
                       <TableCell>
                         {boleto.data_emissao 
                           ? format(new Date(boleto.data_emissao), 'dd/MM/yyyy', { locale: ptBR })
