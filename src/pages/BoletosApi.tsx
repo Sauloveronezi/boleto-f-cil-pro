@@ -123,11 +123,18 @@ export default function BoletosApi() {
     return boletos?.filter((b: any) => {
       if (filtros.transportadora) {
         const transportadora = getTransportadora(b);
-        return String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase());
+        if (!String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase())) return false;
+      }
+      if (bancoSelecionado) {
+        const bancoFiltro = bancos?.find(banco => banco.id === bancoSelecionado);
+        if (bancoFiltro) {
+          const codigoBoleto = b.banco?.replace(/\D/g, '').substring(0, 3);
+          if (codigoBoleto !== bancoFiltro.codigo_banco.trim()) return false;
+        }
       }
       return true;
     }) || [];
-  }, [boletos, filtros.transportadora]);
+  }, [boletos, filtros.transportadora, bancoSelecionado, bancos]);
 
   const getNested = (obj: any, path: string): any => {
     try {
@@ -226,6 +233,7 @@ export default function BoletosApi() {
       cidade: '',
       transportadora: ''
     });
+    setBancoSelecionado('');
     setSelecionados(new Set());
   };
 
@@ -244,27 +252,22 @@ export default function BoletosApi() {
       return;
     }
 
-    if (!bancoSelecionado) {
-      toast({
-        title: 'Selecione um banco',
-        description: 'Escolha o banco emissor para gerar os boletos',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    const banco = bancos?.find(b => b.id === bancoSelecionado);
+    // Resolver banco a partir do primeiro boleto selecionado
+    const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
+    const primeiroBoleto = boletosSelecionados[0];
+    const codigoBancoBoleto = primeiroBoleto?.banco?.replace(/\D/g, '').substring(0, 3);
+    const banco = bancos?.find(b => b.codigo_banco.trim() === codigoBancoBoleto);
+    
     if (!banco) {
       toast({
-        title: 'Banco não encontrado',
-        description: 'Selecione um banco válido',
+        title: 'Banco não identificado',
+        description: 'Não foi possível identificar o banco nos boletos selecionados. Verifique se o campo "banco" está preenchido.',
         variant: 'destructive'
       });
       return;
     }
 
-    const configuracao = configuracoes?.find(c => c.banco_id === bancoSelecionado);
-    const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
+    const configuracao = configuracoes?.find(c => c.banco_id === banco.id);
 
     // Mapear dados dos boletos para DadosBoleto (usado por ambos os renderizadores)
     const mapearDadosBoletos = (boletosList: any[]) => {
@@ -439,15 +442,16 @@ export default function BoletosApi() {
             </Button>
             <Select 
               value={bancoSelecionado} 
-              onValueChange={setBancoSelecionado}
+              onValueChange={(v) => setBancoSelecionado(v === 'all' ? '' : v)}
             >
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Banco emissor" />
+                <SelectValue placeholder="Filtrar banco" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">Todos os bancos</SelectItem>
                 {bancos?.filter(b => b.ativo).map((b) => (
                   <SelectItem key={b.id} value={b.id}>
-                    {b.codigo_banco} - {b.nome_banco}
+                    {b.codigo_banco.trim()} - {b.nome_banco}
                   </SelectItem>
                 ))}
               </SelectContent>
