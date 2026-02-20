@@ -270,6 +270,7 @@ export default function BoletosApi() {
     const configuracao = configuracoes?.find(c => c.banco_id === banco.id);
 
     // Mapear dados dos boletos para DadosBoleto (usado por ambos os renderizadores)
+    const boletosComFalhaLinhaDigitavel: string[] = [];
     const mapearDadosBoletos = (boletosList: any[]) => {
       return boletosList.map((boleto: any) => {
         const notaFiscal = {
@@ -285,8 +286,43 @@ export default function BoletosApi() {
           referencia_interna: boleto.numero_cobranca || ''
         };
         const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
-        return mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
+        const dados = mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
+        
+        // Verificar se a linha digitável foi calculada
+        if (!dados.linha_digitavel) {
+          boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
+        }
+        
+        return dados;
       });
+    };
+
+    // Função para salvar linha digitável e código de barras no banco
+    const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[]) => {
+      for (let i = 0; i < boletosList.length; i++) {
+        const boleto = boletosList[i];
+        const dados = dadosBoletos[i];
+        if (dados.linha_digitavel && dados.codigo_barras) {
+          try {
+            // Salvar no registro do boleto gerado (vv_b_boletos_gerados)
+            await supabase
+              .from('vv_b_boletos_gerados')
+              .insert({
+                nota_fiscal_id: null,
+                modelo_boleto_id: modeloSelecionado || null,
+                banco_id: banco.id,
+                nosso_numero: dados.nosso_numero || '',
+                linha_digitavel: dados.linha_digitavel,
+                codigo_barras: dados.codigo_barras,
+                valor: boleto.valor || 0,
+                data_vencimento: boleto.data_vencimento || null,
+                status: 'gerado',
+              } as any);
+          } catch (err) {
+            console.warn('[BoletosApi] Erro ao salvar linha digitável:', err);
+          }
+        }
+      }
     };
 
     // Tentar usar template V2 (tabelas normalizadas)
@@ -298,7 +334,20 @@ export default function BoletosApi() {
         const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, imprimirFundo);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
+        
+        // Salvar linha digitável no banco
+        await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
+        
         toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${templateV2.name}"` });
+        
+        // Alertar sobre falhas na linha digitável
+        if (boletosComFalhaLinhaDigitavel.length > 0) {
+          toast({
+            title: '⚠️ Linha digitável não calculada',
+            description: `Não foi possível calcular a linha digitável para ${boletosComFalhaLinhaDigitavel.length} boleto(s): ${boletosComFalhaLinhaDigitavel.slice(0, 3).join(', ')}${boletosComFalhaLinhaDigitavel.length > 3 ? '...' : ''}. Verifique as configurações do banco (agência, conta, carteira).`,
+            variant: 'destructive',
+          });
+        }
       } catch (error: any) {
         console.error('[BoletosApi] Erro V2:', error);
         toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
@@ -340,7 +389,19 @@ export default function BoletosApi() {
         const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosBoletos, undefined, imprimirFundo);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
+        
+        // Salvar linha digitável no banco
+        await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
+        
         toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${modelo.nome_modelo}"` });
+        
+        if (boletosComFalhaLinhaDigitavel.length > 0) {
+          toast({
+            title: '⚠️ Linha digitável não calculada',
+            description: `Não foi possível calcular a linha digitável para ${boletosComFalhaLinhaDigitavel.length} boleto(s). Verifique as configurações do banco (agência, conta, carteira).`,
+            variant: 'destructive',
+          });
+        }
       } catch (error: any) {
         console.error('[BoletosApi] Erro legado:', error);
         toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });

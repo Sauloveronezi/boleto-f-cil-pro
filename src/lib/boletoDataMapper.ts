@@ -146,19 +146,19 @@ export function mapBoletoApiToDadosBoleto(
     '237': 'PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO OU BRADESCO EXPRESSO.',
     '341': 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.',
     '001': 'PAGÁVEL EM QUALQUER AGÊNCIA BANCÁRIA ATÉ O VENCIMENTO.',
-    '033': 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.',
+    '033': 'PAGÁVEL PREFERENCIALMENTE NO SANTANDER',
     '104': 'PAGÁVEL PREFERENCIALMENTE NAS CASAS LOTÉRICAS ATÉ O VALOR LIMITE.',
   };
   dados.local_pagamento = localPagamentoMap[codigoBanco] || 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.';
   dados.especie_documento = 'DM';
-  dados.aceite = 'N';
-  dados.especie_moeda = 'R$';
+  dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';
+  dados.especie_moeda = codigoBanco === '033' ? 'REAL' : 'R$';
 
   // Agência/Código e carteira
   const agencia = configBanco?.agencia || '';
   const conta = configBanco?.conta || '';
   const carteira = configBanco?.carteira || '09';
-  dados.carteira = carteira;
+  dados.carteira = codigoBanco === '033' ? 'ELETR C/REG' : carteira;
   dados.agencia_codigo = agencia && conta ? `${agencia} / ${conta}` : '';
 
   // ===== Calcular código de barras e linha digitável =====

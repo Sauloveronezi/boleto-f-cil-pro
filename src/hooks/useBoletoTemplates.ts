@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getDefaultTemplateFields } from '@/data/defaultBoletoTemplateFields';
+import { getSantanderTemplateFields } from '@/data/defaultSantanderTemplateFields';
 
 // ===== Types =====
 export interface BoletoTemplateRow {
@@ -42,6 +43,7 @@ const TEMPLATES_TABLE = 'vv_b_boleto_templates';
 const FIELDS_TABLE = 'vv_b_boleto_template_fields';
 
 const DEFAULT_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000001';
+const SANTANDER_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000033';
 
 // ===== Hooks de leitura =====
 
@@ -188,6 +190,75 @@ export function useSeedDefaultTemplate() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['boleto_templates'] });
       queryClient.invalidateQueries({ queryKey: ['boleto_template_default'] });
+      queryClient.invalidateQueries({ queryKey: ['boleto_template_fields'] });
+    },
+  });
+}
+
+/** Cria ou recria o template Santander */
+export function useSeedSantanderTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data: existing } = await supabase
+        .from(TEMPLATES_TABLE)
+        .select('id')
+        .eq('id', SANTANDER_TEMPLATE_ID)
+        .is('deleted', null)
+        .maybeSingle();
+
+      if (!existing) {
+        const { error: tplError } = await supabase
+          .from(TEMPLATES_TABLE)
+          .insert({
+            id: SANTANDER_TEMPLATE_ID,
+            name: 'Modelo Padrão Santander',
+            bank_code: '033',
+            layout_version: 'v1',
+            background_pdf_url: '/templates/boleto_santander_referencia.pdf',
+            page_width: 210,
+            page_height: 297,
+            requires_calculation: true,
+            is_default: false,
+          });
+        if (tplError) throw tplError;
+      }
+
+      await supabase
+        .from(FIELDS_TABLE)
+        .delete()
+        .eq('template_id', SANTANDER_TEMPLATE_ID);
+
+      const fields = getSantanderTemplateFields();
+      const fieldsToInsert = fields.map(f => ({
+        template_id: SANTANDER_TEMPLATE_ID,
+        key: f.key,
+        label: f.label,
+        source_ref: f.source_ref,
+        page: f.page,
+        bbox: f.bbox,
+        font_family: f.font_family || 'helvetica',
+        font_size: f.font_size || 10,
+        bold: f.bold || false,
+        align: f.align || 'left',
+        format: f.format || null,
+        is_barcode: f.is_barcode || false,
+        is_digitable_line: f.is_digitable_line || false,
+        display_order: f.display_order,
+        visible: true,
+      }));
+
+      const { error: fieldsError } = await supabase
+        .from(FIELDS_TABLE)
+        .insert(fieldsToInsert);
+      if (fieldsError) throw fieldsError;
+
+      console.log(`[seed] Template Santander criado/atualizado com ${fieldsToInsert.length} campos`);
+      return { id: SANTANDER_TEMPLATE_ID };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boleto_templates'] });
       queryClient.invalidateQueries({ queryKey: ['boleto_template_fields'] });
     },
   });
