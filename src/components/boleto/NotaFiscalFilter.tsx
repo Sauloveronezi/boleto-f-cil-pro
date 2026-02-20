@@ -93,6 +93,11 @@ export function NotaFiscalFilter({
     return cliente?.razao_social || 'Cliente não encontrado';
   };
 
+  const getClienteCnpj = (codigoCliente: string) => {
+    const cliente = clientes.find((c) => c.id === codigoCliente);
+    return cliente?.cnpj || '-';
+  };
+
   const handleSelectAll = () => {
     if (notasSelecionadas.length === notasFiltradas.length) {
       onNotasChange([]);
@@ -312,10 +317,14 @@ export function NotaFiscalFilter({
               <TableRow>
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Nota Fiscal</TableHead>
+                <TableHead>Série</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>CNPJ</TableHead>
                 <TableHead>Emissão</TableHead>
                 <TableHead>Vencimento</TableHead>
-                <TableHead>Valor</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Moeda</TableHead>
+                <TableHead>Nº Cobrança</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -332,16 +341,24 @@ export function NotaFiscalFilter({
                       onCheckedChange={() => handleSelectNota(nota.id)}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">
-                    {nota.numero_nota}-{nota.serie}
+                  <TableCell className="font-medium whitespace-nowrap">
+                    {nota.numero_nota}
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{nota.serie}</TableCell>
                   <TableCell className="max-w-[200px] truncate">
                     {getClienteNome(nota.codigo_cliente)}
                   </TableCell>
-                  <TableCell>{formatarData(nota.data_emissao)}</TableCell>
-                  <TableCell>{formatarData(nota.data_vencimento)}</TableCell>
-                  <TableCell className="font-semibold">
+                  <TableCell className="font-mono text-xs whitespace-nowrap">
+                    {getClienteCnpj(nota.codigo_cliente)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{formatarData(nota.data_emissao)}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatarData(nota.data_vencimento)}</TableCell>
+                  <TableCell className="font-semibold text-right whitespace-nowrap">
                     {formatarMoeda(nota.valor_titulo)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{nota.moeda || 'BRL'}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {nota.referencia_interna || '-'}
                   </TableCell>
                   <TableCell>
                     <span className={`badge-status ${STATUS_LABELS[nota.status].className}`}>
@@ -352,7 +369,7 @@ export function NotaFiscalFilter({
               ))}
               {notasFiltradas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                     Nenhuma nota fiscal encontrada com os filtros aplicados.
                   </TableCell>
                 </TableRow>
