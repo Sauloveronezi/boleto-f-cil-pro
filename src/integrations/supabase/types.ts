@@ -1767,6 +1767,51 @@ export type Database = {
           },
         ]
       }
+      vv_b_boletos_api_config: {
+        Row: {
+          campo_boleto: string | null
+          chave: string
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          id: string
+          label: string
+          ordem: number
+          tipo: string
+          updated_at: string
+          usuario_delete_id: string | null
+          visivel: boolean
+        }
+        Insert: {
+          campo_boleto?: string | null
+          chave: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          label: string
+          ordem?: number
+          tipo: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+          visivel?: boolean
+        }
+        Update: {
+          campo_boleto?: string | null
+          chave?: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          id?: string
+          label?: string
+          ordem?: number
+          tipo?: string
+          updated_at?: string
+          usuario_delete_id?: string | null
+          visivel?: boolean
+        }
+        Relationships: []
+      }
       vv_b_boletos_api_erros: {
         Row: {
           campo_erro: string | null
