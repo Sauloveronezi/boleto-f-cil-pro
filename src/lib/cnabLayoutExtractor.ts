@@ -79,6 +79,9 @@ const RE_GRID_COLUMNS = /^(\d{1,2}\.\d)\s+([A-Za-zÀ-ú\/\-\s]+?)\s+(.+?)\s+(\d{
 // Linhas com colunas: "POS INI/FINAL  DESCRIÇÃO  A/N  TAM  DEC  CONTEÚDO  NOTAS"
 // Ex.: "001 - 003  Código do Banco na compensação  N  003     033"
 const RE_SANTANDER_ROW = /^(\d{3})\s*[-–]\s*(\d{3})\s+(.+?)\s+([NA])\s+(\d{1,3})\s+(\d{1,2}|-)?\s*(.*)$/i;
+// === PADRÃO SANTANDER MARKDOWN (com pipes) ===
+// Ex.: "| 001 - 003 | Código do Banco na compensação | N | 003 | | 033 | 2 |"
+const RE_SANTANDER_MARKDOWN = /^\|?\s*(\d{3})\s*[-–]\s*(\d{3})\s*\|\s*(.+?)\s*\|\s*([NA])\s*\|\s*(\d{1,3})\s*\|\s*([\d]*|-)?\s*\|\s*(.*?)\s*\|?\s*(?:\|.*)?$/i;
 
 // === PADRÃO LINHA MARKDOWN ===
 // Formato: "| CAMPO | DESCRIÇÃO | 001 003 | 9(03) | CONTEÚDO |"
@@ -91,7 +94,7 @@ const RE_RECORD_SIZE = /tamanho\s*(?:do\s*)?registro\s*[=:]\s*(\d{3})\s*(?:bytes
 const TABLE_HEADERS = [
   'nome do campo', 'significado', 'posição', 'picture', 'conteúdo',
   'campo', 'de', 'até', 'nº', 'formato', 'default', 'descrição',
-  'pos', 'tamanho', 'tipo', 'dig', 'dec'
+  'pos', 'tamanho', 'tipo', 'dig', 'dec', 'a/n', 'tam', 'nota', 'notas'
 ];
 
 // Palavras que indicam que é um campo válido (para ajudar na detecção)
@@ -495,6 +498,8 @@ function parseMarkdownTable(line: string): ParsedTableRow | null {
   if (!line.includes('|')) return null;
   if (isTableHeader(line)) return null;
   if (line.includes('---')) return null; // Separador markdown
+  // Skip Santander-style markdown where first column is position (e.g., "| 001 - 003 |")
+  if (/^\|?\s*\d{3}\s*[-–]\s*\d{3}\s*\|/.test(line)) return null;
   
   const match = line.match(RE_MARKDOWN_TABLE);
   if (match) {
@@ -612,33 +617,45 @@ function parseGridColumns(line: string): ParsedTableRow | null {
  */
 function parseSantander(line: string): ParsedTableRow | null {
   if (isTableHeader(line)) return null;
+  
+  // Tentar primeiro o formato markdown (com pipes) - mais comum em PDFs recentes
+  const matchMd = line.match(RE_SANTANDER_MARKDOWN);
+  if (matchMd) {
+    const [, startStr, endStr, desc, tipoAN, tamStr, decStr, conteudo] = matchMd;
+    return buildSantanderRow(startStr, endStr, desc, tipoAN, tamStr, decStr, conteudo);
+  }
+  
+  // Formato sem pipes
   const match = line.match(RE_SANTANDER_ROW);
   if (match) {
     const [, startStr, endStr, desc, tipoAN, tamStr, decStr, conteudo] = match;
-    const start = parseInt(startStr);
-    const end = parseInt(endStr);
-    const tam = parseInt(tamStr);
-    const dec = decStr && decStr !== '-' ? parseInt(decStr) : undefined;
-    if (isNaN(start) || isNaN(end) || start > end || end > 500) return null;
-    const picture = tipoAN.toUpperCase() === 'N' ? '9' : 'X';
-    let dataType: CnabDataType = tipoAN.toUpperCase() === 'N' ? 'num' : 'alfa';
-    if (dec && dec > 0) dataType = 'decimal';
-    // Nome do campo: usar a descrição; conteúdo pode indicar campo destino (como "Nosso Número")
-    const fieldName = desc.trim();
-    const row: ParsedTableRow = {
-      field: fieldName,
-      description: fieldName,
-      start,
-      end,
-      picture,
-      digits: tam,
-      decimals: dec,
-      data_type: dataType,
-      notes: ['santander'],
-    };
-    return row;
+    return buildSantanderRow(startStr, endStr, desc, tipoAN, tamStr, decStr, conteudo);
   }
   return null;
+}
+
+function buildSantanderRow(startStr: string, endStr: string, desc: string, tipoAN: string, tamStr: string, decStr: string | undefined, conteudo: string | undefined): ParsedTableRow | null {
+  const start = parseInt(startStr);
+  const end = parseInt(endStr);
+  const tam = parseInt(tamStr);
+  const dec = decStr && decStr !== '-' && decStr !== '' ? parseInt(decStr) : undefined;
+  if (isNaN(start) || isNaN(end) || start > end || end > 500) return null;
+  const picture = tipoAN.toUpperCase() === 'N' ? '9' : 'X';
+  let dataType: CnabDataType = tipoAN.toUpperCase() === 'N' ? 'num' : 'alfa';
+  if (dec && dec > 0) dataType = 'decimal';
+  const fieldName = desc.trim();
+  const row: ParsedTableRow = {
+    field: fieldName,
+    description: fieldName,
+    start,
+    end,
+    picture,
+    digits: tam,
+    decimals: dec,
+    data_type: dataType,
+    notes: ['santander'],
+  };
+  return row;
 }
 
 /**
