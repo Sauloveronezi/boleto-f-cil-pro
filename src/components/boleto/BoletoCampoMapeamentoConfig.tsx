@@ -264,7 +264,7 @@ function ParametrosEditor({
     };
 
     return (
-      <div className="space-y-3 mt-1">
+      <div className="space-y-3 mt-1 min-w-[340px]">
         <Label className="text-xs">
           Partes da composição (cada parte extrai dados de um campo):
         </Label>
@@ -274,11 +274,11 @@ function ParametrosEditor({
           </p>
         )}
         {partes.map((parte, idx) => (
-          <div key={idx} className="border rounded p-2 space-y-2 bg-background">
-            <div className="flex items-center gap-1">
-              <Badge variant="secondary" className="text-[10px]">Parte {idx + 1}</Badge>
+          <div key={idx} className="border rounded p-3 space-y-2 bg-background">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Badge variant="secondary" className="text-[10px] shrink-0">Parte {idx + 1}</Badge>
               {idx > 0 && (
-                <div className="flex items-center gap-1 ml-auto">
+                <div className="flex items-center gap-1">
                   <Label className="text-[10px] whitespace-nowrap">Separador antes:</Label>
                   <Input
                     className="h-6 w-16 text-xs text-center"
@@ -291,46 +291,53 @@ function ParametrosEditor({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-destructive ml-auto"
+                className="h-6 w-6 text-destructive shrink-0"
                 onClick={() => removeParte(idx)}
               >
                 <X className="h-3 w-3" />
               </Button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-2">
               <div>
                 <Label className="text-[10px]">Campo</Label>
                 <CampoFonteCombobox
                   value={parte.campo || ''}
                   onValueChange={(v) => updateParte(idx, 'campo', v)}
-                  className="h-7 w-full text-xs"
+                  className="h-8 w-full text-xs"
                 />
+                {parte.campo && (
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block truncate">
+                    Selecionado: <strong>{parte.campo}</strong>
+                  </span>
+                )}
               </div>
-              <div>
-                <Label className="text-[10px]">Extração</Label>
-                <Select
-                  value={parte.extracao || 'completo'}
-                  onValueChange={(v) => updateParte(idx, 'extracao', v)}
-                >
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="completo">Valor completo</SelectItem>
-                    <SelectItem value="primeiros">Primeiros N dígitos</SelectItem>
-                    <SelectItem value="ultimos">Últimos N dígitos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(parte.extracao === 'primeiros' || parte.extracao === 'ultimos') && (
-                <div>
-                  <Label className="text-[10px]">N dígitos</Label>
-                  <Input
-                    type="number"
-                    className="h-7 text-xs"
-                    value={parte.n || ''}
-                    onChange={(e) => updateParte(idx, 'n', parseInt(e.target.value) || 0)}
-                  />
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label className="text-[10px]">Extração</Label>
+                  <Select
+                    value={parte.extracao || 'completo'}
+                    onValueChange={(v) => updateParte(idx, 'extracao', v)}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="completo">Valor completo</SelectItem>
+                      <SelectItem value="primeiros">Primeiros N dígitos</SelectItem>
+                      <SelectItem value="ultimos">Últimos N dígitos</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+                {(parte.extracao === 'primeiros' || parte.extracao === 'ultimos') && (
+                  <div className="w-20 shrink-0">
+                    <Label className="text-[10px]">N dígitos</Label>
+                    <Input
+                      type="number"
+                      className="h-8 text-xs"
+                      value={parte.n || ''}
+                      onChange={(e) => updateParte(idx, 'n', parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -338,13 +345,13 @@ function ParametrosEditor({
           <Plus className="h-3 w-3 mr-1" /> Adicionar parte
         </Button>
         {partes.length > 0 && (
-          <div className="text-xs text-muted-foreground bg-muted rounded p-2">
+          <div className="text-xs text-muted-foreground bg-muted rounded p-2 break-words">
             <strong>Preview:</strong>{' '}
             {partes.map((p, i) => {
               let desc = p.campo || '???';
               if (p.extracao === 'primeiros') desc = `primeiros ${p.n || '?'} de ${desc}`;
               if (p.extracao === 'ultimos') desc = `últimos ${p.n || '?'} de ${desc}`;
-              return (i > 0 && p.separador ? `"${p.separador}"` + desc : desc);
+              return (i > 0 && p.separador ? ` "${p.separador}" ${desc}` : desc);
             }).join(' + ')}
           </div>
         )}
@@ -510,15 +517,15 @@ export function BoletoCampoMapeamentoConfig() {
         {isLoading ? (
           <p className="text-muted-foreground text-sm">Carregando...</p>
         ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <Table className="table-fixed w-full">
+          <div className="border rounded-lg overflow-x-auto">
+            <Table className="w-full">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[60px]">Ativo</TableHead>
-                  <TableHead className="w-[18%]">Campo Boleto</TableHead>
-                  <TableHead className="w-[18%]">Label</TableHead>
-                  <TableHead className="w-[22%]">Campo Fonte (Tabela)</TableHead>
-                  <TableHead className="w-[22%]">Tipo</TableHead>
+                  <TableHead className="min-w-[120px]">Campo Boleto</TableHead>
+                  <TableHead className="min-w-[120px]">Label</TableHead>
+                  <TableHead className="min-w-[150px]">Campo Fonte (Tabela)</TableHead>
+                  <TableHead className="min-w-[200px]">Tipo</TableHead>
                   <TableHead className="w-[80px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
