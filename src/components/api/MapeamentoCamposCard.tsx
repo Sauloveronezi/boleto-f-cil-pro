@@ -111,6 +111,7 @@ export function MapeamentoCamposCard({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [novoCampoApi, setNovoCampoApi] = useState('');
+  const [buscaCampoApi, setBuscaCampoApi] = useState('');
 
   const previewColumns = useMemo(() => {
     if (!previewData?.length) return [] as string[];
@@ -728,8 +729,16 @@ export function MapeamentoCamposCard({
             <Label className="text-sm font-medium text-blue-800 dark:text-blue-200">
               Campos Disponíveis da API ({camposApiDetectados.length} campos, {camposDisponiveis.filter(c => c.jaMapeado).length} já mapeados)
             </Label>
-            <div className="flex flex-wrap gap-1 mt-2 max-h-32 overflow-y-auto">
-              {camposDisponiveis.map(({ campo, jaMapeado }) => (
+            <Input
+              placeholder="Pesquisar campo..."
+              value={buscaCampoApi}
+              onChange={(e) => setBuscaCampoApi(e.target.value)}
+              className="mt-2 mb-2"
+            />
+            <div className="flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto">
+              {camposDisponiveis
+                .filter(({ campo }) => !buscaCampoApi || campo.toLowerCase().includes(buscaCampoApi.toLowerCase()))
+                .map(({ campo, jaMapeado }) => (
                 <Badge 
                   key={campo} 
                   variant={jaMapeado ? "secondary" : "outline"}

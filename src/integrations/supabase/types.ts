@@ -1528,6 +1528,7 @@ export type Database = {
           cep: string | null
           cliente: string | null
           cliente_id: string | null
+          cod_barras: number | null
           companycode: number | null
           created_at: string
           customer: string | null
@@ -1537,6 +1538,7 @@ export type Database = {
           data_emissao: string | null
           data_vencimento: string | null
           deleted: string | null
+          doc_contabil: string | null
           documento: string | null
           DocumentReferenceID: string | null
           dyn_cidade: string | null
@@ -1550,6 +1552,7 @@ export type Database = {
           id: string
           integracao_id: string | null
           json_original: Json | null
+          nosso_numero: string | null
           numero_cobranca: string
           numero_nota: string
           pais: string | null
@@ -1578,6 +1581,7 @@ export type Database = {
           updated_at: string
           usuario_delete_id: string | null
           valor: number | null
+          valor_com_desconto: number | null
           valor_desconto: number | null
           yy1_custtranspzone_sdh: string | null
           yy1_custtranspzonpais_sdh: string | null
@@ -1612,6 +1616,7 @@ export type Database = {
           cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
+          cod_barras?: number | null
           companycode?: number | null
           created_at?: string
           customer?: string | null
@@ -1621,6 +1626,7 @@ export type Database = {
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          doc_contabil?: string | null
           documento?: string | null
           DocumentReferenceID?: string | null
           dyn_cidade?: string | null
@@ -1634,6 +1640,7 @@ export type Database = {
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
+          nosso_numero?: string | null
           numero_cobranca: string
           numero_nota: string
           pais?: string | null
@@ -1662,6 +1669,7 @@ export type Database = {
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
+          valor_com_desconto?: number | null
           valor_desconto?: number | null
           yy1_custtranspzone_sdh?: string | null
           yy1_custtranspzonpais_sdh?: string | null
@@ -1696,6 +1704,7 @@ export type Database = {
           cep?: string | null
           cliente?: string | null
           cliente_id?: string | null
+          cod_barras?: number | null
           companycode?: number | null
           created_at?: string
           customer?: string | null
@@ -1705,6 +1714,7 @@ export type Database = {
           data_emissao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
+          doc_contabil?: string | null
           documento?: string | null
           DocumentReferenceID?: string | null
           dyn_cidade?: string | null
@@ -1718,6 +1728,7 @@ export type Database = {
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
+          nosso_numero?: string | null
           numero_cobranca?: string
           numero_nota?: string
           pais?: string | null
@@ -1746,6 +1757,7 @@ export type Database = {
           updated_at?: string
           usuario_delete_id?: string | null
           valor?: number | null
+          valor_com_desconto?: number | null
           valor_desconto?: number | null
           yy1_custtranspzone_sdh?: string | null
           yy1_custtranspzonpais_sdh?: string | null

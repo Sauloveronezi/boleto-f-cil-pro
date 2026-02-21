@@ -255,7 +255,23 @@ export default function BoletosApi() {
           status: 'aberta' as const,
           referencia_interna: boleto.numero_cobranca || ''
         };
-        const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configuracao);
+        // Extrair agência/conta dos dados da API (BankInternalID, BankAccountLongID)
+        const extras = boleto.dados_extras || {};
+        const bankInternalId = boleto.BankInternalID || boleto.bankinternalid || extras?.BankInternalID || extras?.bankinternalid || '';
+        const bankAccountLongId = boleto.BankAccountLongID || boleto.bankaccountlongid || extras?.BankAccountLongID || extras?.bankaccountlongid || '';
+        const bankControlKey = boleto.bankcontrolkey || extras?.bankcontrolkey || '';
+        
+        // BankInternalID pode conter banco+agência (ex: "34171463" = banco 341 + agência 1463)
+        const agenciaApi = bankInternalId ? bankInternalId.toString().replace(/\D/g, '').slice(-4) : '';
+        const contaApi = bankAccountLongId ? bankAccountLongId.toString().replace(/\D/g, '') : '';
+        
+        // Sobrescrever config com dados da API se disponíveis
+        const configOverride = configuracao ? { ...configuracao } : undefined;
+        if (configOverride && agenciaApi) configOverride.agencia = agenciaApi;
+        if (configOverride && contaApi) configOverride.conta = contaApi;
+        if (configOverride && bankControlKey) (configOverride as any).conta_dv = bankControlKey;
+        
+        const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configOverride);
         const dados = mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
         if (!dados.linha_digitavel) {
           boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
