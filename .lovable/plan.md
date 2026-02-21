@@ -1,87 +1,71 @@
 
+# Plan: Fix Barcode Calculation, API Config UI, Search in Mapping, and Preserve Existing Mappings
 
-# Plano: Separacao Remessa/Retorno, Novos Segmentos e Validacao de Leitura
+## Summary of Issues
 
-## Problema Identificado
+1. **Wrong barcode for document 1727** - The system uses static bank config (agencia=9012, conta=34567-8) instead of the actual data from the API (agencia=1463, conta=99540). Also, the Itau campo livre DAC values are hardcoded to `0` instead of being calculated.
+2. **API config dialog overflow** - The BoletosApiConfigDialog has items rendering outside the grid, buttons not clickable.
+3. **Missing search in API field mapping** - The "Campos Disponiveis da API" section has 92 fields but no search filter.
+4. **Existing mappings being overwritten** - Opening the API config screen may trigger re-detection of fields that resets mappings.
 
-O importador de layout CNAB atualmente:
-- Nao reconhece segmentos de **retorno** (T, U, Y-04) como tipos distintos - mapeia tudo para "detalhe" generico
-- Nao separa visualmente campos de **remessa** e **retorno** em abas/secoes diferentes  
-- Falta suporte para segmentos Y03, Y53, S como tipos de registro proprios no TypeScript
-- Campos de retorno (ex: #282 "Agencia doBeneficiario (Retorno)") aparecem misturados com campos de remessa na mesma aba
-- Nao existe validacao de leitura para verificar integridade dos campos importados
+---
 
-## Estrutura do Manual Santander (referencia)
+## Technical Details
 
-O manual define claramente:
+### 1. Fix Barcode Calculation (barcodeCalculator.ts + boletoDataMapper.ts + BoletosApi.tsx)
 
-**REMESSA:** Header Arquivo, Header Lote, Segmento P, Q, R, S, Y03, Y53, Trailer Lote, Trailer Arquivo
+**Root cause analysis** using real data from the boleto reference:
+- Correct line: `34191.09107 00000.971465 39954.050009 2 13910000002228`
+- Decoding reveals: agencia=1463, conta=99540, carteira=109, nosso_numero=10000009, valor=22.28
+- The API record has: `BankInternalID=34171463` (bank 341 + agencia 1463), `BankAccountLongID=99540`
+- The system's static config has agencia=9012, conta=34567-8 which is incorrect for this boleto
 
-**RETORNO:** Header Arquivo, Header Lote, Segmento T, U, Y03, Y04, Trailer Lote, Trailer Arquivo
+**Changes:**
 
-## Alteracoes Planejadas
+**a) `src/lib/boletoDataMapper.ts`** - Fix DAC calculation for Itau campo livre:
+- Replace hardcoded `0` DACs with actual `calcularModulo10` calculations
+- Import `calcularModulo10` from barcodeCalculator
+- For case '341': Calculate DAC1 = modulo10(ag+ct+carteira+nossoNumero) and DAC2 = modulo10(ag+ct)
 
-### 1. Expandir tipos de registro (`src/types/boleto.ts`)
+**b) `src/pages/BoletosApi.tsx`** - Extract agencia/conta from API data:
+- Before calling `gerarCodigoBarras`, check `boleto.dados_extras.BankInternalID` for agencia (last 4 digits) and `boleto.dados_extras.BankAccountLongID` for conta
+- Build an overridden config merging API data over static config
+- Also use `boleto.dados_extras.bankcontrolkey` as account check digit
 
-Adicionar novos valores ao tipo `TipoRegistroCNAB`:
-- `detalhe_segmento_t` (retorno)
-- `detalhe_segmento_u` (retorno)
-- `detalhe_segmento_s` (remessa)
-- `detalhe_segmento_y03` (remessa/retorno)
-- `detalhe_segmento_y53` (remessa)
-- `detalhe_segmento_y04` (retorno)
-- `detalhe_segmento_y` (generico)
+**c) `src/lib/barcodeCalculator.ts`** - No changes needed (the calculator is correct; the issue is in the data mapper and in BoletosApi passing wrong config)
 
-### 2. Corrigir mapeamento de nomes de registro (`src/lib/cnabLayoutExtractor.ts`)
+### 2. Fix API Config Dialog UI (BoletosApiConfigDialog.tsx)
 
-- Atualizar `detectRecordType` para reconhecer segmentos T e U (retorno)
-- Atualizar `mapRecordNameToTipoLinha` para mapear corretamente:
-  - `DETALHE_T` -> `detalhe_segmento_t`
-  - `DETALHE_U` -> `detalhe_segmento_u`
-  - `DETALHE_S` -> `detalhe_segmento_s`
-  - `DETALHE_Y03` -> `detalhe_segmento_y03`
-  - `DETALHE_Y53` -> `detalhe_segmento_y53`
-  - `DETALHE_Y04` -> `detalhe_segmento_y04`
-- Atualizar `blockToLayoutRecord` para configurar match_keys dos novos segmentos
+**Changes:**
+- Increase `max-w-lg` to `max-w-2xl` for more space
+- Add `overflow-hidden` to item rows to prevent overflow
+- Make the "Adicionar" button more accessible by ensuring the form grid doesn't push it off-screen
+- Add `truncate` to long chave/label texts
+- Ensure ScrollArea is used for long lists
 
-### 3. Separar remessa e retorno na interface (`src/pages/ImportarLayout.tsx`)
+### 3. Add Search in API Field Mapping (MapeamentoCamposCard.tsx)
 
-- Reformular `camposPorSegmento` para agrupar por fluxo (remessa/retorno) e segmento
-- Adicionar nivel superior de tabs: **REMESSA** | **RETORNO**
-- Dentro de cada tab, mostrar os segmentos correspondentes:
-  - Remessa: Header Arquivo, Header Lote, P, Q, R, S, Y03, Y53, Trailer Lote, Trailer Arquivo
-  - Retorno: Header Arquivo, Header Lote, T, U, Y03, Y04, Trailer Lote, Trailer Arquivo
-- Usar sufixo `_REMESSA`/`_RETORNO` dos nomes de registro para classificar
+**Changes:**
+- Add a search `Input` above the "Campos Disponiveis da API" badges section
+- Filter `camposDisponiveis` by the search term (case-insensitive)
+- Show count of filtered vs total results
 
-### 4. Validacao de leitura (`src/lib/cnabLayoutExtractor.ts` e `src/pages/ImportarLayout.tsx`)
+### 4. Preserve Existing Mappings (MapeamentoCamposCard.tsx)
 
-Adicionar funcao `validateImportedLayout` que verifica:
-- Campos com posicao final > tamanho do registro (240/400)
-- Sobreposicao de campos dentro do mesmo segmento
-- Gaps nao preenchidos (campos faltantes)
-- Campos duplicados (mesma posicao inicio/fim no mesmo segmento)
-- Segmentos obrigatorios ausentes (Header, P, Q para remessa; T, U para retorno)
-- Total de bytes cobertos vs tamanho do registro
+**Root cause:** When the API config section is opened, clicking "Atualizar Campos" calls `test-api-connection` which updates `campos_api_detectados` on the integration record. This doesn't overwrite mappings. However, the "Campo da API" selector in "Adicionar Novo Mapeamento" filters out already-mapped fields (line 767-768: `.filter(c => !c.jaMapeado)`), which is correct behavior.
 
-Exibir painel de validacao na UI com:
-- Indicadores verde/amarelo/vermelho por segmento
-- Lista de avisos e erros encontrados
-- Contagem de campos por segmento
+The actual issue may be that when re-detecting fields, the `campos_api_detectados` array gets reset, which changes the badge display but doesn't affect saved mappings. The fix:
+- In `handleAtualizarCampos` in ApiConfigCard.tsx, merge newly detected fields with existing `campos_api_detectados` instead of replacing them
+- Ensure the field detection preserves the existing list and only adds new fields
 
-### 5. Salvar informacao de fluxo (`src/pages/ImportarLayout.tsx`)
+---
 
-Ao salvar o padrao CNAB, incluir metadado `fluxo: 'remessa' | 'retorno' | 'ambos'` no campo de cada registro para que ao gerar/ler arquivos futuramente o sistema saiba quais campos usar.
+## Files to Modify
 
-## Detalhes Tecnicos
-
-### Arquivos modificados:
-1. **`src/types/boleto.ts`** - Expandir `TipoRegistroCNAB` com novos segmentos
-2. **`src/lib/cnabLayoutExtractor.ts`** - Corrigir `detectRecordType`, `mapRecordNameToTipoLinha`, `blockToLayoutRecord`, adicionar `validateImportedLayout`
-3. **`src/pages/ImportarLayout.tsx`** - Reestruturar tabs com nivel remessa/retorno, adicionar painel de validacao
-4. **`src/components/cnab/CnabTextEditor.tsx`** - Verificar compatibilidade com novos TipoLinha (TipoLinha = TipoRegistroCNAB, entao herda automaticamente)
-
-### Compatibilidade:
-- `TipoLinha` eh alias de `TipoRegistroCNAB`, entao expandir o tipo base atualiza automaticamente todas as referencias
-- Campos existentes salvos com tipos antigos continuam funcionando (retrocompativel)
-- A funcao `mapTipoRegistroParaTipoLinha` em ImportarLayout precisa ser atualizada para os novos tipos
-
+| File | Change |
+|------|--------|
+| `src/lib/boletoDataMapper.ts` | Fix Itau DAC calculation using calcularModulo10 |
+| `src/pages/BoletosApi.tsx` | Extract agencia/conta from API dados_extras |
+| `src/components/boleto/BoletosApiConfigDialog.tsx` | Fix dialog layout/overflow |
+| `src/components/api/MapeamentoCamposCard.tsx` | Add search filter for API fields |
+| `src/components/api/ApiConfigCard.tsx` | Merge detected fields instead of replacing |
