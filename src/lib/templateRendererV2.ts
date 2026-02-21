@@ -51,7 +51,9 @@ function formatValue(raw: string, format: string | null | undefined): string {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
   }
   if (format === 'date_ddmmyyyy') {
-    const d = new Date(raw);
+    // Append T12:00 to avoid UTC timezone shift showing previous day
+    const dateStr = String(raw).substring(0, 10);
+    const d = new Date(dateStr + 'T12:00:00');
     if (isNaN(d.getTime())) return raw; // Já pode estar formatada
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
