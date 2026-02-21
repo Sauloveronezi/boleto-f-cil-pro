@@ -1561,6 +1561,7 @@ export type Database = {
           BR_NFPartnerFunction: string | null
           br_nfsourcedocumenttype: string | null
           br_nfsubseries: string | null
+          carteira: string | null
           CashDiscount1Days: string | null
           CashDiscount1Percent: string | null
           CashDiscount2Days: string | null
@@ -1640,6 +1641,7 @@ export type Database = {
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
+          carteira?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
@@ -1719,6 +1721,7 @@ export type Database = {
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
+          carteira?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
