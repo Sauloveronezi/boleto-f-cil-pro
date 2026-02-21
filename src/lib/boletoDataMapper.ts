@@ -128,13 +128,14 @@ export function mapBoletoApiToDadosBoleto(
   dados.data_documento = row.data_emissao || row.PostingDate || '';
   dados.data_processamento = row.data_emissao || '';
 
-  // Valores
+  // O valor na tabela já vem com desconto aplicado; valor original = valor + valor_desconto
   const valor = row.valor != null ? Number(row.valor) : 0;
-  dados.valor_documento = valor ? String(valor) : '';
-  dados.valor_titulo = dados.valor_documento;
-  dados.valor_cobrado = dados.valor_documento;
-
   const valorDesconto = row.valor_desconto != null ? Number(row.valor_desconto) : 0;
+  const valorOriginal = valor + valorDesconto;
+  dados.valor_documento = valorOriginal ? String(valorOriginal) : '';
+  dados.valor_titulo = dados.valor_documento;
+  dados.valor_cobrado = valor ? String(valor) : '';
+
   dados.valor_desconto = valorDesconto ? String(valorDesconto) : '';
 
   // Banco / Beneficiário
@@ -162,12 +163,20 @@ export function mapBoletoApiToDadosBoleto(
   dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';
   dados.especie_moeda = codigoBanco === '033' ? 'REAL' : 'R$';
 
-  // Agência/Código e carteira
+  // Agência/Código beneficiário: últimos 4 dígitos do campo banco / BankAccountLongID - BankControlKey
   const agencia = configBanco?.agencia || '';
   const conta = configBanco?.conta || '';
   const carteira = configBanco?.carteira || '09';
   dados.carteira = codigoBanco === '033' ? 'ELETR C/REG' : carteira;
-  dados.agencia_codigo = agencia && conta ? `${agencia} / ${conta}` : '';
+  
+  const bancoLast4 = (row.banco || '').replace(/\D/g, '').slice(-4);
+  const bankAccLong = row.BankAccountLongID || row.bankaccountlongid || '';
+  const bankCtrlKey = row.bankcontrolkey || row.BankControlKey || '';
+  if (bancoLast4 && bankAccLong) {
+    dados.agencia_codigo = `${bancoLast4} / ${bankAccLong}${bankCtrlKey ? '-' + bankCtrlKey : ''}`;
+  } else {
+    dados.agencia_codigo = agencia && conta ? `${agencia} / ${conta}` : '';
+  }
 
   // ===== Calcular código de barras e linha digitável =====
   if (configBanco && codigoBanco && dados.data_vencimento && valor > 0 && nossoNumeroRaw) {
