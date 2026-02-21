@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,8 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
-import { Pencil, Save, X, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
+import { Pencil, Save, X, Plus, Trash2, Search, ArrowUpDown, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   useBoletoCampoMapeamento,
   useUpdateBoletoCampoMapeamento,
@@ -24,18 +27,221 @@ const TIPOS_TRANSFORMACAO = [
   { value: 'concatenar', label: 'Concatenar campos' },
 ];
 
-// Campos conhecidos da tabela vv_b_boletos_api
+// Campos da tabela vv_b_boletos_api - lista completa ordenada alfabeticamente
 const CAMPOS_DISPONIVEIS = [
-  'numero_nota', 'numero_cobranca', 'cliente', 'dyn_nome_do_cliente', 'taxnumber1', 'TaxNumber1',
-  'endereco', 'bairro', 'dyn_cidade', 'uf', 'cep', 'pais',
-  'banco', 'BankInternalID', 'bankinternalid', 'BankAccountLongID', 'bankaccountlongid', 'bankcontrolkey',
-  'data_emissao', 'data_vencimento', 'valor', 'valor_desconto', 'valor_com_desconto',
-  'nosso_numero', 'cod_barras', 'serie', 'documento', 'doc_contabil',
-  'companycode', 'empresa', 'customer', 'dyn_conta', 'dyn_zonatransporte', 'dyn_desconto1',
-  'PaymentDueDate', 'PostingDate', 'PaymentMethod', 'PaymentCurrency',
-  'AccountingDocument', 'br_nfpartnercnpj', 'br_nfnumber', 'br_nfenumber',
+  'accountingdocument',
+  'AccountingDocument',
+  'accountingdocumenttype',
+  'bairro',
+  'banco',
+  'bankaccountlongid',
+  'BankAccountLongID',
+  'bankcontrolkey',
+  'bankinternalid',
+  'BankInternalID',
+  'billingdocument',
+  'br_nfenumber',
+  'br_nfnumber',
+  'br_nfpartnercnpj',
+  'BR_NFPartnerFunction',
+  'br_nfsourcedocumenttype',
+  'br_nfsubseries',
   'carteira',
-];
+  'CashDiscount1Days',
+  'CashDiscount1Percent',
+  'CashDiscount2Days',
+  'cashdiscountamountinfuncnlcrcy',
+  'CashDiscountAmountInFuncnlCrcy',
+  'cashdiscountamtincocodecrcy',
+  'CashDiscountAmtInCoCodeCrcy',
+  'cashdiscountamtintransaccrcy',
+  'CashDiscountAmtInTransacCrcy',
+  'cep',
+  'cliente',
+  'cliente_id',
+  'cod_barras',
+  'companycode',
+  'customer',
+  'dados_extras',
+  'data_desconto',
+  'data_emissao',
+  'data_vencimento',
+  'doc_contabil',
+  'documento',
+  'DocumentReferenceID',
+  'dyn_cidade',
+  'dyn_conta',
+  'dyn_desconto1',
+  'dyn_nome_do_cliente',
+  'dyn_zonatransporte',
+  'empresa',
+  'endereco',
+  'FinancialAccountType',
+  'nosso_numero',
+  'numero_cobranca',
+  'numero_nota',
+  'pais',
+  'payeeadditionalname',
+  'payeeregion',
+  'paymentamountinfunctionalcrcy',
+  'PaymentAmountInFunctionalCrcy',
+  'paymentcurrency',
+  'PaymentCurrency',
+  'PaymentDueDate',
+  'PaymentMethod',
+  'paymentorigin',
+  'PaymentOrigin',
+  'paymentreference',
+  'paymentrundate',
+  'paymentrunisproposal',
+  'PaymentRunIsProposal',
+  'paytamountincocodecurrency',
+  'PaytAmountInCoCodeCurrency',
+  'PostingDate',
+  'serie',
+  'taxnumber1',
+  'TaxNumber1',
+  'uf',
+  'valor',
+  'valor_com_desconto',
+  'valor_desconto',
+  'yy1_custtranspzone_sdh',
+  'yy1_custtranspzonpais_sdh',
+].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+/** Combobox com pesquisa para selecionar campo fonte */
+function CampoFonteCombobox({
+  value,
+  onValueChange,
+  className,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn('justify-between font-normal', className)}
+        >
+          <span className="truncate">{value || 'Selecione...'}</span>
+          <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Pesquisar campo..." />
+          <CommandList>
+            <CommandEmpty>Nenhum campo encontrado.</CommandEmpty>
+            <CommandGroup>
+              {CAMPOS_DISPONIVEIS.map((campo) => (
+                <CommandItem
+                  key={campo}
+                  value={campo}
+                  onSelect={() => {
+                    onValueChange(campo);
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={cn('mr-2 h-3.5 w-3.5', value === campo ? 'opacity-100' : 'opacity-0')} />
+                  {campo}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Editor de parâmetros para soma/concatenar */
+function ParametrosEditor({
+  tipo,
+  parametros,
+  onChange,
+}: {
+  tipo: string;
+  parametros: Record<string, any>;
+  onChange: (p: Record<string, any>) => void;
+}) {
+  const campos: string[] = parametros?.campos || [];
+
+  if (tipo === 'ultimos_N') {
+    return (
+      <div className="flex items-center gap-2 mt-1">
+        <Label className="text-xs whitespace-nowrap">N caracteres:</Label>
+        <Input
+          type="number"
+          className="h-7 w-20"
+          value={parametros?.n || ''}
+          onChange={(e) => onChange({ ...parametros, n: parseInt(e.target.value) || 0 })}
+        />
+      </div>
+    );
+  }
+
+  if (tipo === 'soma' || tipo === 'concatenar') {
+    return (
+      <div className="space-y-2 mt-1">
+        <Label className="text-xs">
+          Campos para {tipo === 'soma' ? 'somar' : 'concatenar'}:
+        </Label>
+        {campos.map((c, idx) => (
+          <div key={idx} className="flex items-center gap-1">
+            <CampoFonteCombobox
+              value={c}
+              onValueChange={(v) => {
+                const novo = [...campos];
+                novo[idx] = v;
+                onChange({ ...parametros, campos: novo });
+              }}
+              className="h-7 flex-1 text-xs"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive"
+              onClick={() => {
+                const novo = campos.filter((_, i) => i !== idx);
+                onChange({ ...parametros, campos: novo });
+              }}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {tipo === 'concatenar' && campos.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Label className="text-xs whitespace-nowrap">Separador:</Label>
+            <Input
+              className="h-7 w-20"
+              placeholder="ex: / "
+              value={parametros?.separador || ''}
+              onChange={(e) => onChange({ ...parametros, separador: e.target.value })}
+            />
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => onChange({ ...parametros, campos: [...campos, ''] })}
+        >
+          <Plus className="h-3 w-3 mr-1" /> Adicionar campo
+        </Button>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 export function BoletoCampoMapeamentoConfig() {
   const { toast } = useToast();
@@ -45,7 +251,7 @@ export function BoletoCampoMapeamentoConfig() {
   const deleteMut = useDeleteBoletoCampoMapeamento();
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Partial<BoletoCampoMapeamento>>({});
+  const [editValues, setEditValues] = useState<Partial<BoletoCampoMapeamento> & { parametros?: Record<string, any> }>({});
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [newCampo, setNewCampo] = useState<Partial<BoletoCampoMapeamento>>({
@@ -54,7 +260,12 @@ export function BoletoCampoMapeamentoConfig() {
 
   const startEdit = (c: BoletoCampoMapeamento) => {
     setEditingId(c.id);
-    setEditValues({ fonte_campo: c.fonte_campo, tipo_transformacao: c.tipo_transformacao, label: c.label });
+    setEditValues({
+      fonte_campo: c.fonte_campo,
+      tipo_transformacao: c.tipo_transformacao,
+      label: c.label,
+      parametros: c.parametros || {},
+    });
   };
 
   const saveEdit = async (id: string) => {
@@ -150,14 +361,11 @@ export function BoletoCampoMapeamentoConfig() {
               </div>
               <div>
                 <Label className="text-xs">Campo Fonte</Label>
-                <Select value={newCampo.fonte_campo} onValueChange={v => setNewCampo(p => ({ ...p, fonte_campo: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {CAMPOS_DISPONIVEIS.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CampoFonteCombobox
+                  value={newCampo.fonte_campo || ''}
+                  onValueChange={v => setNewCampo(p => ({ ...p, fonte_campo: v }))}
+                  className="w-full h-9"
+                />
               </div>
               <div>
                 <Label className="text-xs">Tipo</Label>
@@ -171,6 +379,13 @@ export function BoletoCampoMapeamentoConfig() {
                 </Select>
               </div>
             </div>
+            {(newCampo.tipo_transformacao === 'soma' || newCampo.tipo_transformacao === 'concatenar' || newCampo.tipo_transformacao === 'ultimos_N') && (
+              <ParametrosEditor
+                tipo={newCampo.tipo_transformacao}
+                parametros={(newCampo.parametros as Record<string, any>) || {}}
+                onChange={(p) => setNewCampo(prev => ({ ...prev, parametros: p }))}
+              />
+            )}
             <div className="flex gap-2 justify-end">
               <Button variant="ghost" size="sm" onClick={() => setShowAdd(false)}>Cancelar</Button>
               <Button size="sm" onClick={handleAdd} disabled={addMut.isPending}>
@@ -220,36 +435,47 @@ export function BoletoCampoMapeamentoConfig() {
                     </TableCell>
                     <TableCell>
                       {editingId === c.id ? (
-                        <Select
+                        <CampoFonteCombobox
                           value={editValues.fonte_campo || ''}
                           onValueChange={v => setEditValues(p => ({ ...p, fonte_campo: v }))}
-                        >
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {CAMPOS_DISPONIVEIS.map(campo => (
-                              <SelectItem key={campo} value={campo}>{campo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          className="h-8 w-full"
+                        />
                       ) : (
                         <code className="text-xs bg-muted px-1 py-0.5 rounded">{c.fonte_campo}</code>
                       )}
                     </TableCell>
                     <TableCell>
                       {editingId === c.id ? (
-                        <Select
-                          value={editValues.tipo_transformacao || 'direto'}
-                          onValueChange={v => setEditValues(p => ({ ...p, tipo_transformacao: v }))}
-                        >
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {TIPOS_TRANSFORMACAO.map(t => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="space-y-1">
+                          <Select
+                            value={editValues.tipo_transformacao || 'direto'}
+                            onValueChange={v => setEditValues(p => ({ ...p, tipo_transformacao: v }))}
+                          >
+                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {TIPOS_TRANSFORMACAO.map(t => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <ParametrosEditor
+                            tipo={editValues.tipo_transformacao || 'direto'}
+                            parametros={editValues.parametros || {}}
+                            onChange={(p) => setEditValues(prev => ({ ...prev, parametros: p }))}
+                          />
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">{c.tipo_transformacao}</span>
+                        <div>
+                          <span className="text-xs text-muted-foreground">{c.tipo_transformacao}</span>
+                          {(c.tipo_transformacao === 'soma' || c.tipo_transformacao === 'concatenar') && c.parametros?.campos?.length > 0 && (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              ({(c.parametros.campos as string[]).join(c.tipo_transformacao === 'concatenar' ? ` ${c.parametros.separador || '+'} ` : ' + ')})
+                            </div>
+                          )}
+                          {c.tipo_transformacao === 'ultimos_N' && c.parametros?.n && (
+                            <span className="text-xs text-muted-foreground ml-1">(N={c.parametros.n})</span>
+                          )}
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>
