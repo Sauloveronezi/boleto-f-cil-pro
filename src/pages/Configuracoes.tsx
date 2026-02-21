@@ -71,22 +71,12 @@ export default function Configuracoes() {
         </div>
 
         <Tabs defaultValue="empresa" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <Protected modulo="configuracoes">
-              <TabsTrigger value="empresa">Empresa</TabsTrigger>
-            </Protected>
-            <Protected modulo="configuracoes">
-              <TabsTrigger value="operacao">Operação</TabsTrigger>
-            </Protected>
-            <Protected modulo="integracoes">
-              <TabsTrigger value="api">API</TabsTrigger>
-            </Protected>
-            <Protected modulo="configuracoes">
-              <TabsTrigger value="mapeamento">Mapeamento Boleto</TabsTrigger>
-            </Protected>
-            <Protected modulo="configuracoes">
-              <TabsTrigger value="seguranca">Segurança</TabsTrigger>
-            </Protected>
+          <TabsList className="w-full flex">
+            <TabsTrigger value="empresa" className="flex-1">Empresa</TabsTrigger>
+            <TabsTrigger value="operacao" className="flex-1">Operação</TabsTrigger>
+            <TabsTrigger value="api" className="flex-1">API</TabsTrigger>
+            <TabsTrigger value="mapeamento" className="flex-1">Mapeamento Boleto</TabsTrigger>
+            <TabsTrigger value="seguranca" className="flex-1">Segurança</TabsTrigger>
           </TabsList>
 
           {/* Dados da Empresa */}
