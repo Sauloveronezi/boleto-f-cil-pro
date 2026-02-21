@@ -253,9 +253,13 @@ export function mapBoletoApiToDadosBoleto(
   if (!dados.aceite) dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';
   if (!dados.especie_moeda) dados.especie_moeda = codigoBanco === '033' ? 'REAL' : 'R$';
 
-  // Agência/Código beneficiário (se não veio do mapeamento)
-  const agencia = configBanco?.agencia || '';
-  const conta = configBanco?.conta || '';
+  // Agência/Código beneficiário - extrair da API se não configurado
+  const bankInternalId = row.BankInternalID || row.bankinternalid || '';
+  const bankAccountLongId = row.BankAccountLongID || row.bankaccountlongid || '';
+  const agenciaApi = bankInternalId ? String(bankInternalId).replace(/\D/g, '').slice(-4) : '';
+  const contaApi = bankAccountLongId ? String(bankAccountLongId).replace(/\D/g, '') : '';
+  const agencia = configBanco?.agencia || agenciaApi || '';
+  const conta = configBanco?.conta || contaApi || '';
   const carteira = configBanco?.carteira || '09';
   if (!dados.carteira) dados.carteira = codigoBanco === '033' ? 'ELETR C/REG' : carteira;
 

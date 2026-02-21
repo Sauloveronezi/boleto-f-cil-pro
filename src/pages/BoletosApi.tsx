@@ -27,6 +27,7 @@ import { useQuery } from '@tanstack/react-query';
 import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
+import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper';
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates';
 import { renderBoletosV2, downloadPdfV2 } from '@/lib/templateRendererV2';
 import { useBoletosApiConfigColunas, useBoletosApiConfigFiltros } from '@/hooks/useBoletosApiConfig';
@@ -71,6 +72,20 @@ export default function BoletosApi() {
   const { data: templatesV2 } = useBoletoTemplates();
   const { data: templateFieldsV2 } = useBoletoTemplateFields(modeloSelecionado || undefined);
   const seedDefault = useSeedDefaultTemplate();
+
+  // Carregar mapeamento dinâmico de campos do boleto
+  const { data: mapeamentosCampo = [] } = useQuery({
+    queryKey: ['boleto-campo-mapeamento-api'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vv_b_boleto_campo_mapeamento')
+        .select('campo_boleto, fonte_campo, tipo_transformacao, parametros, ativo')
+        .is('deleted', null)
+        .eq('ativo', true)
+        .order('ordem');
+      return (data || []) as MapeamentoCampo[];
+    }
+  });
 
   const { data: modelos } = useQuery({
     queryKey: ['modelos-boleto-select'],
@@ -243,6 +258,35 @@ export default function BoletosApi() {
     const boletosComFalhaLinhaDigitavel: string[] = [];
     const mapearDadosBoletos = (boletosList: any[]) => {
       return boletosList.map((boleto: any) => {
+        // Extrair agência/conta dos dados da API (BankInternalID, BankAccountLongID)
+        const extras = boleto.dados_extras || {};
+        const bankInternalId = boleto.BankInternalID || boleto.bankinternalid || extras?.BankInternalID || extras?.bankinternalid || '';
+        const bankAccountLongId = boleto.BankAccountLongID || boleto.bankaccountlongid || extras?.BankAccountLongID || extras?.bankaccountlongid || '';
+        const bankControlKey = boleto.bankcontrolkey || extras?.bankcontrolkey || '';
+        
+        // BankInternalID pode conter banco+agência (ex: "34171463" = banco 341 + agência 1463)
+        const agenciaApi = bankInternalId ? bankInternalId.toString().replace(/\D/g, '').slice(-4) : '';
+        const contaApi = bankAccountLongId ? bankAccountLongId.toString().replace(/\D/g, '') : '';
+
+        // Usar mapeamento dinâmico se disponível
+        if (mapeamentosCampo.length > 0) {
+          const configCalculo: ConfigBancoParaCalculo = {
+            agencia: agenciaApi || configuracao?.agencia || '',
+            conta: contaApi || configuracao?.conta || '',
+            carteira: configuracao?.carteira || '09',
+            nomeBanco: banco.nome_banco || '',
+            beneficiarioNome: empresa?.razao_social || '',
+            beneficiarioCnpj: empresa?.cnpj || '',
+            beneficiarioEndereco: empresa ? `${empresa.endereco || ''}, ${empresa.numero || ''} ${empresa.complemento ? '- ' + empresa.complemento : ''}` : '',
+          };
+          const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
+          if (!dados.linha_digitavel) {
+            boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
+          }
+          return dados;
+        }
+
+        // Fallback: mapeamento hardcoded legado
         const notaFiscal = {
           id: boleto.id,
           numero_nota: boleto.numero_nota || boleto.documento || '',
@@ -255,17 +299,7 @@ export default function BoletosApi() {
           status: 'aberta' as const,
           referencia_interna: boleto.numero_cobranca || ''
         };
-        // Extrair agência/conta dos dados da API (BankInternalID, BankAccountLongID)
-        const extras = boleto.dados_extras || {};
-        const bankInternalId = boleto.BankInternalID || boleto.bankinternalid || extras?.BankInternalID || extras?.bankinternalid || '';
-        const bankAccountLongId = boleto.BankAccountLongID || boleto.bankaccountlongid || extras?.BankAccountLongID || extras?.bankaccountlongid || '';
-        const bankControlKey = boleto.bankcontrolkey || extras?.bankcontrolkey || '';
         
-        // BankInternalID pode conter banco+agência (ex: "34171463" = banco 341 + agência 1463)
-        const agenciaApi = bankInternalId ? bankInternalId.toString().replace(/\D/g, '').slice(-4) : '';
-        const contaApi = bankAccountLongId ? bankAccountLongId.toString().replace(/\D/g, '') : '';
-        
-        // Sobrescrever config com dados da API se disponíveis
         const configOverride = configuracao ? { ...configuracao } : undefined;
         if (configOverride && agenciaApi) configOverride.agencia = agenciaApi;
         if (configOverride && contaApi) configOverride.conta = contaApi;

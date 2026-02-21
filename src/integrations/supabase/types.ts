@@ -1567,11 +1567,8 @@ export type Database = {
           CashDiscount1Days: string | null
           CashDiscount1Percent: string | null
           CashDiscount2Days: string | null
-          cashdiscountamountinfuncnlcrcy: string | null
           CashDiscountAmountInFuncnlCrcy: string | null
-          cashdiscountamtincocodecrcy: string | null
           CashDiscountAmtInCoCodeCrcy: string | null
-          cashdiscountamtintransaccrcy: string | null
           CashDiscountAmtInTransacCrcy: string | null
           cep: string | null
           cliente: string | null
@@ -1655,11 +1652,8 @@ export type Database = {
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
-          cashdiscountamountinfuncnlcrcy?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
-          cashdiscountamtincocodecrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
-          cashdiscountamtintransaccrcy?: string | null
           CashDiscountAmtInTransacCrcy?: string | null
           cep?: string | null
           cliente?: string | null
@@ -1743,11 +1737,8 @@ export type Database = {
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
           CashDiscount2Days?: string | null
-          cashdiscountamountinfuncnlcrcy?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
-          cashdiscountamtincocodecrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
-          cashdiscountamtintransaccrcy?: string | null
           CashDiscountAmtInTransacCrcy?: string | null
           cep?: string | null
           cliente?: string | null
