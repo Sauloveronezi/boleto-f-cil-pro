@@ -169,8 +169,13 @@ function gerarCampoLivreFromData(
       return `${ag}${carteira.replace(/\D/g, '').padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
     case '341': { // Itaú
       const cart = carteira.replace(/\D/g, '').padStart(3, '0');
+      // Se o nosso número já contém o prefixo da carteira, remover
+      let nnLimpo = nossoNumero;
+      if (nnLimpo.startsWith(cart) && nnLimpo.length > 8) {
+        nnLimpo = nnLimpo.substring(cart.length);
+      }
       // Usar os PRIMEIROS 8 dígitos (o 9º é o DV, não faz parte do cálculo)
-      const nn = nossoNumero.length > 8 ? nossoNumero.slice(0, 8) : nossoNumero.padStart(8, '0');
+      const nn = nnLimpo.length > 8 ? nnLimpo.slice(0, 8) : nnLimpo.padStart(8, '0');
       const agIt = ag.slice(-4);
       const ctIt = ct.slice(-5);
       const dac1 = calcularModulo10(`${agIt}${ctIt}${cart}${nn}`);
