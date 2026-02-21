@@ -13,7 +13,7 @@ import { PDFDocument } from 'pdf-lib'
 import JSZip from 'jszip'
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates'
 import { renderBoletoV2, downloadPdfV2, type RenderOptions } from '@/lib/templateRendererV2'
-import { mapBoletoApiToDadosBoleto, getBoletoPreviewData, type ConfigBancoParaCalculo } from '@/lib/boletoDataMapper'
+import { mapBoletoApiToDadosBoleto, getBoletoPreviewData, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper'
 import { Database, Star, Eye, FileDown, LayoutTemplate } from 'lucide-react'
 import type { DadosBoleto } from '@/lib/pdfModelRenderer'
 
@@ -67,6 +67,20 @@ export default function GerarBoletosPDF() {
     }
   })
 
+  // Carregar mapeamento dinâmico de campos do boleto
+  const { data: mapeamentos = [] } = useQuery({
+    queryKey: ['boleto-campo-mapeamento-gen'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vv_b_boleto_campo_mapeamento')
+        .select('campo_boleto, fonte_campo, tipo_transformacao, parametros, ativo')
+        .is('deleted', null)
+        .eq('ativo', true)
+        .order('ordem')
+      return (data || []) as MapeamentoCampo[]
+    }
+  })
+
   const selectedTemplate = templates.find(t => t.id === templateId)
 
   const getConfigBancoParaBoleto = (bancoField: string | null): ConfigBancoParaCalculo | undefined => {
@@ -96,7 +110,7 @@ export default function GerarBoletosPDF() {
       .single()
     const row = (data || {}) as Record<string, any>
     const configBanco = getConfigBancoParaBoleto(row.banco)
-    return mapBoletoApiToDadosBoleto(row, configBanco)
+    return mapBoletoApiToDadosBoleto(row, configBanco, mapeamentos.length > 0 ? mapeamentos : undefined)
   }
 
   const handlePreview = async (boletoId: string) => {

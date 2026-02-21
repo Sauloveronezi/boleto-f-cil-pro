@@ -313,7 +313,7 @@ export function BoletoCampoMapeamentoConfig() {
   );
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <ArrowUpDown className="h-5 w-5" />
@@ -398,16 +398,16 @@ export function BoletoCampoMapeamentoConfig() {
         {isLoading ? (
           <p className="text-muted-foreground text-sm">Carregando...</p>
         ) : (
-          <div className="border rounded-lg overflow-auto">
-            <Table>
+          <div className="border rounded-lg overflow-hidden">
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">Ativo</TableHead>
-                  <TableHead>Campo Boleto</TableHead>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Campo Fonte (Tabela)</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="w-24">Ações</TableHead>
+                  <TableHead className="w-[60px]">Ativo</TableHead>
+                  <TableHead className="w-[18%]">Campo Boleto</TableHead>
+                  <TableHead className="w-[18%]">Label</TableHead>
+                  <TableHead className="w-[22%]">Campo Fonte (Tabela)</TableHead>
+                  <TableHead className="w-[22%]">Tipo</TableHead>
+                  <TableHead className="w-[80px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -419,8 +419,8 @@ export function BoletoCampoMapeamentoConfig() {
                         onCheckedChange={checked => handleToggleAtivo(c.id, checked)}
                       />
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono text-xs">{c.campo_boleto}</Badge>
+                    <TableCell className="truncate">
+                      <Badge variant="outline" className="font-mono text-xs max-w-full truncate">{c.campo_boleto}</Badge>
                     </TableCell>
                     <TableCell>
                       {editingId === c.id ? (
@@ -441,7 +441,7 @@ export function BoletoCampoMapeamentoConfig() {
                           className="h-8 w-full"
                         />
                       ) : (
-                        <code className="text-xs bg-muted px-1 py-0.5 rounded">{c.fonte_campo}</code>
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded block truncate">{c.fonte_campo}</code>
                       )}
                     </TableCell>
                     <TableCell>
