@@ -1,71 +1,65 @@
 
-# Plan: Fix Barcode Calculation, API Config UI, Search in Mapping, and Preserve Existing Mappings
 
-## Summary of Issues
+# Correção de Código de Barras e Formatação de Datas
 
-1. **Wrong barcode for document 1727** - The system uses static bank config (agencia=9012, conta=34567-8) instead of the actual data from the API (agencia=1463, conta=99540). Also, the Itau campo livre DAC values are hardcoded to `0` instead of being calculated.
-2. **API config dialog overflow** - The BoletosApiConfigDialog has items rendering outside the grid, buttons not clickable.
-3. **Missing search in API field mapping** - The "Campos Disponiveis da API" section has 92 fields but no search filter.
-4. **Existing mappings being overwritten** - Opening the API config screen may trigger re-detection of fields that resets mappings.
+## Problema 1: Código de Barras com Nosso Número Errado
 
----
+### Diagnóstico
 
-## Technical Details
+O campo `nosso_numero` no banco de dados contém `10000009-7` (8 dígitos + DV separado por hífen). O fluxo atual:
 
-### 1. Fix Barcode Calculation (barcodeCalculator.ts + boletoDataMapper.ts + BoletosApi.tsx)
+1. Remove caracteres não-numéricos: `100000097` (9 dígitos)
+2. Aplica `slice(-8)`: `00000097` (pega os ULTIMOS 8 dígitos)
+3. Resultado errado no campo livre do Itau
 
-**Root cause analysis** using real data from the boleto reference:
-- Correct line: `34191.09107 00000.971465 39954.050009 2 13910000002228`
-- Decoding reveals: agencia=1463, conta=99540, carteira=109, nosso_numero=10000009, valor=22.28
-- The API record has: `BankInternalID=34171463` (bank 341 + agencia 1463), `BankAccountLongID=99540`
-- The system's static config has agencia=9012, conta=34567-8 which is incorrect for this boleto
+O correto seria extrair os PRIMEIROS 8 dígitos (`10000009`), pois o nono dígito (`7`) é o digito verificador (DV) que nao faz parte do nosso numero para calculo do campo livre.
 
-**Changes:**
+**Comparacao:**
 
-**a) `src/lib/boletoDataMapper.ts`** - Fix DAC calculation for Itau campo livre:
-- Replace hardcoded `0` DACs with actual `calcularModulo10` calculations
-- Import `calcularModulo10` from barcodeCalculator
-- For case '341': Calculate DAC1 = modulo10(ag+ct+carteira+nossoNumero) and DAC2 = modulo10(ag+ct)
+```text
+Correto (banco):  34191.09107 00000.971465 39954.050009 2 13910000002228
+Gerado (errado):  34191.09008 00009.731464 39954.050009 5 13910000002228
 
-**b) `src/pages/BoletosApi.tsx`** - Extract agencia/conta from API data:
-- Before calling `gerarCodigoBarras`, check `boleto.dados_extras.BankInternalID` for agencia (last 4 digits) and `boleto.dados_extras.BankAccountLongID` for conta
-- Build an overridden config merging API data over static config
-- Also use `boleto.dados_extras.bankcontrolkey` as account check digit
+Campo livre correto: 109 10000009 7 1463 99540 5 000
+Campo livre errado:  109 00000097 3 1463 99540 5 000
+                         ^^^^^^^^ -- nosso numero invertido
+```
 
-**c) `src/lib/barcodeCalculator.ts`** - No changes needed (the calculator is correct; the issue is in the data mapper and in BoletosApi passing wrong config)
+### Solucao
 
-### 2. Fix API Config Dialog UI (BoletosApiConfigDialog.tsx)
+No arquivo `src/lib/boletoDataMapper.ts`, na funcao `gerarCampoLivreFromData`, caso Itau (341):
+- Trocar `nossoNumero.slice(-8)` por logica que pega os primeiros 8 digitos quando o nosso numero tem mais de 8 digitos (o excedente e o DV).
+- Mesma logica para o DAC do nosso numero.
 
-**Changes:**
-- Increase `max-w-lg` to `max-w-2xl` for more space
-- Add `overflow-hidden` to item rows to prevent overflow
-- Make the "Adicionar" button more accessible by ensuring the form grid doesn't push it off-screen
-- Add `truncate` to long chave/label texts
-- Ensure ScrollArea is used for long lists
-
-### 3. Add Search in API Field Mapping (MapeamentoCamposCard.tsx)
-
-**Changes:**
-- Add a search `Input` above the "Campos Disponiveis da API" badges section
-- Filter `camposDisponiveis` by the search term (case-insensitive)
-- Show count of filtered vs total results
-
-### 4. Preserve Existing Mappings (MapeamentoCamposCard.tsx)
-
-**Root cause:** When the API config section is opened, clicking "Atualizar Campos" calls `test-api-connection` which updates `campos_api_detectados` on the integration record. This doesn't overwrite mappings. However, the "Campo da API" selector in "Adicionar Novo Mapeamento" filters out already-mapped fields (line 767-768: `.filter(c => !c.jaMapeado)`), which is correct behavior.
-
-The actual issue may be that when re-detecting fields, the `campos_api_detectados` array gets reset, which changes the badge display but doesn't affect saved mappings. The fix:
-- In `handleAtualizarCampos` in ApiConfigCard.tsx, merge newly detected fields with existing `campos_api_detectados` instead of replacing them
-- Ensure the field detection preserves the existing list and only adds new fields
+Tambem aplicar no `barcodeCalculator.ts` (funcao `gerarCampoLivre` caso 341) para manter consistencia.
 
 ---
 
-## Files to Modify
+## Problema 2: Datas no formato errado na impressao
 
-| File | Change |
-|------|--------|
-| `src/lib/boletoDataMapper.ts` | Fix Itau DAC calculation using calcularModulo10 |
-| `src/pages/BoletosApi.tsx` | Extract agencia/conta from API dados_extras |
-| `src/components/boleto/BoletosApiConfigDialog.tsx` | Fix dialog layout/overflow |
-| `src/components/api/MapeamentoCamposCard.tsx` | Add search filter for API fields |
-| `src/components/api/ApiConfigCard.tsx` | Merge detected fields instead of replacing |
+### Diagnóstico
+
+As datas estao armazenadas no banco como `yyyy-mm-dd` (ex: `2026-02-20`). Na tabela de visualizacao ja sao formatadas para `dd/mm/yyyy`, mas no mapeamento de dados para o PDF, as datas sao passadas no formato bruto.
+
+### Solucao
+
+No `boletoDataMapper.ts`, apos o calculo do codigo de barras (que precisa da data em formato yyyy-mm-dd), formatar todos os campos de data para `dd/mm/yyyy`:
+- `data_vencimento`
+- `data_emissao`
+- `data_documento`
+- `data_processamento`
+
+Isso garante que independente do template ter ou nao o formato `date_ddmmyyyy` configurado, as datas sempre sairao corretas.
+
+---
+
+## Arquivos a Alterar
+
+### 1. `src/lib/boletoDataMapper.ts`
+- **Funcao `gerarCampoLivreFromData` (caso 341/Itau):** Trocar `nossoNumero.slice(-8)` por `nossoNumero.slice(0, 8)` quando o nosso numero tiver mais de 8 digitos
+- **Apos calculo do codigo de barras:** Adicionar formatacao de campos de data para dd/mm/yyyy
+
+### 2. `src/lib/barcodeCalculator.ts`
+- **Funcao `gerarCampoLivre` (caso 341/Itau):** Aplicar mesma correcao no `nossoNumero` - usar primeiros 8 digitos em vez dos ultimos 8
+- **Funcao `gerarNossoNumero` (caso 341/Itau):** Garantir que o sequencial use os primeiros 8 digitos
+
