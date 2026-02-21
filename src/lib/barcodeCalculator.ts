@@ -102,8 +102,9 @@ export function gerarNossoNumero(
     
     case '341': // Itaú
       // Formato Itaú: Carteira (3) + Nosso Número (8)
-      // Ex: 109/00011710-8 -> carteira 109, sequencial 00011710
-      return `${carteira.replace(/\D/g, '').padStart(3, '0')}${sequencial.slice(-8).padStart(8, '0')}`;
+      // Usar os PRIMEIROS 8 dígitos (o 9º é DV)
+      const seqItau = sequencial.length > 8 ? sequencial.slice(0, 8) : sequencial.padStart(8, '0');
+      return `${carteira.replace(/\D/g, '').padStart(3, '0')}${seqItau}`;
     
     default:
       // Formato padrão: 11 dígitos
@@ -189,7 +190,9 @@ export function gerarCampoLivre(
       // Carteira (3) + Nosso Número (8) + DAC[Agência/Conta/Carteira/Nosso Número] (1) + 
       // Agência (4) + Conta (5) + DAC[Agência/Conta] (1) + Zeros (3)
       const carteiraItau = carteira.replace(/\D/g, '').padStart(3, '0');
-      const nossoNumItau = nossoNumero.slice(-8).padStart(8, '0');
+      // Usar os PRIMEIROS 8 dígitos do nosso número (o 9º é DV)
+      const nnClean = nossoNumero.replace(/\D/g, '');
+      const nossoNumItau = nnClean.length > 8 ? nnClean.slice(0, 8) : nnClean.padStart(8, '0');
       const agenciaItau = agencia.slice(-4).padStart(4, '0');
       const contaItau = conta.slice(-5).padStart(5, '0');
       

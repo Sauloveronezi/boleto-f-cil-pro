@@ -169,7 +169,8 @@ function gerarCampoLivreFromData(
       return `${ag}${carteira.replace(/\D/g, '').padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
     case '341': { // Itaú
       const cart = carteira.replace(/\D/g, '').padStart(3, '0');
-      const nn = nossoNumero.slice(-8).padStart(8, '0');
+      // Usar os PRIMEIROS 8 dígitos (o 9º é o DV, não faz parte do cálculo)
+      const nn = nossoNumero.length > 8 ? nossoNumero.slice(0, 8) : nossoNumero.padStart(8, '0');
       const agIt = ag.slice(-4);
       const ctIt = ct.slice(-5);
       const dac1 = calcularModulo10(`${agIt}${ctIt}${cart}${nn}`);
@@ -367,6 +368,16 @@ export function mapBoletoApiToDadosBoleto(
   } else if (!dados.codigo_barras) {
     dados.codigo_barras = row.codigo_barras || '';
     dados.linha_digitavel = row.linha_digitavel || '';
+  }
+
+  // ===== Formatar datas para dd/mm/yyyy (após cálculos de barras que precisam de yyyy-mm-dd) =====
+  const camposData = ['data_vencimento', 'data_emissao', 'data_documento', 'data_processamento'];
+  for (const campo of camposData) {
+    const val = dados[campo];
+    if (val && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+      const [ano, mes, dia] = val.substring(0, 10).split('-');
+      dados[campo] = `${dia}/${mes}/${ano}`;
+    }
   }
 
   // Preservar todos os campos originais para acesso direto
