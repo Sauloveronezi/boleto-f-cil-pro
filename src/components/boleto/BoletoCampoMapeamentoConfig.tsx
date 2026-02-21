@@ -22,9 +22,11 @@ import {
 
 const TIPOS_TRANSFORMACAO = [
   { value: 'direto', label: 'Direto (campo → valor)' },
+  { value: 'primeiros_N', label: 'Primeiros N caracteres' },
   { value: 'ultimos_N', label: 'Últimos N caracteres' },
   { value: 'soma', label: 'Soma de campos' },
   { value: 'concatenar', label: 'Concatenar campos' },
+  { value: 'composicao', label: 'Composição (partes de vários campos)' },
 ];
 
 // Campos da tabela vv_b_boletos_api - lista completa ordenada alfabeticamente
@@ -173,7 +175,7 @@ function ParametrosEditor({
 }) {
   const campos: string[] = parametros?.campos || [];
 
-  if (tipo === 'ultimos_N') {
+  if (tipo === 'ultimos_N' || tipo === 'primeiros_N') {
     return (
       <div className="flex items-center gap-2 mt-1">
         <Label className="text-xs whitespace-nowrap">N caracteres:</Label>
@@ -236,6 +238,116 @@ function ParametrosEditor({
         >
           <Plus className="h-3 w-3 mr-1" /> Adicionar campo
         </Button>
+      </div>
+    );
+  }
+
+  if (tipo === 'composicao') {
+    const partes: Array<{ campo: string; extracao: string; n?: number; separador?: string }> =
+      parametros?.partes || [];
+
+    const updateParte = (idx: number, key: string, value: any) => {
+      const novas = [...partes];
+      novas[idx] = { ...novas[idx], [key]: value };
+      onChange({ ...parametros, partes: novas });
+    };
+
+    const removeParte = (idx: number) => {
+      onChange({ ...parametros, partes: partes.filter((_, i) => i !== idx) });
+    };
+
+    const addParte = () => {
+      onChange({
+        ...parametros,
+        partes: [...partes, { campo: '', extracao: 'completo', n: 4, separador: '' }],
+      });
+    };
+
+    return (
+      <div className="space-y-3 mt-1">
+        <Label className="text-xs">
+          Partes da composição (cada parte extrai dados de um campo):
+        </Label>
+        {partes.length === 0 && (
+          <p className="text-xs text-muted-foreground italic">
+            Ex: últimos 4 de BankInternalID + "/" + BankAccountLongID + "-" + bankcontrolkey
+          </p>
+        )}
+        {partes.map((parte, idx) => (
+          <div key={idx} className="border rounded p-2 space-y-2 bg-background">
+            <div className="flex items-center gap-1">
+              <Badge variant="secondary" className="text-[10px]">Parte {idx + 1}</Badge>
+              {idx > 0 && (
+                <div className="flex items-center gap-1 ml-auto">
+                  <Label className="text-[10px] whitespace-nowrap">Separador antes:</Label>
+                  <Input
+                    className="h-6 w-16 text-xs text-center"
+                    placeholder="/ ou -"
+                    value={parte.separador || ''}
+                    onChange={(e) => updateParte(idx, 'separador', e.target.value)}
+                  />
+                </div>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive ml-auto"
+                onClick={() => removeParte(idx)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[10px]">Campo</Label>
+                <CampoFonteCombobox
+                  value={parte.campo || ''}
+                  onValueChange={(v) => updateParte(idx, 'campo', v)}
+                  className="h-7 w-full text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px]">Extração</Label>
+                <Select
+                  value={parte.extracao || 'completo'}
+                  onValueChange={(v) => updateParte(idx, 'extracao', v)}
+                >
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completo">Valor completo</SelectItem>
+                    <SelectItem value="primeiros">Primeiros N dígitos</SelectItem>
+                    <SelectItem value="ultimos">Últimos N dígitos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(parte.extracao === 'primeiros' || parte.extracao === 'ultimos') && (
+                <div>
+                  <Label className="text-[10px]">N dígitos</Label>
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    value={parte.n || ''}
+                    onChange={(e) => updateParte(idx, 'n', parseInt(e.target.value) || 0)}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addParte}>
+          <Plus className="h-3 w-3 mr-1" /> Adicionar parte
+        </Button>
+        {partes.length > 0 && (
+          <div className="text-xs text-muted-foreground bg-muted rounded p-2">
+            <strong>Preview:</strong>{' '}
+            {partes.map((p, i) => {
+              let desc = p.campo || '???';
+              if (p.extracao === 'primeiros') desc = `primeiros ${p.n || '?'} de ${desc}`;
+              if (p.extracao === 'ultimos') desc = `últimos ${p.n || '?'} de ${desc}`;
+              return (i > 0 && p.separador ? `"${p.separador}"` + desc : desc);
+            }).join(' + ')}
+          </div>
+        )}
       </div>
     );
   }
@@ -379,7 +491,7 @@ export function BoletoCampoMapeamentoConfig() {
                 </Select>
               </div>
             </div>
-            {(newCampo.tipo_transformacao === 'soma' || newCampo.tipo_transformacao === 'concatenar' || newCampo.tipo_transformacao === 'ultimos_N') && (
+            {(newCampo.tipo_transformacao !== 'direto') && (
               <ParametrosEditor
                 tipo={newCampo.tipo_transformacao}
                 parametros={(newCampo.parametros as Record<string, any>) || {}}
@@ -466,14 +578,26 @@ export function BoletoCampoMapeamentoConfig() {
                         </div>
                       ) : (
                         <div>
-                          <span className="text-xs text-muted-foreground">{c.tipo_transformacao}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {TIPOS_TRANSFORMACAO.find(t => t.value === c.tipo_transformacao)?.label || c.tipo_transformacao}
+                          </span>
                           {(c.tipo_transformacao === 'soma' || c.tipo_transformacao === 'concatenar') && c.parametros?.campos?.length > 0 && (
                             <div className="text-xs text-muted-foreground mt-0.5">
                               ({(c.parametros.campos as string[]).join(c.tipo_transformacao === 'concatenar' ? ` ${c.parametros.separador || '+'} ` : ' + ')})
                             </div>
                           )}
-                          {c.tipo_transformacao === 'ultimos_N' && c.parametros?.n && (
+                          {(c.tipo_transformacao === 'ultimos_N' || c.tipo_transformacao === 'primeiros_N') && c.parametros?.n && (
                             <span className="text-xs text-muted-foreground ml-1">(N={c.parametros.n})</span>
+                          )}
+                          {c.tipo_transformacao === 'composicao' && c.parametros?.partes?.length > 0 && (
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {(c.parametros.partes as Array<any>).map((p: any, i: number) => {
+                                let desc = p.campo || '?';
+                                if (p.extracao === 'primeiros') desc = `${desc}[0:${p.n}]`;
+                                if (p.extracao === 'ultimos') desc = `${desc}[-${p.n}:]`;
+                                return (i > 0 && p.separador ? `"${p.separador}"${desc}` : desc);
+                              }).join(' + ')}
+                            </div>
                           )}
                         </div>
                       )}

@@ -34,7 +34,7 @@ function aplicarTransformacao(
   switch (tipo_transformacao) {
     case 'direto':
     default: {
-      // Se tem parametros.campos, tratar como soma (corrige config onde tipo ficou 'direto' mas campos foram definidos)
+      // Se tem parametros.campos com múltiplos campos, tratar como soma automática
       if (parametros?.campos && Array.isArray(parametros.campos) && parametros.campos.length > 1) {
         let soma = 0;
         for (const c of parametros.campos) {
@@ -53,6 +53,13 @@ function aplicarTransformacao(
       const str = String(val).replace(/\D/g, '');
       return str.slice(-n);
     }
+    case 'primeiros_N': {
+      const val = row[fonte_campo];
+      const n = parametros?.n || 3;
+      if (val == null) return '';
+      const str = String(val).replace(/\D/g, '');
+      return str.slice(0, n);
+    }
     case 'soma': {
       const campos: string[] = parametros?.campos || [fonte_campo];
       let soma = 0;
@@ -70,6 +77,43 @@ function aplicarTransformacao(
         return v != null ? String(v) : '';
       }).filter(Boolean);
       return partes.join(sep);
+    }
+    case 'composicao': {
+      // Composição avançada: cada parte define campo, extração (primeiros/ultimos/completo) e separador
+      const partes: Array<{
+        campo: string;
+        extracao: 'completo' | 'primeiros' | 'ultimos';
+        n?: number;
+        separador?: string;
+      }> = parametros?.partes || [];
+      if (partes.length === 0) {
+        const val = row[fonte_campo];
+        return val != null ? String(val) : '';
+      }
+      let resultado = '';
+      for (let i = 0; i < partes.length; i++) {
+        const parte = partes[i];
+        const val = row[parte.campo];
+        if (val == null) continue;
+        let str = String(val);
+        const digits = str.replace(/\D/g, '');
+        switch (parte.extracao) {
+          case 'primeiros':
+            str = digits.slice(0, parte.n || 3);
+            break;
+          case 'ultimos':
+            str = digits.slice(-(parte.n || 4));
+            break;
+          case 'completo':
+          default:
+            break;
+        }
+        if (i > 0 && parte.separador) {
+          resultado += parte.separador;
+        }
+        resultado += str;
+      }
+      return resultado;
     }
   }
 }
