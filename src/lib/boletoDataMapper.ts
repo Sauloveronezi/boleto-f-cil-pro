@@ -46,15 +46,7 @@ function aplicarTransformacao(
   switch (tipo_transformacao) {
     case 'direto':
     default: {
-      // Se tem parametros.campos com múltiplos campos, tratar como soma automática
-      if (parametros?.campos && Array.isArray(parametros.campos) && parametros.campos.length > 1) {
-        let soma = 0;
-        for (const c of parametros.campos) {
-          const v = getRowValue(row, c);
-          if (v != null) soma += Number(v) || 0;
-        }
-        return soma ? String(soma) : '';
-      }
+      // Direto: retorna apenas o valor do campo fonte, sem transformação
       const val = getRowValue(row, fonte_campo);
       return val != null ? String(val) : '';
     }
@@ -165,16 +157,18 @@ function gerarCampoLivreFromData(
   agencia: string,
   conta: string,
   carteira: string,
-  nossoNumero: string,
+  nossoNumeroRaw: string,
 ): string {
   const ag = agencia.replace(/\D/g, '').padStart(4, '0');
   const ct = conta.replace(/\D/g, '').padStart(8, '0');
+  // Nosso número: apenas dígitos para cálculos bancários
+  const nossoNumero = nossoNumeroRaw.replace(/\D/g, '');
 
   switch (codigoBanco) {
     case '237': // Bradesco
-      return `${ag}${carteira.padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
+      return `${ag}${carteira.replace(/\D/g, '').padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
     case '341': { // Itaú
-      const cart = carteira.padStart(3, '0');
+      const cart = carteira.replace(/\D/g, '').padStart(3, '0');
       const nn = nossoNumero.slice(-8).padStart(8, '0');
       const agIt = ag.slice(-4);
       const ctIt = ct.slice(-5);
@@ -213,6 +207,13 @@ function calcularCodigoBarrasFromDados(
     const campoLivre = gerarCampoLivreFromData(banco3, agencia, conta, carteira, nossoNumero);
 
     const codigoSemDV = `${banco3}${moeda}${fatorVencimento}${valorFmt}${campoLivre}`;
+    
+    // Validar que o código tem apenas dígitos e 43 posições (sem DV)
+    if (codigoSemDV.length !== 43 || !/^\d+$/.test(codigoSemDV)) {
+      console.warn('[boletoDataMapper] Código de barras inválido (não-numérico ou tamanho errado):', codigoSemDV);
+      return null;
+    }
+    
     const dv = calcularModulo11(codigoSemDV);
 
     const codigoBarras = `${banco3}${moeda}${dv}${fatorVencimento}${valorFmt}${campoLivre}`;
