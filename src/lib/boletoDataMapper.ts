@@ -25,6 +25,18 @@ export interface MapeamentoCampo {
 /**
  * Aplica uma regra de transformação de mapeamento sobre os dados brutos
  */
+/**
+ * Busca valor no row de forma case-insensitive
+ */
+function getRowValue(row: Record<string, any>, campo: string): any {
+  if (campo in row) return row[campo];
+  const lower = campo.toLowerCase();
+  for (const key of Object.keys(row)) {
+    if (key.toLowerCase() === lower) return row[key];
+  }
+  return undefined;
+}
+
 function aplicarTransformacao(
   row: Record<string, any>,
   mapeamento: MapeamentoCampo,
@@ -38,23 +50,23 @@ function aplicarTransformacao(
       if (parametros?.campos && Array.isArray(parametros.campos) && parametros.campos.length > 1) {
         let soma = 0;
         for (const c of parametros.campos) {
-          const v = row[c];
+          const v = getRowValue(row, c);
           if (v != null) soma += Number(v) || 0;
         }
         return soma ? String(soma) : '';
       }
-      const val = row[fonte_campo];
+      const val = getRowValue(row, fonte_campo);
       return val != null ? String(val) : '';
     }
     case 'ultimos_N': {
-      const val = row[fonte_campo];
+      const val = getRowValue(row, fonte_campo);
       const n = parametros?.n || 4;
       if (val == null) return '';
       const str = String(val).replace(/\D/g, '');
       return str.slice(-n);
     }
     case 'primeiros_N': {
-      const val = row[fonte_campo];
+      const val = getRowValue(row, fonte_campo);
       const n = parametros?.n || 3;
       if (val == null) return '';
       const str = String(val).replace(/\D/g, '');
@@ -64,7 +76,7 @@ function aplicarTransformacao(
       const campos: string[] = parametros?.campos || [fonte_campo];
       let soma = 0;
       for (const c of campos) {
-        const v = row[c];
+        const v = getRowValue(row, c);
         if (v != null) soma += Number(v) || 0;
       }
       return soma ? String(soma) : '';
@@ -73,7 +85,7 @@ function aplicarTransformacao(
       const campos: string[] = parametros?.campos || [fonte_campo];
       const sep = parametros?.separador || '';
       const partes = campos.map(c => {
-        const v = row[c];
+        const v = getRowValue(row, c);
         return v != null ? String(v) : '';
       }).filter(Boolean);
       return partes.join(sep);
@@ -87,13 +99,13 @@ function aplicarTransformacao(
         separador?: string;
       }> = parametros?.partes || [];
       if (partes.length === 0) {
-        const val = row[fonte_campo];
+        const val = getRowValue(row, fonte_campo);
         return val != null ? String(val) : '';
       }
       let resultado = '';
       for (let i = 0; i < partes.length; i++) {
         const parte = partes[i];
-        const val = row[parte.campo];
+        const val = getRowValue(row, parte.campo);
         if (val == null) continue;
         let str = String(val);
         const digits = str.replace(/\D/g, '');
