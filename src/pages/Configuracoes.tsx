@@ -19,6 +19,7 @@ import { HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DadosEmpresa, EMPRESA_PADRAO, salvarDadosEmpresa, carregarDadosEmpresa } from '@/types/empresa';
 import { ApiConfigCard } from '@/components/api/ApiConfigCard';
+import { BoletoCampoMapeamentoConfig } from '@/components/boleto/BoletoCampoMapeamentoConfig';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { Protected } from '@/components/auth/Protected';
 import { Loader2 } from 'lucide-react';
@@ -70,7 +71,7 @@ export default function Configuracoes() {
         </div>
 
         <Tabs defaultValue="empresa" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <Protected modulo="configuracoes">
               <TabsTrigger value="empresa">Empresa</TabsTrigger>
             </Protected>
@@ -79,6 +80,9 @@ export default function Configuracoes() {
             </Protected>
             <Protected modulo="integracoes">
               <TabsTrigger value="api">API</TabsTrigger>
+            </Protected>
+            <Protected modulo="configuracoes">
+              <TabsTrigger value="mapeamento">Mapeamento Boleto</TabsTrigger>
             </Protected>
             <Protected modulo="configuracoes">
               <TabsTrigger value="seguranca">Segurança</TabsTrigger>
@@ -357,6 +361,11 @@ export default function Configuracoes() {
           {/* Configuração de API */}
           <TabsContent value="api" className="space-y-6">
             <ApiConfigCard />
+          </TabsContent>
+
+          {/* Mapeamento de Campos do Boleto */}
+          <TabsContent value="mapeamento" className="space-y-6">
+            <BoletoCampoMapeamentoConfig />
           </TabsContent>
 
           {/* Configurações de Segurança */}

@@ -1360,6 +1360,54 @@ export type Database = {
         }
         Relationships: []
       }
+      vv_b_boleto_campo_mapeamento: {
+        Row: {
+          ativo: boolean
+          campo_boleto: string
+          created_at: string
+          data_delete: string | null
+          deleted: string | null
+          fonte_campo: string
+          id: string
+          label: string
+          ordem: number
+          parametros: Json | null
+          tipo_transformacao: string | null
+          updated_at: string
+          usuario_delete_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          campo_boleto: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          fonte_campo: string
+          id?: string
+          label: string
+          ordem?: number
+          parametros?: Json | null
+          tipo_transformacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          campo_boleto?: string
+          created_at?: string
+          data_delete?: string | null
+          deleted?: string | null
+          fonte_campo?: string
+          id?: string
+          label?: string
+          ordem?: number
+          parametros?: Json | null
+          tipo_transformacao?: string | null
+          updated_at?: string
+          usuario_delete_id?: string | null
+        }
+        Relationships: []
+      }
       vv_b_boleto_template_fields: {
         Row: {
           align: string | null
