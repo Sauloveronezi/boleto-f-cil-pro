@@ -432,8 +432,8 @@ export function BoletoCampoMapeamentoConfig() {
   );
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
+    <Card className="overflow-visible">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
           <ArrowUpDown className="h-5 w-5" />
           Mapeamento de Campos do Boleto
@@ -517,8 +517,8 @@ export function BoletoCampoMapeamentoConfig() {
         {isLoading ? (
           <p className="text-muted-foreground text-sm">Carregando...</p>
         ) : (
-          <div className="border rounded-lg overflow-x-auto">
-            <Table className="w-full">
+          <div className="border rounded-lg overflow-x-auto max-h-[70vh] overflow-y-auto" style={{ overflowX: 'auto', position: 'relative' }}>
+            <Table className="w-full min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[60px]">Ativo</TableHead>
