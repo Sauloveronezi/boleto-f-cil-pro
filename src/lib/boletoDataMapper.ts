@@ -9,6 +9,7 @@ import {
   calcularFatorVencimento,
   formatarValorCodigoBarras,
   calcularModulo11,
+  calcularModulo10,
   gerarLinhaDigitavel,
 } from './barcodeCalculator';
 
@@ -37,8 +38,15 @@ function gerarCampoLivreFromData(
   switch (codigoBanco) {
     case '237': // Bradesco: Agência(4) + Carteira(2) + NossoNúmero(11) + Conta(7) + Zero(1)
       return `${ag}${carteira.padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
-    case '341': // Itaú: Carteira(3) + NossoNúmero(8) + DAC(1) + Agência(4) + Conta(5) + DAC(1) + Zeros(3)
-      return `${carteira.padStart(3, '0')}${nossoNumero.slice(-8).padStart(8, '0')}0${ag.slice(-4)}${ct.slice(-5)}0000`.slice(0, 25);
+    case '341': { // Itaú: Carteira(3) + NossoNúmero(8) + DAC1(1) + Agência(4) + Conta(5) + DAC2(1) + Zeros(3)
+      const cart = carteira.padStart(3, '0');
+      const nn = nossoNumero.slice(-8).padStart(8, '0');
+      const agIt = ag.slice(-4);
+      const ctIt = ct.slice(-5);
+      const dac1 = calcularModulo10(`${agIt}${ctIt}${cart}${nn}`);
+      const dac2 = calcularModulo10(`${agIt}${ctIt}`);
+      return `${cart}${nn}${dac1}${agIt}${ctIt}${dac2}000`;
+    }
     case '001': // BB
       return `${nossoNumero.padStart(17, '0')}21000000`.slice(0, 25);
     case '033': // Santander

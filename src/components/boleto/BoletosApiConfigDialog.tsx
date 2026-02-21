@@ -63,15 +63,15 @@ export function BoletosApiConfigDialog() {
           {items.map(item => (
             <div
               key={item.id}
-              className="flex items-center justify-between p-2 rounded border border-border bg-muted/30"
+              className="flex items-center justify-between p-2 rounded border border-border bg-muted/30 overflow-hidden"
             >
-              <div className="flex items-center gap-2">
-                <Badge variant={item.visivel ? 'default' : 'secondary'} className="text-xs">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Badge variant={item.visivel ? 'default' : 'secondary'} className="text-xs shrink-0 max-w-[120px] truncate">
                   {item.chave}
                 </Badge>
-                <span className="text-sm">{item.label}</span>
+                <span className="text-sm truncate">{item.label}</span>
                 {item.campo_boleto && item.campo_boleto !== item.chave && (
-                  <span className="text-xs text-muted-foreground">→ {item.campo_boleto}</span>
+                  <span className="text-xs text-muted-foreground truncate">→ {item.campo_boleto}</span>
                 )}
               </div>
               <div className="flex items-center gap-1">
@@ -108,7 +108,7 @@ export function BoletosApiConfigDialog() {
           <Settings className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />

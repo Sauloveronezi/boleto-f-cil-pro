@@ -61,6 +61,10 @@ export function ApiConfigCard() {
       return;
     }
     try {
+      // Buscar campos existentes antes de atualizar
+      const integracaoAtual = integracoes?.find(i => i.id === integracaoId);
+      const camposExistentes = new Set<string>(integracaoAtual?.campos_api_detectados || []);
+
       const { data, error } = await supabase.functions.invoke('test-api-connection', {
         body: { integracao_id: integracaoId, limit: 1 }
       });
@@ -68,9 +72,20 @@ export function ApiConfigCard() {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Falha ao testar API');
 
+      // Merge: manter campos existentes + adicionar novos detectados
+      const novosCampos: string[] = data.campos_detectados || [];
+      novosCampos.forEach((c: string) => camposExistentes.add(c));
+      const camposMerged = Array.from(camposExistentes);
+
+      // Atualizar com lista mergeada
+      await supabase
+        .from('vv_b_api_integracoes')
+        .update({ campos_api_detectados: camposMerged as any } as any)
+        .eq('id', integracaoId);
+
       toast({
         title: 'Campos atualizados',
-        description: `${data.campos_detectados?.length || 0} campos detectados.`
+        description: `${camposMerged.length} campos disponíveis (${novosCampos.length} detectados).`
       });
 
       queryClient.invalidateQueries({ queryKey: ['api-integracoes'] });
