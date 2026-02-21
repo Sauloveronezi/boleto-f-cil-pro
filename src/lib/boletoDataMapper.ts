@@ -296,7 +296,9 @@ export function mapBoletoApiToDadosBoleto(
   }
 
   // ===== Campos derivados que dependem de lógica bancária =====
-  const codigoBanco = dados.banco_codigo || extractBankCode(row.banco);
+  // Sempre extrair apenas 3 dígitos do código do banco para cálculos
+  const rawBancoCodigo = dados.banco_codigo || row.banco || '';
+  const codigoBanco = extractBankCode(rawBancoCodigo);
   dados.banco_codigo = codigoBanco;
   dados.banco_nome = configBanco?.nomeBanco || dados.banco_nome || '';
   dados.beneficiario_nome = configBanco?.beneficiarioNome || dados.beneficiario_nome || '';

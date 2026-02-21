@@ -1547,15 +1547,12 @@ export type Database = {
       }
       vv_b_boletos_api: {
         Row: {
-          accountingdocument: string | null
           AccountingDocument: string | null
           accountingdocumenttype: string | null
           bairro: string | null
           banco: string | null
-          bankaccountlongid: string | null
           BankAccountLongID: string | null
           bankcontrolkey: string | null
-          bankinternalid: string | null
           BankInternalID: string | null
           billingdocument: string | null
           br_nfenumber: string | null
@@ -1605,11 +1602,9 @@ export type Database = {
           payeeregion: string | null
           paymentamountinfunctionalcrcy: string | null
           PaymentAmountInFunctionalCrcy: string | null
-          paymentcurrency: string | null
           PaymentCurrency: string | null
           PaymentDueDate: string | null
           PaymentMethod: string | null
-          paymentorigin: string | null
           PaymentOrigin: string | null
           paymentreference: string | null
           paymentrundate: string | null
@@ -1621,7 +1616,6 @@ export type Database = {
           serie: string | null
           sincronizado_em: string | null
           taxnumber1: string | null
-          TaxNumber1: string | null
           uf: string | null
           updated_at: string
           usuario_delete_id: string | null
@@ -1632,15 +1626,12 @@ export type Database = {
           yy1_custtranspzonpais_sdh: string | null
         }
         Insert: {
-          accountingdocument?: string | null
           AccountingDocument?: string | null
           accountingdocumenttype?: string | null
           bairro?: string | null
           banco?: string | null
-          bankaccountlongid?: string | null
           BankAccountLongID?: string | null
           bankcontrolkey?: string | null
-          bankinternalid?: string | null
           BankInternalID?: string | null
           billingdocument?: string | null
           br_nfenumber?: string | null
@@ -1690,11 +1681,9 @@ export type Database = {
           payeeregion?: string | null
           paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
-          paymentcurrency?: string | null
           PaymentCurrency?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
-          paymentorigin?: string | null
           PaymentOrigin?: string | null
           paymentreference?: string | null
           paymentrundate?: string | null
@@ -1706,7 +1695,6 @@ export type Database = {
           serie?: string | null
           sincronizado_em?: string | null
           taxnumber1?: string | null
-          TaxNumber1?: string | null
           uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
@@ -1717,15 +1705,12 @@ export type Database = {
           yy1_custtranspzonpais_sdh?: string | null
         }
         Update: {
-          accountingdocument?: string | null
           AccountingDocument?: string | null
           accountingdocumenttype?: string | null
           bairro?: string | null
           banco?: string | null
-          bankaccountlongid?: string | null
           BankAccountLongID?: string | null
           bankcontrolkey?: string | null
-          bankinternalid?: string | null
           BankInternalID?: string | null
           billingdocument?: string | null
           br_nfenumber?: string | null
@@ -1775,11 +1760,9 @@ export type Database = {
           payeeregion?: string | null
           paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
-          paymentcurrency?: string | null
           PaymentCurrency?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
-          paymentorigin?: string | null
           PaymentOrigin?: string | null
           paymentreference?: string | null
           paymentrundate?: string | null
@@ -1791,7 +1774,6 @@ export type Database = {
           serie?: string | null
           sincronizado_em?: string | null
           taxnumber1?: string | null
-          TaxNumber1?: string | null
           uf?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
