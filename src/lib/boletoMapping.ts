@@ -54,8 +54,8 @@ export function mapearBoletoApiParaModelo(
   };
 
   const valorFormatado = formatCurrency(boleto.valor);
-  const dataEmissaoFormatada = boleto.data_emissao ? format(new Date(boleto.data_emissao), 'dd/MM/yyyy') : '';
-  const dataVencimentoFormatada = boleto.data_vencimento ? format(new Date(boleto.data_vencimento), 'dd/MM/yyyy') : '';
+  const dataEmissaoFormatada = boleto.data_emissao ? format(new Date(String(boleto.data_emissao).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy') : '';
+  const dataVencimentoFormatada = boleto.data_vencimento ? format(new Date(String(boleto.data_vencimento).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy') : '';
   const dataProcessamento = format(new Date(), 'dd/MM/yyyy');
   
   // Tratamento de descontos
@@ -64,7 +64,7 @@ export function mapearBoletoApiParaModelo(
     : (boleto.dyn_desconto1 ? formatCurrency(parseFloat(boleto.dyn_desconto1)) : '0,00');
     
   const dataDescontoFormatada = boleto.data_desconto 
-    ? format(new Date(boleto.data_desconto), 'dd/MM/yyyy') 
+    ? format(new Date(String(boleto.data_desconto).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy') 
     : (boleto.dyn_desconto_data || '');
 
   // Endereço do beneficiário

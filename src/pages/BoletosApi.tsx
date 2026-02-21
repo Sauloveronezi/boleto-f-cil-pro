@@ -159,9 +159,12 @@ export default function BoletosApi() {
         return bancoInfo ? `${bancoInfo.codigo_banco.trim()} - ${bancoInfo.nome_banco}` : (boleto.banco || '-');
       }
       case 'data_emissao':
-        return boleto.data_emissao ? format(new Date(boleto.data_emissao), 'dd/MM/yyyy', { locale: ptBR }) : '-';
+        if (!boleto.data_emissao) return '-';
+        // Append T12:00 to avoid UTC timezone shift showing previous day
+        return format(new Date(String(boleto.data_emissao).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR });
       case 'data_vencimento':
-        return boleto.data_vencimento ? format(new Date(boleto.data_vencimento), 'dd/MM/yyyy', { locale: ptBR }) : '-';
+        if (!boleto.data_vencimento) return '-';
+        return format(new Date(String(boleto.data_vencimento).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR });
       case 'valor':
         return boleto.valor !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor) : '-';
       case 'status':

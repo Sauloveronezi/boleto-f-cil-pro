@@ -34,6 +34,15 @@ function aplicarTransformacao(
   switch (tipo_transformacao) {
     case 'direto':
     default: {
+      // Se tem parametros.campos, tratar como soma (corrige config onde tipo ficou 'direto' mas campos foram definidos)
+      if (parametros?.campos && Array.isArray(parametros.campos) && parametros.campos.length > 1) {
+        let soma = 0;
+        for (const c of parametros.campos) {
+          const v = row[c];
+          if (v != null) soma += Number(v) || 0;
+        }
+        return soma ? String(soma) : '';
+      }
       const val = row[fonte_campo];
       return val != null ? String(val) : '';
     }
