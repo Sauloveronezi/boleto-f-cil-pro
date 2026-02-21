@@ -101,8 +101,9 @@ export function mapearBoletoApiParaModelo(
     beneficiario_cidade_uf: beneficiarioCidadeUf,
     
     // Dados do título/boleto
-    valor_documento: valorFormatado,
-    valor_titulo: valorFormatado,
+    // O valor na tabela já vem com desconto aplicado, então o valor original = valor + valor_desconto
+    valor_documento: formatCurrency((boleto.valor || 0) + (boleto.valor_desconto || 0)),
+    valor_titulo: formatCurrency((boleto.valor || 0) + (boleto.valor_desconto || 0)),
     valor_cobrado: valorFormatado,
     data_vencimento: dataVencimentoFormatada,
     data_emissao: dataEmissaoFormatada,
@@ -121,7 +122,17 @@ export function mapearBoletoApiParaModelo(
     banco_codigo: banco.codigo_banco || '',
     agencia: configuracao?.agencia || '',
     conta: configuracao?.conta || (boleto.dyn_conta || ''),
-    agencia_codigo: `${configuracao?.agencia || ''}/${configuracao?.conta || (boleto.dyn_conta || '')}-${configuracao?.convenio || '0'}`, // Ajustado digito para convenio se n houver
+    agencia_codigo: (() => {
+      // Agência/Código: últimos 4 dígitos do campo banco / BankAccountLongID - BankControlKey
+      const bancoField = (boleto as any).banco || '';
+      const agLast4 = bancoField.replace(/\D/g, '').slice(-4);
+      const bankAccLong = dadosExtras.BankAccountLongID || dadosExtras.bankaccountlongid || (boleto as any).BankAccountLongID || (boleto as any).bankaccountlongid || '';
+      const bankCtrlKey = dadosExtras.BankControlKey || dadosExtras.bankcontrolkey || (boleto as any).bankcontrolkey || '';
+      if (agLast4 && bankAccLong) {
+        return `${agLast4} / ${bankAccLong}${bankCtrlKey ? '-' + bankCtrlKey : ''}`;
+      }
+      return `${configuracao?.agencia || ''}/${configuracao?.conta || (boleto.dyn_conta || '')}-${configuracao?.convenio || '0'}`;
+    })(),
     carteira: configuracao?.carteira || '',
     codigo_cedente: configuracao?.codigo_cedente || '',
     
