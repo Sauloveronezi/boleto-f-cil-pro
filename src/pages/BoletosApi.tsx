@@ -347,7 +347,10 @@ export default function BoletosApi() {
       try {
         toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
         const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
-        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, imprimirFundo);
+        const renderOpts = imprimirFundo
+          ? { usarFundo: true }
+          : { usarFundo: false, debugBorders: true, showFieldLabels: true, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
+        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, renderOpts as any);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
         await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
