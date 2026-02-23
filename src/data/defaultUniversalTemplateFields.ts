@@ -1,8 +1,7 @@
 /**
  * Campos do template universal de boleto (compatível com qualquer banco)
  * Coordenadas em mm, baseadas em página A4 (210x297mm)
- * Usa EXATAMENTE as mesmas coordenadas do Bradesco (defaultBoletoTemplateFields.ts)
- * com bg_color para mascarar textos fixos do banco no PDF de fundo.
+ * Usa o modelo_padrao_bradesco.pdf como fundo (blank) e mascara textos do Bradesco.
  */
 
 import { DefaultFieldDef } from './defaultBoletoTemplateFields';
@@ -10,17 +9,28 @@ import { DefaultFieldDef } from './defaultBoletoTemplateFields';
 const VIA2_OFFSET_Y = 148;
 
 const camposVia1: DefaultFieldDef[] = [
-  // === Mascaramento do cabeçalho do banco (Ficha de Caixa + texto banco) ===
-  // Retângulo branco cobre "Ficha de Caixa" e data no topo direito
+  // === Mascaramento: Logo e nome do banco no cabeçalho ===
   {
-    key: 'mask_header_right',
+    key: 'mask_bank_header',
     label: '',
     source_ref: 'literal:',
-    bbox: [145, 6, 210, 11],
+    bbox: [0, 0, 68, 16],
     font_size: 1,
     align: 'left',
     bg_color: '#FFFFFF',
     display_order: 0,
+    page: 1,
+  },
+  // Máscara "Ficha de Caixa" no topo direito
+  {
+    key: 'mask_header_right',
+    label: '',
+    source_ref: 'literal:',
+    bbox: [145, 5, 210, 12],
+    font_size: 1,
+    align: 'left',
+    bg_color: '#FFFFFF',
+    display_order: 1,
     page: 1,
   },
 
@@ -35,17 +45,17 @@ const camposVia1: DefaultFieldDef[] = [
     bold: true,
     align: 'right',
     is_digitable_line: true,
-    display_order: 1,
+    display_order: 2,
     page: 1,
   },
 
   // === Linha 1: Local de Pagamento | Vencimento ===
-  // Máscara branca cobre TODO o texto fixo do banco (ex: "PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO")
+  // Máscara cobre "PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO"
   {
     key: 'local_pagamento',
     label: 'Local de Pagamento',
     source_ref: 'local_pagamento',
-    bbox: [3, 18, 146, 28],
+    bbox: [5, 19, 145, 27],
     font_size: 7,
     align: 'left',
     bg_color: '#FFFFFF',
@@ -353,7 +363,6 @@ function gerarCamposVia2(): DefaultFieldDef[] {
   return camposVia1.map(campo => ({
     ...campo,
     key: `via2_${campo.key}`,
-    // Via 2 também precisa de bg_color no local_pagamento
     bg_color: campo.bg_color,
     bbox: [
       campo.bbox[0],
