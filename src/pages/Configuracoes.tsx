@@ -17,32 +17,101 @@ import {
 } from '@/components/ui/tooltip';
 import { HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { DadosEmpresa, EMPRESA_PADRAO, salvarDadosEmpresa, carregarDadosEmpresa } from '@/types/empresa';
+import { DadosEmpresa, EMPRESA_PADRAO } from '@/types/empresa';
 import { ApiConfigCard } from '@/components/api/ApiConfigCard';
 import { BoletoCampoMapeamentoConfig } from '@/components/boleto/BoletoCampoMapeamentoConfig';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { Protected } from '@/components/auth/Protected';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export default function Configuracoes() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { isLoading: isLoadingPermissoes } = usePermissoes();
   const [modoDemo, setModoDemo] = useState(true);
   const [apiEndpoint, setApiEndpoint] = useState('');
   const [apiToken, setApiToken] = useState('');
   const [empresa, setEmpresa] = useState<DadosEmpresa>(EMPRESA_PADRAO);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+
+  // Carregar dados da empresa do Supabase
+  const { data: empresaDb, isLoading: isLoadingEmpresa } = useQuery({
+    queryKey: ['empresa-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vv_b_empresas')
+        .select('*')
+        .is('deleted', null)
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar empresa:', error);
+      }
+      return data;
+    }
+  });
 
   useEffect(() => {
-    const dadosSalvos = carregarDadosEmpresa();
-    setEmpresa(dadosSalvos);
-  }, []);
+    if (empresaDb) {
+      setEmpresaId(empresaDb.id);
+      setEmpresa({
+        razaoSocial: empresaDb.razao_social || '',
+        nomeFantasia: empresaDb.nome_fantasia || '',
+        cnpj: empresaDb.cnpj || '',
+        inscricaoEstadual: (empresaDb as any).inscricao_estadual || '',
+        inscricaoMunicipal: (empresaDb as any).inscricao_municipal || '',
+        endereco: empresaDb.endereco || '',
+        numero: empresaDb.numero || '',
+        complemento: empresaDb.complemento || '',
+        bairro: empresaDb.bairro || '',
+        cidade: empresaDb.cidade || '',
+        estado: empresaDb.estado || '',
+        cep: empresaDb.cep || '',
+        telefone: empresaDb.telefone || '',
+        email: empresaDb.email || '',
+        site: empresaDb.site || '',
+      });
+    }
+  }, [empresaDb]);
 
-  const handleSalvar = () => {
-    salvarDadosEmpresa(empresa);
-    toast({
-      title: 'Configurações salvas',
-      description: 'As configurações do sistema foram atualizadas com sucesso.',
-    });
+  const handleSalvar = async () => {
+    const payload = {
+      razao_social: empresa.razaoSocial,
+      nome_fantasia: empresa.nomeFantasia,
+      cnpj: empresa.cnpj,
+      inscricao_estadual: empresa.inscricaoEstadual,
+      inscricao_municipal: empresa.inscricaoMunicipal,
+      endereco: empresa.endereco,
+      numero: empresa.numero,
+      complemento: empresa.complemento,
+      bairro: empresa.bairro,
+      cidade: empresa.cidade,
+      estado: empresa.estado,
+      cep: empresa.cep,
+      telefone: empresa.telefone,
+      email: empresa.email,
+      site: empresa.site,
+      updated_at: new Date().toISOString(),
+    };
+
+    let error;
+    if (empresaId) {
+      ({ error } = await supabase.from('vv_b_empresas').update(payload).eq('id', empresaId));
+    } else {
+      const { data, error: insertError } = await supabase.from('vv_b_empresas').insert(payload as any).select('id').single();
+      error = insertError;
+      if (data) setEmpresaId(data.id);
+    }
+
+    if (error) {
+      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['empresa-config'] });
+      queryClient.invalidateQueries({ queryKey: ['empresa-dados'] });
+      toast({ title: 'Configurações salvas', description: 'Os dados da empresa foram salvos com sucesso.' });
+    }
   };
 
   const atualizarEmpresa = (campo: keyof DadosEmpresa, valor: string) => {

@@ -273,6 +273,15 @@ export default function BoletosApi() {
 
         // Usar mapeamento dinâmico se disponível
         if (mapeamentosCampo.length > 0) {
+          const benefEndereco = empresa
+            ? [
+                [empresa.endereco, empresa.numero].filter(Boolean).join(', '),
+                empresa.complemento,
+                empresa.bairro,
+                [empresa.cidade, empresa.estado].filter(Boolean).join(' - '),
+                empresa.cep,
+              ].filter(Boolean).join(' - ')
+            : '';
           const configCalculo: ConfigBancoParaCalculo = {
             agencia: agenciaApi || configuracao?.agencia || '',
             conta: contaApi || configuracao?.conta || '',
@@ -280,7 +289,8 @@ export default function BoletosApi() {
             nomeBanco: banco.nome_banco || '',
             beneficiarioNome: empresa?.razao_social || '',
             beneficiarioCnpj: empresa?.cnpj || '',
-            beneficiarioEndereco: empresa ? `${empresa.endereco || ''}, ${empresa.numero || ''} ${empresa.complemento ? '- ' + empresa.complemento : ''}` : '',
+            beneficiarioEndereco: benefEndereco,
+            textoInstrucaoPadrao: configuracao?.texto_instrucao_padrao || '',
           };
           const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
           // Inject bank logo and formatted code
