@@ -10,6 +10,20 @@ import { DefaultFieldDef } from './defaultBoletoTemplateFields';
 const VIA2_OFFSET_Y = 148;
 
 const camposVia1: DefaultFieldDef[] = [
+  // === Mascaramento do cabeçalho do banco (Ficha de Caixa + texto banco) ===
+  // Retângulo branco cobre "Ficha de Caixa" e data no topo direito
+  {
+    key: 'mask_header_right',
+    label: '',
+    source_ref: 'literal:',
+    bbox: [145, 6, 210, 11],
+    font_size: 1,
+    align: 'left',
+    bg_color: '#FFFFFF',
+    display_order: 0,
+    page: 1,
+  },
+
   // === Cabeçalho / Linha digitável ===
   {
     key: 'linha_digitavel',
@@ -26,12 +40,12 @@ const camposVia1: DefaultFieldDef[] = [
   },
 
   // === Linha 1: Local de Pagamento | Vencimento ===
-  // bg_color branco cobre texto fixo do banco no PDF de fundo
+  // Máscara branca cobre TODO o texto fixo do banco (ex: "PAGÁVEL PREFERENCIALMENTE NA REDE BRADESCO")
   {
     key: 'local_pagamento',
     label: 'Local de Pagamento',
     source_ref: 'local_pagamento',
-    bbox: [5, 21, 145, 27],
+    bbox: [3, 18, 146, 28],
     font_size: 7,
     align: 'left',
     bg_color: '#FFFFFF',
