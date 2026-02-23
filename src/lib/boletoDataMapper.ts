@@ -240,6 +240,7 @@ export interface ConfigBancoParaCalculo {
   beneficiarioNome?: string;
   beneficiarioCnpj?: string;
   beneficiarioEndereco?: string;
+  textoInstrucaoPadrao?: string;
 }
 
 /**
@@ -260,6 +261,11 @@ function mapeamentoFallback(row: Record<string, any>): Record<string, string> {
   result.data_documento = row.data_emissao || row.PostingDate || '';
   result.data_processamento = row.data_emissao || '';
   result.nosso_numero = row.numero_cobranca || '';
+
+  // Beneficiário: extrair do payee (SAP) se disponível
+  result.beneficiario_nome = row.payeeadditionalname || row.beneficiario_nome || '';
+  result.beneficiario_cnpj = row.beneficiario_cnpj || '';
+  result.beneficiario_endereco = row.beneficiario_endereco || '';
 
   // Valor: valor original = valor + valor_desconto
   const valor = row.valor != null ? Number(row.valor) : 0;
@@ -322,6 +328,9 @@ export function mapBoletoApiToDadosBoleto(
       '104': 'PAGÁVEL PREFERENCIALMENTE NAS CASAS LOTÉRICAS ATÉ O VALOR LIMITE.',
     };
     dados.local_pagamento = localPagamentoMap[codigoBanco] || 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.';
+  }
+  if (!dados.instrucoes) {
+    dados.instrucoes = configBanco?.textoInstrucaoPadrao || '';
   }
   if (!dados.especie_documento) dados.especie_documento = 'DM';
   if (!dados.aceite) dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';

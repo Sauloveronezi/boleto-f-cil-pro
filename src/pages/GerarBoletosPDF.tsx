@@ -49,7 +49,7 @@ export default function GerarBoletosPDF() {
     queryFn: async () => {
       const { data } = await supabase
         .from('vv_b_configuracoes_banco')
-        .select('banco_id, agencia, conta, carteira')
+        .select('banco_id, agencia, conta, carteira, codigo_cedente, texto_instrucao_padrao')
         .is('deleted', null)
       return data || []
     }
@@ -95,6 +95,7 @@ export default function GerarBoletosPDF() {
       conta: config.conta || '',
       carteira: config.carteira || '09',
       nomeBanco: (bancoRef as any).nome_banco || '',
+      textoInstrucaoPadrao: config.texto_instrucao_padrao || '',
     }
   }
 
