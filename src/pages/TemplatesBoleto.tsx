@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate, useSeedSantanderTemplate } from '@/hooks/useBoletoTemplates'
+import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate, useSeedSantanderTemplate, useSeedUniversalTemplate } from '@/hooks/useBoletoTemplates'
 import { TemplateFieldEditor } from '@/components/boleto/TemplateFieldEditor'
 import { useBancos } from '@/hooks/useBancos'
 import { Database, Eye, EyeOff, Settings } from 'lucide-react'
@@ -15,6 +15,7 @@ export default function TemplatesBoleto() {
   const { toast } = useToast()
   const seedDefault = useSeedDefaultTemplate()
   const seedSantander = useSeedSantanderTemplate()
+  const seedUniversal = useSeedUniversalTemplate()
   const { data: templates = [], isLoading } = useBoletoTemplates()
   const { data: bancos = [] } = useBancos()
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
@@ -51,6 +52,17 @@ export default function TemplatesBoleto() {
             >
               <Database className="h-4 w-4 mr-2" />
               {seedSantander.isPending ? 'Atualizando...' : 'Template Santander'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => seedUniversal.mutate(undefined, {
+                onSuccess: () => toast({ title: 'Sucesso', description: 'Template Universal criado/atualizado com todos os campos.' }),
+                onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+              })}
+              disabled={seedUniversal.isPending}
+            >
+              <Database className="h-4 w-4 mr-2" />
+              {seedUniversal.isPending ? 'Atualizando...' : 'Template Universal'}
             </Button>
           </div>
         </div>
