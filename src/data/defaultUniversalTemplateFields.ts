@@ -32,6 +32,7 @@ const camposVia1: DefaultFieldDef[] = [
     bbox: [5, 21, 145, 27],
     font_size: 7,
     align: 'left',
+    bg_color: '#FFFFFF',
     display_order: 10,
     page: 1,
   },
