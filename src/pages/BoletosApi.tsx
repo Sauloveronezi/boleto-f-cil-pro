@@ -283,6 +283,10 @@ export default function BoletosApi() {
             beneficiarioEndereco: empresa ? `${empresa.endereco || ''}, ${empresa.numero || ''} ${empresa.complemento ? '- ' + empresa.complemento : ''}` : '',
           };
           const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
+          // Inject bank logo and formatted code
+          dados.banco_logo_url = banco.logo_url || '';
+          const dvBanco: Record<string, string> = { '237': '2', '341': '7', '033': '7', '001': '9', '104': '0' };
+          dados.banco_codigo_formatado = `${banco.codigo_banco.trim()}-${dvBanco[banco.codigo_banco.trim()] || '0'}`;
           if (!dados.linha_digitavel) {
             boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
           }
@@ -310,6 +314,10 @@ export default function BoletosApi() {
         
         const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configOverride);
         const dados = mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
+        // Inject bank logo and formatted code
+        dados.banco_logo_url = banco.logo_url || '';
+        const dvBancoLegacy: Record<string, string> = { '237': '2', '341': '7', '033': '7', '001': '9', '104': '0' };
+        dados.banco_codigo_formatado = `${banco.codigo_banco.trim()}-${dvBancoLegacy[banco.codigo_banco.trim()] || '0'}`;
         if (!dados.linha_digitavel) {
           boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
         }
@@ -349,8 +357,8 @@ export default function BoletosApi() {
         const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
         const renderOpts = imprimirFundo
           ? { usarFundo: true }
-          : { usarFundo: false, debugBorders: true, showFieldLabels: true, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
-        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, renderOpts as any);
+          : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
+        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, renderOpts);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
         await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
