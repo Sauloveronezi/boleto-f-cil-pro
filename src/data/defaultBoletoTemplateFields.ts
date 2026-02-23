@@ -20,6 +20,7 @@ export interface DefaultFieldDef {
   bold?: boolean;
   align?: 'left' | 'center' | 'right';
   format?: string;
+  bg_color?: string;
   is_barcode?: boolean;
   is_digitable_line?: boolean;
   display_order: number;

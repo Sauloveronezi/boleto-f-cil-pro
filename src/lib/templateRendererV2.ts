@@ -228,6 +228,12 @@ export async function renderBoletoV2(
     const h = mmToPt(y2mm - y1mm);
     const y = pageH - mmToPt(y1mm) - h; // PDF: y from bottom
 
+    // Background color (para cobrir texto do PDF base)
+    if (field.bg_color) {
+      const bgC = hexToRgb(field.bg_color);
+      page.drawRectangle({ x, y, width: w, height: h, color: rgb(bgC.r, bgC.g, bgC.b) });
+    }
+
     // Debug/Layout: desenhar bordas e label do campo
     if (showBorders) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
