@@ -1,65 +1,68 @@
 
 
-# Correção de Código de Barras e Formatação de Datas
+# Duplicar Template Bradesco como Modelo Universal
 
-## Problema 1: Código de Barras com Nosso Número Errado
+## Objetivo
+Criar um novo template de boleto "Modelo Universal" baseado no PDF enviado (boletos_341_20260223.pdf), com coordenadas ajustadas, sem textos fixos de banco especifico, e com correcao do codigo de barras na segunda via.
 
-### Diagnóstico
+## Etapas
 
-O campo `nosso_numero` no banco de dados contém `10000009-7` (8 dígitos + DV separado por hífen). O fluxo atual:
+### 1. Copiar o PDF enviado para o projeto
+- Copiar `user-uploads://boletos_341_20260223.pdf` para `public/templates/boleto_universal_referencia.pdf`
+- Este PDF sera o fundo base do novo template
 
-1. Remove caracteres não-numéricos: `100000097` (9 dígitos)
-2. Aplica `slice(-8)`: `00000097` (pega os ULTIMOS 8 dígitos)
-3. Resultado errado no campo livre do Itau
+### 2. Criar arquivo de campos do template universal
+- Novo arquivo: `src/data/defaultUniversalTemplateFields.ts`
+- Baseado no `defaultBoletoTemplateFields.ts` (Bradesco), com os seguintes ajustes:
+  - **local_pagamento**: source_ref sera `local_pagamento` (sem texto fixo hardcoded - o texto generico "PAGAVEL EM QUALQUER BANCO ATE O VENCIMENTO" sera aplicado pelo mapper)
+  - Coordenadas recalibradas conforme o PDF enviado (posicoes dos campos no boleto Itau)
+  - Via 2 gerada automaticamente com offset Y de 148mm (mesmo padrao)
+  - **Codigo de barras da via 2**: o campo `via2_codigo_barras` tera o mesmo `source_ref: 'codigo_barras'` que a via 1, garantindo que o barcode seja renderizado corretamente em ambas as vias sem duplicacao indevida
 
-O correto seria extrair os PRIMEIROS 8 dígitos (`10000009`), pois o nono dígito (`7`) é o digito verificador (DV) que nao faz parte do nosso numero para calculo do campo livre.
+### 3. Adicionar seed function no hook
+- Arquivo: `src/hooks/useBoletoTemplates.ts`
+- Novo ID: `b0000000-0000-0000-0000-000000000099` (Universal)
+- Nova funcao `useSeedUniversalTemplate()` que:
+  - Cria o template com `bank_code: null` (compativel com qualquer banco)
+  - `is_default: false`
+  - `background_pdf_url: '/templates/boleto_universal_referencia.pdf'`
+  - Insere todos os campos do novo arquivo de definicoes
 
-**Comparacao:**
+### 4. Atualizar local_pagamento no mapper
+- Arquivo: `src/lib/boletoDataMapper.ts`
+- Alterar o fallback de `local_pagamento` para usar texto generico quando o banco nao for identificado:
+  - Manter mapa por banco para quando o codigo do banco for identificado
+  - Default: "PAGAVEL EM QUALQUER BANCO ATE O VENCIMENTO."
 
-```text
-Correto (banco):  34191.09107 00000.971465 39954.050009 2 13910000002228
-Gerado (errado):  34191.09008 00009.731464 39954.050009 5 13910000002228
+### 5. Adicionar botao na tela de Templates
+- Arquivo: `src/pages/TemplatesBoleto.tsx`
+- Novo botao "Template Universal" ao lado dos existentes (Bradesco e Santander)
+- Ao clicar, executa `seedUniversal.mutate()` para criar/atualizar o template
 
-Campo livre correto: 109 10000009 7 1463 99540 5 000
-Campo livre errado:  109 00000097 3 1463 99540 5 000
-                         ^^^^^^^^ -- nosso numero invertido
-```
+## Detalhes Tecnicos
 
-### Solucao
+### Coordenadas ajustadas (Via 1, em mm)
+As coordenadas serao calibradas com base no PDF enviado. Os campos principais e suas posicoes estimadas:
 
-No arquivo `src/lib/boletoDataMapper.ts`, na funcao `gerarCampoLivreFromData`, caso Itau (341):
-- Trocar `nossoNumero.slice(-8)` por logica que pega os primeiros 8 digitos quando o nosso numero tem mais de 8 digitos (o excedente e o DV).
-- Mesma logica para o DAC do nosso numero.
+| Campo | bbox [x, y, x2, y2] |
+|-------|---------------------|
+| linha_digitavel | [70, 12, 205, 16] |
+| local_pagamento | [5, 21, 145, 27] |
+| data_vencimento | [147, 21, 205, 27] |
+| beneficiario_nome | [5, 31, 145, 37] |
+| agencia_codigo | [147, 31, 205, 37] |
+| data_documento | [5, 43, 35, 49] |
+| numero_documento | [37, 43, 82, 49] |
+| nosso_numero | [147, 43, 205, 49] |
+| valor_documento | [147, 53, 205, 59] |
+| instrucoes | [5, 62, 145, 89] |
+| pagador_nome | [5, 100, 155, 106] |
+| codigo_barras | [5, 120, 195, 136] |
 
-Tambem aplicar no `barcodeCalculator.ts` (funcao `gerarCampoLivre` caso 341) para manter consistencia.
-
----
-
-## Problema 2: Datas no formato errado na impressao
-
-### Diagnóstico
-
-As datas estao armazenadas no banco como `yyyy-mm-dd` (ex: `2026-02-20`). Na tabela de visualizacao ja sao formatadas para `dd/mm/yyyy`, mas no mapeamento de dados para o PDF, as datas sao passadas no formato bruto.
-
-### Solucao
-
-No `boletoDataMapper.ts`, apos o calculo do codigo de barras (que precisa da data em formato yyyy-mm-dd), formatar todos os campos de data para `dd/mm/yyyy`:
-- `data_vencimento`
-- `data_emissao`
-- `data_documento`
-- `data_processamento`
-
-Isso garante que independente do template ter ou nao o formato `date_ddmmyyyy` configurado, as datas sempre sairao corretas.
-
----
-
-## Arquivos a Alterar
-
-### 1. `src/lib/boletoDataMapper.ts`
-- **Funcao `gerarCampoLivreFromData` (caso 341/Itau):** Trocar `nossoNumero.slice(-8)` por `nossoNumero.slice(0, 8)` quando o nosso numero tiver mais de 8 digitos
-- **Apos calculo do codigo de barras:** Adicionar formatacao de campos de data para dd/mm/yyyy
-
-### 2. `src/lib/barcodeCalculator.ts`
-- **Funcao `gerarCampoLivre` (caso 341/Itau):** Aplicar mesma correcao no `nossoNumero` - usar primeiros 8 digitos em vez dos ultimos 8
-- **Funcao `gerarNossoNumero` (caso 341/Itau):** Garantir que o sequencial use os primeiros 8 digitos
+### Arquivos alterados
+1. **Novo**: `src/data/defaultUniversalTemplateFields.ts` - definicoes de campos
+2. **Editado**: `src/hooks/useBoletoTemplates.ts` - nova seed function
+3. **Editado**: `src/pages/TemplatesBoleto.tsx` - botao na interface
+4. **Editado**: `src/lib/boletoDataMapper.ts` - local_pagamento generico
+5. **Copiado**: PDF para `public/templates/boleto_universal_referencia.pdf`
 
