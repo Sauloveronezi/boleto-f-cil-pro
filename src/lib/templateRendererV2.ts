@@ -261,9 +261,18 @@ export async function renderBoletoV2(
     if (showBorders) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
       if (showLabels) {
-        const labelText = field.key || '';
-        const labelFont = fonts.helvetica;
-        page.drawText(labelText, { x: x + 1, y: y + h - labelSize - 1, size: labelSize, font: labelFont, color: rgb(borderCol.r, borderCol.g, borderCol.b) });
+        const labelText = field.label || field.key || '';
+        if (labelText) {
+          const labelFont = fonts.helvetica;
+          const labelColor = rgb(0.4, 0.4, 0.4);
+          // Draw label at top of bbox
+          const labelFontRef = fonts.helvetica;
+          const maxLabelW = labelFontRef.widthOfTextAtSize(labelText, labelSize);
+          const truncLabel = maxLabelW > w - 2 ? labelText.substring(0, Math.floor(labelText.length * (w - 2) / maxLabelW)) : labelText;
+          if (truncLabel) {
+            page.drawText(truncLabel, { x: x + 1, y: y + h - labelSize - 0.5, size: labelSize, font: labelFont, color: labelColor });
+          }
+        }
       }
     }
 
