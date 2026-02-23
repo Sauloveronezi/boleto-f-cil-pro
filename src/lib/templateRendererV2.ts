@@ -170,6 +170,17 @@ async function fetchPdf(url: string): Promise<ArrayBuffer> {
   return res.arrayBuffer();
 }
 
+// ===== Logo / imagem =====
+
+async function fetchImageBytes(url: string): Promise<{ bytes: ArrayBuffer; type: 'png' | 'jpg' }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Erro ao baixar imagem: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const header = new Uint8Array(buf.slice(0, 4));
+  const isPng = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+  return { bytes: buf, type: isPng ? 'png' : 'jpg' };
+}
+
 // ===== Renderização principal =====
 
 export interface RenderOptions {
@@ -178,6 +189,8 @@ export interface RenderOptions {
   borderColor?: { r: number; g: number; b: number };
   showFieldLabels?: boolean;
   labelFontSize?: number;
+  /** Always draw grid borders + labels even when usarFundo=true */
+  alwaysDrawGrid?: boolean;
 }
 
 export async function renderBoletoV2(
@@ -243,6 +256,9 @@ export async function renderBoletoV2(
     (a, b) => (a.display_order || 0) - (b.display_order || 0)
   );
 
+  // Cache for embedded images (logo)
+  const imageCache: Record<string, Awaited<ReturnType<typeof doc.embedPng>>> = {};
+
   // Processar cada campo visível
   for (const field of sortedFields) {
     const [x1mm, y1mm, x2mm, y2mm] = field.bbox;
@@ -257,30 +273,55 @@ export async function renderBoletoV2(
       page.drawRectangle({ x, y, width: w, height: h, color: rgb(bgC.r, bgC.g, bgC.b) });
     }
 
-    // Debug/Layout: desenhar bordas e label do campo
-    if (showBorders) {
+    // Grid borders + labels (when no background OR debug mode)
+    const drawGrid = showBorders || (!usarFundo);
+    if (drawGrid) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
-      if (showLabels) {
-        const labelText = field.label || field.key || '';
-        if (labelText) {
-          const labelFont = fonts.helvetica;
-          const labelColor = rgb(0.4, 0.4, 0.4);
-          // Draw label at top of bbox
-          const labelFontRef = fonts.helvetica;
-          const maxLabelW = labelFontRef.widthOfTextAtSize(labelText, labelSize);
-          const truncLabel = maxLabelW > w - 2 ? labelText.substring(0, Math.floor(labelText.length * (w - 2) / maxLabelW)) : labelText;
-          if (truncLabel) {
-            page.drawText(truncLabel, { x: x + 1, y: y + h - labelSize - 0.5, size: labelSize, font: labelFont, color: labelColor });
-          }
+      const labelText = field.label || field.key || '';
+      if (labelText && !field.key.startsWith('mask_')) {
+        const labelFont = fonts.helvetica;
+        const labelColor = rgb(0.4, 0.4, 0.4);
+        const maxLabelW = labelFont.widthOfTextAtSize(labelText, labelSize);
+        const truncLabel = maxLabelW > w - 2 ? labelText.substring(0, Math.floor(labelText.length * (w - 2) / maxLabelW)) : labelText;
+        if (truncLabel) {
+          page.drawText(truncLabel, { x: x + 1, y: y + h - labelSize - 0.5, size: labelSize, font: labelFont, color: labelColor });
         }
       }
+    }
+
+    // === Logo / Image field ===
+    if (field.key === 'banco_logo' || field.key === 'via2_banco_logo') {
+      const logoUrl = resolveValue(field.source_ref, dados);
+      if (logoUrl) {
+        try {
+          if (!imageCache[logoUrl]) {
+            const { bytes, type } = await fetchImageBytes(logoUrl);
+            imageCache[logoUrl] = type === 'png'
+              ? await doc.embedPng(bytes)
+              : await doc.embedJpg(bytes);
+          }
+          const img = imageCache[logoUrl];
+          // Fit image proportionally inside bbox
+          const imgDims = img.scale(1);
+          const scaleX = w / imgDims.width;
+          const scaleY = h / imgDims.height;
+          const scale = Math.min(scaleX, scaleY);
+          const drawW = imgDims.width * scale;
+          const drawH = imgDims.height * scale;
+          const imgX = x + (w - drawW) / 2;
+          const imgY = y + (h - drawH) / 2;
+          page.drawImage(img, { x: imgX, y: imgY, width: drawW, height: drawH });
+        } catch (e) {
+          console.warn(`[templateRendererV2] Falha ao renderizar logo: ${e}`);
+        }
+      }
+      continue;
     }
 
     // Código de barras
     if (field.is_barcode) {
       const barValue = resolveValue(field.source_ref, dados) || resolveValue(field.key, dados);
       if (barValue) {
-        // Only draw barcode once - check collision
         if (!checkCollision(x, y, w, h, field.key)) {
           drawBarcodeI25(page, barValue, x, y, w, h);
           occupiedRects.push({ x, y, w, h, key: field.key });
@@ -298,7 +339,7 @@ export async function renderBoletoV2(
     let fontSize = field.font_size || 10;
     const textColor = hexToRgb(field.color || '#000000');
 
-    // Shrink to fit (clipping: text must not overflow bbox)
+    // Shrink to fit
     let textWidth = font.widthOfTextAtSize(value, fontSize);
     const minFontSize = 5;
     if (textWidth > w - 2 && textWidth > 0) {
@@ -323,14 +364,16 @@ export async function renderBoletoV2(
     if (field.align === 'center') txX = x + (w - textWidth) / 2;
     if (field.align === 'right') txX = x + w - textWidth - 1;
 
-    // Centralizar verticalmente
-    const txY = y + (h - fontSize) / 2;
+    // Vertical: place text below the label line when grid is drawn
+    const labelOffset = drawGrid ? labelSize + 1.5 : 0;
+    const availH = h - labelOffset;
+    const txY = y + (availH - fontSize) / 2;
 
     // Collision check for critical fields
     const criticalFields = ['linha_digitavel', 'codigo_barras', 'valor_documento', 'data_vencimento'];
     if (criticalFields.includes(field.key) || criticalFields.includes(field.key.replace('via2_', ''))) {
       if (checkCollision(x, y, w, h, field.key)) {
-        console.error(`[templateRendererV2] CRITICAL FIELD COLLISION: "${field.key}" - this indicates a bbox/scale bug`);
+        console.error(`[templateRendererV2] CRITICAL FIELD COLLISION: "${field.key}"`);
       }
     }
 
@@ -342,7 +385,6 @@ export async function renderBoletoV2(
       color: rgb(textColor.r, textColor.g, textColor.b),
     });
 
-    // Register occupied rectangle (skip mask fields)
     if (!field.key.startsWith('mask_')) {
       occupiedRects.push({ x, y, w, h, key: field.key });
     }
@@ -358,12 +400,12 @@ export async function renderBoletosV2(
   template: BoletoTemplateRow,
   fields: BoletoTemplateFieldRow[],
   dadosList: DadosBoleto[],
-  usarFundo: boolean = true,
+  usarFundoOrOptions: boolean | RenderOptions = true,
 ): Promise<Uint8Array> {
   const outputDoc = await PDFDocument.create();
 
   for (const dados of dadosList) {
-    const boletoBytes = await renderBoletoV2(template, fields, dados, usarFundo);
+    const boletoBytes = await renderBoletoV2(template, fields, dados, usarFundoOrOptions);
     const boletoPdf = await PDFDocument.load(boletoBytes);
     const [copiedPage] = await outputDoc.copyPages(boletoPdf, [0]);
     outputDoc.addPage(copiedPage);
