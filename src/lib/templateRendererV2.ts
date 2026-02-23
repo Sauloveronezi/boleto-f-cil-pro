@@ -274,10 +274,12 @@ export async function renderBoletoV2(
     }
 
     // Grid borders + labels (when no background OR debug mode)
+    // Skip border for barcode fields and fields with empty labels
     const drawGrid = showBorders || (!usarFundo);
-    if (drawGrid) {
+    const skipBorder = field.is_barcode;
+    if (drawGrid && !skipBorder) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
-      const labelText = field.label || field.key || '';
+      const labelText = field.label || '';
       if (labelText && !field.key.startsWith('mask_')) {
         const labelFont = fonts.helvetica;
         const labelColor = rgb(0.4, 0.4, 0.4);

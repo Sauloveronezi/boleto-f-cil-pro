@@ -330,7 +330,12 @@ export function mapBoletoApiToDadosBoleto(
     dados.local_pagamento = localPagamentoMap[codigoBanco] || 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.';
   }
   if (!dados.instrucoes) {
-    dados.instrucoes = configBanco?.textoInstrucaoPadrao || '';
+    // Build instruction text from bank config: include rates + custom text
+    const instrParts: string[] = [];
+    if (configBanco?.textoInstrucaoPadrao) {
+      instrParts.push(configBanco.textoInstrucaoPadrao);
+    }
+    dados.instrucoes = instrParts.join('\n') || '';
   }
   if (!dados.especie_documento) dados.especie_documento = 'DM';
   if (!dados.aceite) dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';
