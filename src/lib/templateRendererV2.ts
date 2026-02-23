@@ -337,23 +337,27 @@ export async function renderBoletoV2(
     const value = formatValue(rawValue, field.format);
     if (!value) continue;
 
+    // Sanitize: pdf-lib WinAnsi cannot encode control chars like \n \r \t
+    const sanitizedValue = value.replace(/[\n\r\t]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    if (!sanitizedValue) continue;
+
     const font = getFont(fonts, field.font_family, field.bold);
     let fontSize = field.font_size || 10;
     const textColor = hexToRgb(field.color || '#000000');
 
     // Shrink to fit
-    let textWidth = font.widthOfTextAtSize(value, fontSize);
+    let textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
     const minFontSize = 5;
     if (textWidth > w - 2 && textWidth > 0) {
       const scale = (w - 2) / textWidth;
       fontSize = Math.max(minFontSize, fontSize * scale);
-      textWidth = font.widthOfTextAtSize(value, fontSize);
+      textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
     }
 
     // Truncate with ellipsis if still overflows
-    let displayValue = value;
+    let displayValue = sanitizedValue;
     if (textWidth > w - 2) {
-      let truncated = value;
+      let truncated = sanitizedValue;
       while (truncated.length > 1 && font.widthOfTextAtSize(truncated + '…', fontSize) > w - 2) {
         truncated = truncated.slice(0, -1);
       }
