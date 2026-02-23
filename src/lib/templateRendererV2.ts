@@ -187,6 +187,9 @@ export async function renderBoletoV2(
   usarFundoOrOptions: boolean | RenderOptions = true,
   debugBorders: boolean = false,
 ): Promise<Uint8Array> {
+  const renderId = `render_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  console.log(`[templateRendererV2] render_start id=${renderId} template=${template.name} fields=${fields.length}`);
+
   // Support both old signature and new options object
   let opts: RenderOptions;
   if (typeof usarFundoOrOptions === 'boolean') {
@@ -220,8 +223,28 @@ export async function renderBoletoV2(
   const { height: pageH } = page.getSize();
   const fonts = await loadFonts(doc);
 
+  // Collision detection: track occupied rectangles
+  const occupiedRects: Array<{ x: number; y: number; w: number; h: number; key: string }> = [];
+
+  function checkCollision(x: number, y: number, w: number, h: number, key: string): boolean {
+    for (const rect of occupiedRects) {
+      const overlapX = x < rect.x + rect.w && x + w > rect.x;
+      const overlapY = y < rect.y + rect.h && y + h > rect.y;
+      if (overlapX && overlapY) {
+        console.warn(`[templateRendererV2] COLLISION: "${key}" overlaps with "${rect.key}"`);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Sort fields by display_order to ensure masks render first
+  const sortedFields = [...fields.filter(f => f.visible !== false)].sort(
+    (a, b) => (a.display_order || 0) - (b.display_order || 0)
+  );
+
   // Processar cada campo visível
-  for (const field of fields.filter(f => f.visible !== false)) {
+  for (const field of sortedFields) {
     const [x1mm, y1mm, x2mm, y2mm] = field.bbox;
     const x = mmToPt(x1mm);
     const w = mmToPt(x2mm - x1mm);
@@ -247,7 +270,13 @@ export async function renderBoletoV2(
     // Código de barras
     if (field.is_barcode) {
       const barValue = resolveValue(field.source_ref, dados) || resolveValue(field.key, dados);
-      if (barValue) drawBarcodeI25(page, barValue, x, y, w, h);
+      if (barValue) {
+        // Only draw barcode once - check collision
+        if (!checkCollision(x, y, w, h, field.key)) {
+          drawBarcodeI25(page, barValue, x, y, w, h);
+          occupiedRects.push({ x, y, w, h, key: field.key });
+        }
+      }
       continue;
     }
 
@@ -260,12 +289,24 @@ export async function renderBoletoV2(
     let fontSize = field.font_size || 10;
     const textColor = hexToRgb(field.color || '#000000');
 
-    // Shrink to fit
+    // Shrink to fit (clipping: text must not overflow bbox)
     let textWidth = font.widthOfTextAtSize(value, fontSize);
+    const minFontSize = 5;
     if (textWidth > w - 2 && textWidth > 0) {
       const scale = (w - 2) / textWidth;
-      fontSize = Math.max(5, fontSize * scale);
+      fontSize = Math.max(minFontSize, fontSize * scale);
       textWidth = font.widthOfTextAtSize(value, fontSize);
+    }
+
+    // Truncate with ellipsis if still overflows
+    let displayValue = value;
+    if (textWidth > w - 2) {
+      let truncated = value;
+      while (truncated.length > 1 && font.widthOfTextAtSize(truncated + '…', fontSize) > w - 2) {
+        truncated = truncated.slice(0, -1);
+      }
+      displayValue = truncated + '…';
+      textWidth = font.widthOfTextAtSize(displayValue, fontSize);
     }
 
     // Alinhamento horizontal
@@ -276,15 +317,29 @@ export async function renderBoletoV2(
     // Centralizar verticalmente
     const txY = y + (h - fontSize) / 2;
 
-    page.drawText(value, {
+    // Collision check for critical fields
+    const criticalFields = ['linha_digitavel', 'codigo_barras', 'valor_documento', 'data_vencimento'];
+    if (criticalFields.includes(field.key) || criticalFields.includes(field.key.replace('via2_', ''))) {
+      if (checkCollision(x, y, w, h, field.key)) {
+        console.error(`[templateRendererV2] CRITICAL FIELD COLLISION: "${field.key}" - this indicates a bbox/scale bug`);
+      }
+    }
+
+    page.drawText(displayValue, {
       x: txX,
       y: txY,
       size: fontSize,
       font,
       color: rgb(textColor.r, textColor.g, textColor.b),
     });
+
+    // Register occupied rectangle (skip mask fields)
+    if (!field.key.startsWith('mask_')) {
+      occupiedRects.push({ x, y, w, h, key: field.key });
+    }
   }
 
+  console.log(`[templateRendererV2] render_end id=${renderId} occupiedRects=${occupiedRects.length}`);
   return doc.save();
 }
 
