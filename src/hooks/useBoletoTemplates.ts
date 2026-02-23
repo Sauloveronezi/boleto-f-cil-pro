@@ -289,7 +289,7 @@ export function useSeedUniversalTemplate() {
             name: 'Modelo Universal',
             bank_code: null,
             layout_version: 'v1',
-            background_pdf_url: '/templates/boleto_universal_referencia.pdf',
+            background_pdf_url: '/templates/modelo_padrao_bradesco.pdf',
             page_width: 210,
             page_height: 297,
             requires_calculation: true,
