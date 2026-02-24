@@ -12,7 +12,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers, AlertTriangle, Info } from 'lucide-react';
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers, AlertTriangle, Info, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -47,7 +53,7 @@ import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
 import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper';
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates';
 import { renderBoletosV2, downloadPdfV2 } from '@/lib/templateRendererV2';
-import { useBoletosApiConfigColunas, useBoletosApiConfigFiltros } from '@/hooks/useBoletosApiConfig';
+import { useBoletosApiConfigColunas, useBoletosApiConfigFiltros, BoletosApiConfigItem } from '@/hooks/useBoletosApiConfig';
 import { BoletosApiConfigDialog } from '@/components/boleto/BoletosApiConfigDialog';
 
 const ESTADOS_BRASIL = [
@@ -81,7 +87,9 @@ export default function BoletosApi() {
 
   // Config dinâmica de colunas e filtros
   const { data: colunasVisiveis } = useBoletosApiConfigColunas();
-  const { data: filtrosVisiveis } = useBoletosApiConfigFiltros();
+  const { data: filtrosVisiveis, primarios: filtrosPrimarios, secundarios: filtrosSecundarios } = useBoletosApiConfigFiltros();
+  const [showSecundarios, setShowSecundarios] = useState(false);
+  
 
   const { data: boletos, isLoading, refetch } = useBoletosApi({
     dataEmissaoInicio: filtros.dataEmissaoInicio || undefined,
@@ -200,10 +208,32 @@ export default function BoletosApi() {
     }
   };
 
+  // Extrair estados e cidades únicos dos dados para filtros de seleção
+  const estadosDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    boletos?.forEach((b: any) => {
+      const uf = b.uf || getNested(b, 'dados_extras.uf') || '';
+      if (uf && String(uf).trim()) set.add(String(uf).trim().toUpperCase());
+    });
+    return Array.from(set).sort();
+  }, [boletos]);
+
+  const cidadesDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    boletos?.forEach((b: any) => {
+      const cidade = b.dyn_cidade || getNested(b, 'dados_extras.cidade') || '';
+      const uf = b.uf || getNested(b, 'dados_extras.uf') || '';
+      if (!cidade || !String(cidade).trim()) return;
+      // Se estado selecionado, filtrar cidades daquele estado
+      if (filtros.estado && String(uf).trim().toUpperCase() !== filtros.estado.toUpperCase()) return;
+      set.add(String(cidade).trim());
+    });
+    return Array.from(set).sort();
+  }, [boletos, filtros.estado]);
+
   // Filtrar boletos
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
-      // Filtro de boletos já emitidos
       if (ocultarEmitidos && b.cod_barras_calculado) return false;
       if (filtros.transportadora) {
         const transportadora = getTransportadora(b);
@@ -216,9 +246,71 @@ export default function BoletosApi() {
           if (codigoBoleto !== bancoFiltro.codigo_banco.trim()) return false;
         }
       }
+      // Filtro estado
+      if (filtros.estado) {
+        const uf = b.uf || getNested(b, 'dados_extras.uf') || '';
+        if (String(uf).trim().toUpperCase() !== filtros.estado.toUpperCase()) return false;
+      }
+      // Filtro cidade
       if (filtros.cidade) {
         const cidade = b.dyn_cidade || getNested(b, 'dados_extras.cidade') || '';
-        if (!String(cidade).toLowerCase().includes(filtros.cidade.toLowerCase())) return false;
+        if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return false;
+      }
+      // Filtro CNPJ (texto livre)
+      if (filtros.cnpj) {
+        const cnpj = getCnpj(b);
+        if (!String(cnpj).includes(filtros.cnpj)) return false;
+      }
+      // Filtro cliente nome (texto livre)
+      if (filtros.clienteNome) {
+        const nome = b.dyn_nome_do_cliente || b.cliente?.razao_social || '';
+        if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return false;
+      }
+      // Range filters for numbers (de->até)
+      // numero_nota range
+      if (filtros.numero_nota_de) {
+        const val = String(b.numero_nota || '');
+        if (val < filtros.numero_nota_de) return false;
+      }
+      if (filtros.numero_nota_ate) {
+        const val = String(b.numero_nota || '');
+        if (val > filtros.numero_nota_ate) return false;
+      }
+      // valor range
+      if (filtros.valor_de) {
+        if ((b.valor || 0) < parseFloat(filtros.valor_de)) return false;
+      }
+      if (filtros.valor_ate) {
+        if ((b.valor || 0) > parseFloat(filtros.valor_ate)) return false;
+      }
+      // data_emissao range
+      if (filtros.dataEmissaoInicio) {
+        const dt = String(b.data_emissao || '').substring(0, 10);
+        if (dt < filtros.dataEmissaoInicio) return false;
+      }
+      if (filtros.dataEmissaoFim) {
+        const dt = String(b.data_emissao || '').substring(0, 10);
+        if (dt > filtros.dataEmissaoFim) return false;
+      }
+      // data_vencimento range
+      if (filtros.dataVencimentoInicio) {
+        const dt = String(b.data_vencimento || '').substring(0, 10);
+        if (dt < filtros.dataVencimentoInicio) return false;
+      }
+      if (filtros.dataVencimentoFim) {
+        const dt = String(b.data_vencimento || '').substring(0, 10);
+        if (dt > filtros.dataVencimentoFim) return false;
+      }
+      // Generic text filters for any other configured filter
+      const handledKeys = new Set([
+        'transportadora', 'estado', 'cidade', 'cnpj', 'clienteNome', 'clienteId',
+        'numero_nota_de', 'numero_nota_ate', 'valor_de', 'valor_ate',
+        'dataEmissaoInicio', 'dataEmissaoFim', 'dataVencimentoInicio', 'dataVencimentoFim',
+      ]);
+      for (const [key, val] of Object.entries(filtros)) {
+        if (!val || handledKeys.has(key)) continue;
+        const cellVal = getCellValue(b, key);
+        if (!String(cellVal).toLowerCase().includes(val.toLowerCase())) return false;
       }
       return true;
     }) || [];
@@ -518,52 +610,131 @@ export default function BoletosApi() {
     }
   };
 
-  // Renderizar um filtro dinâmico
-  const renderFiltro = (filtroConfig: { chave: string; label: string; campo_boleto: string | null }) => {
-    const { chave, label } = filtroConfig;
+  // Detect filter type from key
+  const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'text' | 'cnpj' | 'cliente' => {
+    const lower = chave.toLowerCase();
+    if (lower.includes('data') || lower.includes('date') || lower === 'postingdate') return 'date';
+    if (lower === 'estado' || lower === 'uf' || lower === 'payeeregion') return 'estado';
+    if (lower === 'cidade' || lower === 'dyn_cidade') return 'cidade';
+    if (lower === 'cnpj' || lower.includes('taxnumber') || lower.includes('cnpj')) return 'cnpj';
+    if (lower === 'clienteid' || lower === 'cliente' || lower === 'dyn_nome_do_cliente' || lower.includes('nome')) return 'cliente';
+    if (lower === 'valor' || lower.includes('amount') || lower === 'numero_nota' || lower === 'numero_cobranca' || lower === 'nosso_numero') return 'number';
+    return 'text';
+  };
 
-    // Filtros especiais com Select
-    if (chave === 'clienteId') {
+  // Renderizar um filtro dinâmico
+  const renderFiltro = (filtroConfig: BoletosApiConfigItem) => {
+    const { chave, label } = filtroConfig;
+    const tipo = getFilterType(chave);
+
+    // Estado - select com estados existentes nos dados
+    if (tipo === 'estado') {
       return (
         <div key={chave}>
-          <Label>{label}</Label>
-          <Select value={filtros[chave] || ''} onValueChange={(v) => setFiltros(f => ({ ...f, [chave]: v === 'all' ? '' : v }))}>
+          <Label className="text-xs">{label}</Label>
+          <Select value={filtros.estado || ''} onValueChange={(v) => {
+            setFiltros(f => ({ ...f, estado: v === 'all' ? '' : v, cidade: '' })); // limpa cidade ao mudar estado
+          }}>
             <SelectTrigger className="mt-1"><SelectValue placeholder="Todos" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os clientes</SelectItem>
-              {clientes?.map((c) => (<SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>))}
+              <SelectItem value="all">Todos</SelectItem>
+              {estadosDisponiveis.map((uf) => (<SelectItem key={uf} value={uf}>{uf}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
       );
     }
-    if (chave === 'estado') {
+
+    // Cidade - select com cidades filtradas pelo estado
+    if (tipo === 'cidade') {
       return (
         <div key={chave}>
-          <Label>{label}</Label>
-          <Select value={filtros[chave] || ''} onValueChange={(v) => setFiltros(f => ({ ...f, [chave]: v === 'all' ? '' : v }))}>
-            <SelectTrigger className="mt-1"><SelectValue placeholder="Todos" /></SelectTrigger>
+          <Label className="text-xs">{label}</Label>
+          <Select value={filtros.cidade || ''} onValueChange={(v) => setFiltros(f => ({ ...f, cidade: v === 'all' ? '' : v }))}>
+            <SelectTrigger className="mt-1"><SelectValue placeholder="Todas" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os estados</SelectItem>
-              {ESTADOS_BRASIL.map((uf) => (<SelectItem key={uf} value={uf}>{uf}</SelectItem>))}
+              <SelectItem value="all">Todas</SelectItem>
+              {cidadesDisponiveis.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
       );
     }
-    // Filtros de data
-    if (chave.toLowerCase().includes('data')) {
+
+    // CNPJ - texto digitado
+    if (tipo === 'cnpj') {
       return (
         <div key={chave}>
-          <Label>{label}</Label>
-          <Input type="date" value={filtros[chave] || ''} onChange={(e) => setFiltros(f => ({ ...f, [chave]: e.target.value }))} className="mt-1" />
+          <Label className="text-xs">{label}</Label>
+          <Input
+            value={filtros.cnpj || ''}
+            onChange={(e) => setFiltros(f => ({ ...f, cnpj: e.target.value }))}
+            placeholder="Digite o CNPJ..."
+            className="mt-1"
+          />
         </div>
       );
     }
-    // Filtro de texto padrão
+
+    // Cliente nome - texto digitado
+    if (tipo === 'cliente') {
+      return (
+        <div key={chave}>
+          <Label className="text-xs">{label}</Label>
+          <Input
+            value={filtros.clienteNome || ''}
+            onChange={(e) => setFiltros(f => ({ ...f, clienteNome: e.target.value }))}
+            placeholder="Digite o nome..."
+            className="mt-1"
+          />
+        </div>
+      );
+    }
+
+    // Data - range de->até
+    if (tipo === 'date') {
+      const keyDe = chave.includes('vencimento') ? 'dataVencimentoInicio' : 'dataEmissaoInicio';
+      const keyAte = chave.includes('vencimento') ? 'dataVencimentoFim' : 'dataEmissaoFim';
+      return (
+        <div key={chave} className="col-span-1 md:col-span-2">
+          <Label className="text-xs">{label}</Label>
+          <div className="flex gap-2 mt-1">
+            <div className="flex-1">
+              <Input type="date" value={filtros[keyDe] || ''} onChange={(e) => setFiltros(f => ({ ...f, [keyDe]: e.target.value }))} placeholder="De" />
+            </div>
+            <span className="self-center text-xs text-muted-foreground">até</span>
+            <div className="flex-1">
+              <Input type="date" value={filtros[keyAte] || ''} onChange={(e) => setFiltros(f => ({ ...f, [keyAte]: e.target.value }))} placeholder="Até" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Número - range de->até
+    if (tipo === 'number') {
+      const keyDe = `${chave}_de`;
+      const keyAte = `${chave}_ate`;
+      return (
+        <div key={chave} className="col-span-1 md:col-span-2">
+          <Label className="text-xs">{label}</Label>
+          <div className="flex gap-2 mt-1">
+            <div className="flex-1">
+              <Input value={filtros[keyDe] || ''} onChange={(e) => setFiltros(f => ({ ...f, [keyDe]: e.target.value }))} placeholder="De" />
+            </div>
+            <span className="self-center text-xs text-muted-foreground">até</span>
+            <div className="flex-1">
+              <Input value={filtros[keyAte] || ''} onChange={(e) => setFiltros(f => ({ ...f, [keyAte]: e.target.value }))} placeholder="Até" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Texto padrão
     return (
       <div key={chave}>
-        <Label>{label}</Label>
+        <Label className="text-xs">{label}</Label>
         <Input value={filtros[chave] || ''} onChange={(e) => setFiltros(f => ({ ...f, [chave]: e.target.value }))} placeholder={label} className="mt-1" />
       </div>
     );
@@ -642,9 +813,10 @@ export default function BoletosApi() {
                 Filtros
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Filtros primários - sempre visíveis */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {filtrosVisiveis.map(f => renderFiltro(f))}
+                {filtrosPrimarios.map(f => renderFiltro(f))}
                 <div className="flex items-center space-x-2">
                   <Checkbox id="ocultar-emitidos" checked={ocultarEmitidos} onCheckedChange={(checked) => setOcultarEmitidos(!!checked)} />
                   <Label htmlFor="ocultar-emitidos" className="text-sm cursor-pointer">Ocultar já emitidos</Label>
@@ -653,6 +825,24 @@ export default function BoletosApi() {
                   <Button variant="ghost" onClick={handleLimparFiltros} className="w-full">Limpar Filtros</Button>
                 </div>
               </div>
+
+              {/* Filtros secundários - em menu suspenso */}
+              {filtrosSecundarios.length > 0 && (
+                <Collapsible open={showSecundarios} onOpenChange={setShowSecundarios}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2 text-xs">
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      Filtros Adicionais ({filtrosSecundarios.length})
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showSecundarios ? 'rotate-180' : ''}`} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-3 border border-border rounded-lg bg-muted/20">
+                      {filtrosSecundarios.map(f => renderFiltro(f))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </CardContent>
           </Card>
         )}

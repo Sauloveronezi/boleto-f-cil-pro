@@ -1833,6 +1833,7 @@ export type Database = {
           deleted: string | null
           id: string
           label: string
+          nivel: string
           ordem: number
           tipo: string
           updated_at: string
@@ -1847,6 +1848,7 @@ export type Database = {
           deleted?: string | null
           id?: string
           label: string
+          nivel?: string
           ordem?: number
           tipo: string
           updated_at?: string
@@ -1861,6 +1863,7 @@ export type Database = {
           deleted?: string | null
           id?: string
           label?: string
+          nivel?: string
           ordem?: number
           tipo?: string
           updated_at?: string
