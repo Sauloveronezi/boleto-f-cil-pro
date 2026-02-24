@@ -54,6 +54,7 @@ export default function BoletosApi() {
   const [filtros, setFiltros] = useState<Record<string, string>>({});
   const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [ocultarEmitidos, setOcultarEmitidos] = useState(true);
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
   const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
   const [imprimirFundo, setImprimirFundo] = useState(true);
@@ -193,6 +194,8 @@ export default function BoletosApi() {
   // Filtrar boletos
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
+      // Filtro de boletos já emitidos
+      if (ocultarEmitidos && b.cod_barras_calculado) return false;
       if (filtros.transportadora) {
         const transportadora = getTransportadora(b);
         if (!String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase())) return false;
@@ -204,14 +207,13 @@ export default function BoletosApi() {
           if (codigoBoleto !== bancoFiltro.codigo_banco.trim()) return false;
         }
       }
-      // Filtros dinâmicos de texto (cidade, cnpj, etc.)
       if (filtros.cidade) {
         const cidade = b.dyn_cidade || getNested(b, 'dados_extras.cidade') || '';
         if (!String(cidade).toLowerCase().includes(filtros.cidade.toLowerCase())) return false;
       }
       return true;
     }) || [];
-  }, [boletos, filtros, bancoSelecionado, bancos]);
+  }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos]);
 
   const todosIds = useMemo(() => boletosFiltrados.map((b: any) => b.id), [boletosFiltrados]);
   const todosSelecionados = todosIds.length > 0 && todosIds.every((id: string) => selecionados.has(id));
@@ -634,6 +636,10 @@ export default function BoletosApi() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {filtrosVisiveis.map(f => renderFiltro(f))}
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="ocultar-emitidos" checked={ocultarEmitidos} onCheckedChange={(checked) => setOcultarEmitidos(!!checked)} />
+                  <Label htmlFor="ocultar-emitidos" className="text-sm cursor-pointer">Ocultar já emitidos</Label>
+                </div>
                 <div className="flex items-end">
                   <Button variant="ghost" onClick={handleLimparFiltros} className="w-full">Limpar Filtros</Button>
                 </div>
