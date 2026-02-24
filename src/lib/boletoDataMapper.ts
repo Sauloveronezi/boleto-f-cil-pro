@@ -221,9 +221,24 @@ function calcularCodigoBarrasFromDados(
     }
     
     const dv = calcularModulo11(codigoSemDV);
+    if (dv === null || dv === undefined) {
+      console.warn('[boletoDataMapper] DV inválido para código de barras');
+      return null;
+    }
 
     const codigoBarras = `${banco3}${moeda}${dv}${fatorVencimento}${valorFmt}${campoLivre}`;
+    
+    // Validação final: deve ser exatamente 44 dígitos numéricos
+    if (codigoBarras.length !== 44 || !/^\d{44}$/.test(codigoBarras)) {
+      console.warn('[boletoDataMapper] Código de barras final inválido:', codigoBarras);
+      return null;
+    }
+
     const linhaDigitavel = gerarLinhaDigitavel(codigoBarras);
+    if (!linhaDigitavel) {
+      console.warn('[boletoDataMapper] Linha digitável não gerada');
+      return null;
+    }
 
     return { codigoBarras, linhaDigitavel };
   } catch (e) {

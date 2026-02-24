@@ -491,13 +491,53 @@ export default function BoletosApi() {
     }
   };
 
-    // ===== Verificar conflito de código de barras =====
+    // ===== Validar código de barras: deve ser 44 dígitos numéricos =====
     const dadosBoletosCalc = mapearDadosBoletos(boletosSelecionados);
+    
+    const isCodigoBarrasValido = (cod: string | undefined | null): boolean => {
+      if (!cod) return false;
+      const limpo = String(cod).trim();
+      return /^\d{44}$/.test(limpo);
+    };
+
+    // Separar boletos válidos dos inválidos
+    const boletosValidos: any[] = [];
+    const dadosValidos: any[] = [];
+    const boletosInvalidos: any[] = [];
+
+    for (let i = 0; i < boletosSelecionados.length; i++) {
+      const boleto = boletosSelecionados[i];
+      const dados = dadosBoletosCalc[i];
+      if (isCodigoBarrasValido(dados?.codigo_barras) && dados?.linha_digitavel) {
+        boletosValidos.push(boleto);
+        dadosValidos.push(dados);
+      } else {
+        boletosInvalidos.push(boleto);
+      }
+    }
+
+    // Se há boletos inválidos, exibir diálogo de erro
+    if (boletosInvalidos.length > 0) {
+      setBoletosComFalha(boletosInvalidos);
+      setShowFalhaDialog(true);
+    }
+
+    // Se NENHUM boleto é válido, abortar completamente
+    if (boletosValidos.length === 0) {
+      toast({ 
+        title: 'Emissão cancelada', 
+        description: `Nenhum dos ${boletosSelecionados.length} boleto(s) possui código de barras válido. Verifique as configurações bancárias.`, 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    // ===== Verificar conflito de código de barras (apenas válidos) =====
     if (!forceOverride) {
       const conflicts: { nota: string; antigo: string; novo: string }[] = [];
-      for (let i = 0; i < boletosSelecionados.length; i++) {
-        const boleto = boletosSelecionados[i];
-        const novoBarras = dadosBoletosCalc[i]?.codigo_barras;
+      for (let i = 0; i < boletosValidos.length; i++) {
+        const boleto = boletosValidos[i];
+        const novoBarras = dadosValidos[i]?.codigo_barras;
         const barrasExistente = (boleto as any).cod_barras_calculado;
         if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
           conflicts.push({
@@ -519,21 +559,16 @@ export default function BoletosApi() {
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
     if (templateV2 && templateFieldsV2 && templateFieldsV2.length > 0) {
       try {
-        toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
-        const dadosBoletos = dadosBoletosCalc;
+        const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
+        toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
         const renderOpts = imprimirFundo
           ? { usarFundo: true }
           : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
-        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosBoletos, renderOpts);
+        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosValidos, renderOpts);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-        await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
-        toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${templateV2.name}"` });
-        if (boletosComFalhaLinhaDigitavel.length > 0) {
-          const falhos = boletosSelecionados.filter((b: any) => boletosComFalhaLinhaDigitavel.includes(b.numero_nota || b.id));
-          setBoletosComFalha(falhos);
-          setShowFalhaDialog(true);
-        }
+        await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
+        toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${templateV2.name}"${msgExtra}` });
       } catch (error: any) {
         console.error('[BoletosApi] Erro V2:', error);
         toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
@@ -547,7 +582,8 @@ export default function BoletosApi() {
       if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return; }
       if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return; }
       try {
-        toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
+        const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
+        toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
         const { data: modeloCompleto, error: modeloError } = await supabase
           .from('vv_b_modelos_boleto').select('campos_mapeados').eq('id', modeloSelecionado).single();
         if (modeloError) throw new Error('Erro ao carregar modelo');
@@ -562,17 +598,11 @@ export default function BoletosApi() {
           bordaEsquerda: c.bordaEsquerda, bordaDireita: c.bordaDireita,
           espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
         })) || [];
-        const dadosBoletos = dadosBoletosCalc;
-        const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosBoletos, undefined, imprimirFundo);
+        const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosValidos, undefined, imprimirFundo);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-        await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
-        toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${modelo.nome_modelo}"` });
-        if (boletosComFalhaLinhaDigitavel.length > 0) {
-          const falhos = boletosSelecionados.filter((b: any) => boletosComFalhaLinhaDigitavel.includes(b.numero_nota || b.id));
-          setBoletosComFalha(falhos);
-          setShowFalhaDialog(true);
-        }
+        await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
+        toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${modelo.nome_modelo}"${msgExtra}` });
       } catch (error: any) {
         console.error('[BoletosApi] Erro legado:', error);
         toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
@@ -580,8 +610,8 @@ export default function BoletosApi() {
       return;
     }
 
-    // Fallback sem modelo
-    const notasParaImprimir = boletosSelecionados.map((boleto: any) => ({
+    // Fallback sem modelo - usar apenas boletos válidos
+    const notasParaImprimir = boletosValidos.map((boleto: any) => ({
       id: boleto.id, numero_nota: boleto.numero_nota,
       serie: boleto.dados_extras?.serie || '1', codigo_cliente: boleto.cliente_id || '',
       data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
@@ -590,7 +620,7 @@ export default function BoletosApi() {
       referencia_interna: boleto.numero_cobranca || ''
     }));
 
-    const clientesParaImprimir = boletosSelecionados
+    const clientesParaImprimir = boletosValidos
       .map((b: any) => b.cliente || {
         id: b.cliente_id || b.id,
         razao_social: b.dyn_nome_do_cliente || 'Cliente Sem Nome',
@@ -603,8 +633,9 @@ export default function BoletosApi() {
       );
 
     try {
+      const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
       gerarPDFBoletos(notasParaImprimir, clientesParaImprimir, banco, configuracao, 'API_CDS', 'arquivo_unico');
-      toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s)` });
+      toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s)${msgExtra}` });
     } catch (error: any) {
       toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
     }
