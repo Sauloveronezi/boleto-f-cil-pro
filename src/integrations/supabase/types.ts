@@ -1549,6 +1549,8 @@ export type Database = {
         Row: {
           AccountingDocument: string | null
           accountingdocumenttype: string | null
+          amountinfunctionalcurrency: string | null
+          AmountInFunctionalCurrency: string | null
           bairro: string | null
           banco: string | null
           BankAccountLongID: string | null
@@ -1561,6 +1563,7 @@ export type Database = {
           BR_NFPartnerFunction: string | null
           br_nfsourcedocumenttype: string | null
           br_nfsubseries: string | null
+          BR_NFSubSeries: string | null
           carteira: string | null
           CashDiscount1Days: string | null
           CashDiscount1Percent: string | null
@@ -1629,6 +1632,8 @@ export type Database = {
         Insert: {
           AccountingDocument?: string | null
           accountingdocumenttype?: string | null
+          amountinfunctionalcurrency?: string | null
+          AmountInFunctionalCurrency?: string | null
           bairro?: string | null
           banco?: string | null
           BankAccountLongID?: string | null
@@ -1641,6 +1646,7 @@ export type Database = {
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
+          BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null
@@ -1709,6 +1715,8 @@ export type Database = {
         Update: {
           AccountingDocument?: string | null
           accountingdocumenttype?: string | null
+          amountinfunctionalcurrency?: string | null
+          AmountInFunctionalCurrency?: string | null
           bairro?: string | null
           banco?: string | null
           BankAccountLongID?: string | null
@@ -1721,6 +1729,7 @@ export type Database = {
           BR_NFPartnerFunction?: string | null
           br_nfsourcedocumenttype?: string | null
           br_nfsubseries?: string | null
+          BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
           CashDiscount1Percent?: string | null

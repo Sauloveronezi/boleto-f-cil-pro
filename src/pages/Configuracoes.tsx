@@ -98,7 +98,7 @@ export default function Configuracoes() {
 
     let error;
     if (empresaId) {
-      ({ error } = await supabase.from('vv_b_empresas').update(payload).eq('id', empresaId));
+      ({ error } = await supabase.from('vv_b_empresas').update(payload as any).eq('id', empresaId));
     } else {
       const { data, error: insertError } = await supabase.from('vv_b_empresas').insert(payload as any).select('id').single();
       error = insertError;
