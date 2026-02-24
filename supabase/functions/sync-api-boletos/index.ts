@@ -232,6 +232,42 @@ serve(async (req) => {
       .or('deleted.is.null,deleted.eq.""')
       .order('ordem', { ascending: true });
 
+    // Buscar bancos e configurações para resolver carteira
+    const { data: bancosDb } = await supabase
+      .from('vv_b_bancos')
+      .select('id, codigo_banco, nome_banco')
+      .is('deleted', null);
+
+    const { data: configsBanco } = await supabase
+      .from('vv_b_configuracoes_banco')
+      .select('*')
+      .is('deleted', null);
+
+    // Mapear código do banco -> configuração (agência+conta+carteira)
+    const bancoIdPorCodigo = new Map<string, string>();
+    for (const b of (bancosDb || [])) {
+      bancoIdPorCodigo.set(b.codigo_banco.trim(), b.id);
+    }
+
+    const configsPorBancoId = new Map<string, any[]>();
+    for (const cfg of (configsBanco || [])) {
+      const arr = configsPorBancoId.get(cfg.banco_id) || [];
+      arr.push(cfg);
+      configsPorBancoId.set(cfg.banco_id, arr);
+    }
+
+    // Função para resolver carteira a partir do código do banco
+    function resolverCarteira(codigoBanco: string | undefined | null): string | null {
+      if (!codigoBanco) return null;
+      const codigoLimpo = String(codigoBanco).trim().padStart(3, '0');
+      const bancoId = bancoIdPorCodigo.get(codigoLimpo);
+      if (!bancoId) return null;
+      const configs = configsPorBancoId.get(bancoId);
+      if (!configs || configs.length === 0) return null;
+      // Retorna a carteira da primeira configuração encontrada
+      return configs[0].carteira || null;
+    }
+
     let registrosNovos = 0;
     let registrosAtualizados = 0;
     const erros: any[] = [];
@@ -480,8 +516,9 @@ serve(async (req) => {
         cliente: reg.cliente,
         dados_extras: reg.dadosExtras,
         json_original: reg.jsonOriginal,
-        sincronizado_em: new Date().toISOString()
-      };
+        sincronizado_em: new Date().toISOString(),
+        // Resolver carteira a partir do código do banco (campo 'banco' ou 'BankInternalID')
+        carteira: resolverCarteira(reg.banco) || resolverCarteira(reg.colunasDinamicas?.BankInternalID) || null,
       
       // Adicionar colunas dinâmicas (prefixo dyn_)
       if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
