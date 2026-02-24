@@ -1578,6 +1578,7 @@ export type Database = {
           cliente: string | null
           cliente_id: string | null
           cod_barras: number | null
+          cod_barras_calculado: string | null
           companycode: number | null
           created_at: string
           customer: string | null
@@ -1601,6 +1602,7 @@ export type Database = {
           id: string
           integracao_id: string | null
           json_original: Json | null
+          linha_digitavel_calculada: string | null
           nosso_numero: string | null
           numero_cobranca: string
           numero_nota: string
@@ -1664,6 +1666,7 @@ export type Database = {
           cliente?: string | null
           cliente_id?: string | null
           cod_barras?: number | null
+          cod_barras_calculado?: string | null
           companycode?: number | null
           created_at?: string
           customer?: string | null
@@ -1687,6 +1690,7 @@ export type Database = {
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
+          linha_digitavel_calculada?: string | null
           nosso_numero?: string | null
           numero_cobranca: string
           numero_nota: string
@@ -1750,6 +1754,7 @@ export type Database = {
           cliente?: string | null
           cliente_id?: string | null
           cod_barras?: number | null
+          cod_barras_calculado?: string | null
           companycode?: number | null
           created_at?: string
           customer?: string | null
@@ -1773,6 +1778,7 @@ export type Database = {
           id?: string
           integracao_id?: string | null
           json_original?: Json | null
+          linha_digitavel_calculada?: string | null
           nosso_numero?: string | null
           numero_cobranca?: string
           numero_nota?: string
@@ -1938,6 +1944,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           data_delete: string | null
+          data_emissao_boleto: string | null
           data_geracao: string | null
           data_vencimento: string | null
           deleted: string | null
@@ -1950,6 +1957,7 @@ export type Database = {
           status: string | null
           updated_at: string
           usuario_delete_id: string | null
+          usuario_emissao_id: string | null
           valor: number | null
         }
         Insert: {
@@ -1958,6 +1966,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data_delete?: string | null
+          data_emissao_boleto?: string | null
           data_geracao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
@@ -1970,6 +1979,7 @@ export type Database = {
           status?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
+          usuario_emissao_id?: string | null
           valor?: number | null
         }
         Update: {
@@ -1978,6 +1988,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data_delete?: string | null
+          data_emissao_boleto?: string | null
           data_geracao?: string | null
           data_vencimento?: string | null
           deleted?: string | null
@@ -1990,6 +2001,7 @@ export type Database = {
           status?: string | null
           updated_at?: string
           usuario_delete_id?: string | null
+          usuario_emissao_id?: string | null
           valor?: number | null
         }
         Relationships: [
