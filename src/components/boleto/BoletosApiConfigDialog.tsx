@@ -23,6 +23,7 @@ import {
   useAddBoletosApiConfig,
   useToggleBoletosApiConfig,
   useDeleteBoletosApiConfig,
+  useUpdateBoletosApiConfigNivel,
   BoletosApiConfigItem,
 } from '@/hooks/useBoletosApiConfig';
 import { supabase } from '@/integrations/supabase/client';
@@ -107,6 +108,7 @@ export function BoletosApiConfigDialog() {
   const addConfig = useAddBoletosApiConfig();
   const toggleConfig = useToggleBoletosApiConfig();
   const deleteConfig = useDeleteBoletosApiConfig();
+  const updateNivel = useUpdateBoletosApiConfigNivel();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -114,6 +116,7 @@ export function BoletosApiConfigDialog() {
   const [novaChave, setNovaChave] = useState('');
   const [novoLabel, setNovoLabel] = useState('');
   const [novoCampo, setNovoCampo] = useState('');
+  const [novoNivel, setNovoNivel] = useState<'primario' | 'secundario'>('primario');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,6 +145,7 @@ export function BoletosApiConfigDialog() {
       chave: novaChave.trim(),
       label: novoLabel.trim(),
       campo_boleto: novoCampo.trim() || novaChave.trim(),
+      nivel: novoTipo === 'filtro' ? novoNivel : 'primario',
     });
     setNovaChave('');
     setNovoLabel('');
@@ -214,6 +218,21 @@ export function BoletosApiConfigDialog() {
                 )}
               </div>
               <div className="flex items-center gap-1">
+                {/* Nivel selector for filters */}
+                {item.tipo === 'filtro' && editingId !== item.id && (
+                  <Select
+                    value={item.nivel || 'primario'}
+                    onValueChange={(v) => updateNivel.mutate({ id: item.id, nivel: v as any })}
+                  >
+                    <SelectTrigger className="h-7 w-[90px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="primario">Primário</SelectItem>
+                      <SelectItem value="secundario">Secundário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 {editingId !== item.id && (
                   <Button
                     variant="ghost"
@@ -238,8 +257,8 @@ export function BoletosApiConfigDialog() {
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive"
-                  onClick={() => deleteConfig.mutate(item.id)}
-                  title="Excluir"
+                  onClick={() => toggleConfig.mutate({ id: item.id, visivel: false })}
+                  title="Remover da visualização"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -310,6 +329,20 @@ export function BoletosApiConfigDialog() {
                   className="mt-1"
                 />
               </div>
+              {novoTipo === 'filtro' && (
+                <div>
+                  <Label className="text-xs">Nível do filtro</Label>
+                  <Select value={novoNivel} onValueChange={(v) => setNovoNivel(v as any)}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="primario">Primário (sempre visível)</SelectItem>
+                      <SelectItem value="secundario">Secundário (menu suspenso)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <Button
               size="sm"

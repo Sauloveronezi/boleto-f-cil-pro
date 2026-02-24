@@ -10,6 +10,7 @@ export interface BoletosApiConfigItem {
   visivel: boolean;
   ordem: number;
   campo_boleto: string | null;
+  nivel: 'primario' | 'secundario';
 }
 
 const QUERY_KEY = 'boletos-api-config';
@@ -40,8 +41,11 @@ export function useBoletosApiConfigColunas() {
 
 export function useBoletosApiConfigFiltros() {
   const { data, ...rest } = useBoletosApiConfig();
+  const visiveis = data?.filter(c => c.tipo === 'filtro' && c.visivel) || [];
   return {
-    data: data?.filter(c => c.tipo === 'filtro' && c.visivel) || [],
+    data: visiveis,
+    primarios: visiveis.filter(f => f.nivel === 'primario'),
+    secundarios: visiveis.filter(f => f.nivel === 'secundario'),
     allFiltros: data?.filter(c => c.tipo === 'filtro') || [],
     ...rest,
   };
@@ -52,7 +56,7 @@ export function useAddBoletosApiConfig() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (item: { tipo: 'coluna' | 'filtro'; chave: string; label: string; campo_boleto?: string; ordem?: number }) => {
+    mutationFn: async (item: { tipo: 'coluna' | 'filtro'; chave: string; label: string; campo_boleto?: string; ordem?: number; nivel?: 'primario' | 'secundario' }) => {
       const { data, error } = await supabase
         .from('vv_b_boletos_api_config' as any)
         .insert({
@@ -62,6 +66,7 @@ export function useAddBoletosApiConfig() {
           campo_boleto: item.campo_boleto || item.chave,
           ordem: item.ordem || 99,
           visivel: true,
+          nivel: item.nivel || 'primario',
         } as any)
         .select()
         .single();
@@ -86,6 +91,23 @@ export function useToggleBoletosApiConfig() {
       const { error } = await supabase
         .from('vv_b_boletos_api_config' as any)
         .update({ visivel, updated_at: new Date().toISOString() } as any)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
+    },
+  });
+}
+
+export function useUpdateBoletosApiConfigNivel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, nivel }: { id: string; nivel: 'primario' | 'secundario' }) => {
+      const { error } = await supabase
+        .from('vv_b_boletos_api_config' as any)
+        .update({ nivel, updated_at: new Date().toISOString() } as any)
         .eq('id', id);
       if (error) throw error;
     },
