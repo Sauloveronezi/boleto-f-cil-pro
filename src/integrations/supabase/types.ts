@@ -1566,7 +1566,10 @@ export type Database = {
           BR_NFSubSeries: string | null
           carteira: string | null
           CashDiscount1Days: string | null
+          cashdiscount1duedate: string | null
+          CashDiscount1DueDate: string | null
           CashDiscount1Percent: string | null
+          cashdiscount2days: string | null
           CashDiscount2Days: string | null
           CashDiscountAmountInFuncnlCrcy: string | null
           CashDiscountAmtInCoCodeCrcy: string | null
@@ -1649,7 +1652,10 @@ export type Database = {
           BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
+          cashdiscount1duedate?: string | null
+          CashDiscount1DueDate?: string | null
           CashDiscount1Percent?: string | null
+          cashdiscount2days?: string | null
           CashDiscount2Days?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
@@ -1732,7 +1738,10 @@ export type Database = {
           BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
+          cashdiscount1duedate?: string | null
+          CashDiscount1DueDate?: string | null
           CashDiscount1Percent?: string | null
+          cashdiscount2days?: string | null
           CashDiscount2Days?: string | null
           CashDiscountAmountInFuncnlCrcy?: string | null
           CashDiscountAmtInCoCodeCrcy?: string | null
@@ -2206,6 +2215,7 @@ export type Database = {
           estado: string | null
           id: string
           inscricao_estadual: string | null
+          inscricao_municipal: string | null
           logo_url: string | null
           nome_fantasia: string | null
           numero: string | null
@@ -2229,6 +2239,7 @@ export type Database = {
           estado?: string | null
           id?: string
           inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
           logo_url?: string | null
           nome_fantasia?: string | null
           numero?: string | null
@@ -2252,6 +2263,7 @@ export type Database = {
           estado?: string | null
           id?: string
           inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
           logo_url?: string | null
           nome_fantasia?: string | null
           numero?: string | null
