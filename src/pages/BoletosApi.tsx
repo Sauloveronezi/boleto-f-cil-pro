@@ -12,7 +12,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers, AlertTriangle } from 'lucide-react';
+import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers, AlertTriangle, Info } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +68,8 @@ export default function BoletosApi() {
   const [barcodeConflicts, setBarcodeConflicts] = useState<{ nota: string; antigo: string; novo: string }[]>([]);
   const [showBarcodeAlert, setShowBarcodeAlert] = useState(false);
   const [pendingPrintAction, setPendingPrintAction] = useState<(() => Promise<void>) | null>(null);
+  const [boletosComFalha, setBoletosComFalha] = useState<any[]>([]);
+  const [showFalhaDialog, setShowFalhaDialog] = useState(false);
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
@@ -429,11 +438,9 @@ export default function BoletosApi() {
         await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
         toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${templateV2.name}"` });
         if (boletosComFalhaLinhaDigitavel.length > 0) {
-          toast({
-            title: '⚠️ Linha digitável não calculada',
-            description: `Não foi possível calcular para ${boletosComFalhaLinhaDigitavel.length} boleto(s). Verifique configurações do banco.`,
-            variant: 'destructive',
-          });
+          const falhos = boletosSelecionados.filter((b: any) => boletosComFalhaLinhaDigitavel.includes(b.numero_nota || b.id));
+          setBoletosComFalha(falhos);
+          setShowFalhaDialog(true);
         }
       } catch (error: any) {
         console.error('[BoletosApi] Erro V2:', error);
@@ -470,7 +477,9 @@ export default function BoletosApi() {
         await salvarLinhaDigitavelNoBanco(boletosSelecionados, dadosBoletos);
         toast({ title: 'PDF gerado com sucesso', description: `${selecionados.size} boleto(s) gerado(s) com "${modelo.nome_modelo}"` });
         if (boletosComFalhaLinhaDigitavel.length > 0) {
-          toast({ title: '⚠️ Linha digitável não calculada', description: `Verifique configurações do banco.`, variant: 'destructive' });
+          const falhos = boletosSelecionados.filter((b: any) => boletosComFalhaLinhaDigitavel.includes(b.numero_nota || b.id));
+          setBoletosComFalha(falhos);
+          setShowFalhaDialog(true);
         }
       } catch (error: any) {
         console.error('[BoletosApi] Erro legado:', error);
@@ -656,7 +665,13 @@ export default function BoletosApi() {
                 <FileText className="h-5 w-5" />
                 Boletos Importados
               </CardTitle>
-              <Badge variant="secondary">{boletosFiltrados.length} registro(s)</Badge>
+              <div className="flex items-center gap-4">
+                <Badge variant="secondary">{boletosFiltrados.length} registro(s)</Badge>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-100 dark:bg-green-950/50 border border-green-300 dark:border-green-800" /> Já emitido</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-primary/10 border border-primary/30" /> Selecionado</span>
+                </div>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -685,8 +700,15 @@ export default function BoletosApi() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {boletosFiltrados.map((boleto: any) => (
-                    <TableRow key={boleto.id} className={selecionados.has(boleto.id) ? 'bg-primary/10' : ''}>
+                  {boletosFiltrados.map((boleto: any) => {
+                    const jaEmitido = !!boleto.cod_barras_calculado;
+                    const rowClass = selecionados.has(boleto.id)
+                      ? 'bg-primary/10'
+                      : jaEmitido
+                        ? 'bg-green-50 dark:bg-green-950/30'
+                        : '';
+                    return (
+                    <TableRow key={boleto.id} className={rowClass}>
                       <TableCell>
                         <Checkbox checked={selecionados.has(boleto.id)} onCheckedChange={(checked) => handleSelecionarItem(boleto.id, !!checked)} />
                       </TableCell>
@@ -712,7 +734,8 @@ export default function BoletosApi() {
                         </TableCell>
                       ))}
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -758,6 +781,38 @@ export default function BoletosApi() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de boletos com falha na linha digitável */}
+      <Dialog open={showFalhaDialog} onOpenChange={setShowFalhaDialog}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Linha digitável não calculada
+            </DialogTitle>
+            <DialogDescription>
+              Não foi possível calcular a linha digitável para {boletosComFalha.length} boleto(s). Verifique as configurações do banco (agência, conta, carteira).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            {boletosComFalha.map((boleto: any, idx: number) => (
+              <div key={boleto.id || idx} className="border border-destructive/30 rounded-lg p-4 bg-destructive/5 space-y-2 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div><span className="font-semibold text-muted-foreground">Nº Nota:</span> <span className="font-mono">{boleto.numero_nota || '-'}</span></div>
+                  <div><span className="font-semibold text-muted-foreground">Nº Cobrança:</span> <span className="font-mono">{boleto.numero_cobranca || '-'}</span></div>
+                  <div><span className="font-semibold text-muted-foreground">Cliente:</span> {boleto.dyn_nome_do_cliente || boleto.cliente || '-'}</div>
+                  <div><span className="font-semibold text-muted-foreground">Banco:</span> {boleto.banco || '-'}</div>
+                  <div><span className="font-semibold text-muted-foreground">Carteira:</span> {boleto.carteira || <span className="text-destructive font-semibold">Não definida</span>}</div>
+                  <div><span className="font-semibold text-muted-foreground">Nosso Número:</span> <span className="font-mono">{boleto.nosso_numero || '-'}</span></div>
+                  <div><span className="font-semibold text-muted-foreground">Valor:</span> {boleto.valor != null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(boleto.valor) : '-'}</div>
+                  <div><span className="font-semibold text-muted-foreground">Vencimento:</span> {boleto.data_vencimento ? format(new Date(String(boleto.data_vencimento).substring(0, 10) + 'T12:00:00'), 'dd/MM/yyyy', { locale: ptBR }) : '-'}</div>
+                  <div><span className="font-semibold text-muted-foreground">CNPJ:</span> <span className="font-mono">{getCnpj(boleto)}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
