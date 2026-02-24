@@ -680,7 +680,7 @@ export default function BoletosApi() {
                 </TableHeader>
                 <TableBody>
                   {boletosFiltrados.map((boleto: any) => (
-                    <TableRow key={boleto.id}>
+                    <TableRow key={boleto.id} className={selecionados.has(boleto.id) ? 'bg-primary/10' : ''}>
                       <TableCell>
                         <Checkbox checked={selecionados.has(boleto.id)} onCheckedChange={(checked) => handleSelecionarItem(boleto.id, !!checked)} />
                       </TableCell>
