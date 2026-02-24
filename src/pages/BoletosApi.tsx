@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,17 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers } from 'lucide-react';
+import { Calendar, Search, Filter, Printer, FileText, RefreshCw, Layers, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useBoletosApi, useSyncApi, useApiIntegracoes } from '@/hooks/useApiIntegracao';
 import { useClientes } from '@/hooks/useClientes';
 import { useBancos } from '@/hooks/useBancos';
@@ -47,6 +57,9 @@ export default function BoletosApi() {
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
   const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
   const [imprimirFundo, setImprimirFundo] = useState(true);
+  const [barcodeConflicts, setBarcodeConflicts] = useState<{ nota: string; antigo: string; novo: string }[]>([]);
+  const [showBarcodeAlert, setShowBarcodeAlert] = useState(false);
+  const [pendingPrintAction, setPendingPrintAction] = useState<(() => Promise<void>) | null>(null);
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
@@ -240,7 +253,7 @@ export default function BoletosApi() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const handleImprimirSelecionados = async () => {
+  const handleImprimirSelecionados = async (forceOverride = false) => {
     if (selecionados.size === 0) {
       toast({ title: 'Nenhum boleto selecionado', description: 'Selecione ao menos um boleto para imprimir', variant: 'destructive' });
       return;
@@ -335,36 +348,76 @@ export default function BoletosApi() {
       });
     };
 
-    const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[]) => {
-      for (let i = 0; i < boletosList.length; i++) {
-        const boleto = boletosList[i];
-        const dados = dadosBoletos[i];
-        if (dados.linha_digitavel && dados.codigo_barras) {
-          try {
-            await supabase.from('vv_b_boletos_gerados').insert({
-              nota_fiscal_id: null,
-              modelo_boleto_id: modeloSelecionado || null,
-              banco_id: banco.id,
-              nosso_numero: dados.nosso_numero || '',
-              linha_digitavel: dados.linha_digitavel,
-              codigo_barras: dados.codigo_barras,
-              valor: boleto.valor || 0,
-              data_vencimento: boleto.data_vencimento || null,
-              status: 'gerado',
-            } as any);
-          } catch (err) {
-            console.warn('[BoletosApi] Erro ao salvar linha digitável:', err);
-          }
+  const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[]) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+    const agora = new Date().toISOString();
+
+    for (let i = 0; i < boletosList.length; i++) {
+      const boleto = boletosList[i];
+      const dados = dadosBoletos[i];
+      if (!dados.linha_digitavel || !dados.codigo_barras) continue;
+
+      try {
+        // Salvar código de barras na tabela do boleto importado
+        await supabase.from('vv_b_boletos_api' as any)
+          .update({
+            cod_barras_calculado: dados.codigo_barras,
+            linha_digitavel_calculada: dados.linha_digitavel,
+            updated_at: agora,
+          } as any)
+          .eq('id', boleto.id);
+
+        // Registrar na tabela de boletos gerados
+        await supabase.from('vv_b_boletos_gerados').insert({
+          nota_fiscal_id: null,
+          modelo_boleto_id: modeloSelecionado || null,
+          banco_id: banco.id,
+          nosso_numero: dados.nosso_numero || '',
+          linha_digitavel: dados.linha_digitavel,
+          codigo_barras: dados.codigo_barras,
+          valor: boleto.valor || 0,
+          data_vencimento: boleto.data_vencimento || null,
+          status: 'gerado',
+          usuario_emissao_id: userId,
+          data_emissao_boleto: agora,
+        } as any);
+      } catch (err) {
+        console.warn('[BoletosApi] Erro ao salvar linha digitável:', err);
+      }
+    }
+  };
+
+    // ===== Verificar conflito de código de barras =====
+    const dadosBoletosCalc = mapearDadosBoletos(boletosSelecionados);
+    if (!forceOverride) {
+      const conflicts: { nota: string; antigo: string; novo: string }[] = [];
+      for (let i = 0; i < boletosSelecionados.length; i++) {
+        const boleto = boletosSelecionados[i];
+        const novoBarras = dadosBoletosCalc[i]?.codigo_barras;
+        const barrasExistente = (boleto as any).cod_barras_calculado;
+        if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
+          conflicts.push({
+            nota: boleto.numero_nota || boleto.id,
+            antigo: String(barrasExistente),
+            novo: novoBarras,
+          });
         }
       }
-    };
+      if (conflicts.length > 0) {
+        setBarcodeConflicts(conflicts);
+        setPendingPrintAction(() => () => handleImprimirSelecionados(true));
+        setShowBarcodeAlert(true);
+        return;
+      }
+    }
 
     // Tentar template V2
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
     if (templateV2 && templateFieldsV2 && templateFieldsV2.length > 0) {
       try {
         toast({ title: 'Gerando boletos...', description: 'Aguarde o processamento.' });
-        const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
+        const dadosBoletos = dadosBoletosCalc;
         const renderOpts = imprimirFundo
           ? { usarFundo: true }
           : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
@@ -408,7 +461,7 @@ export default function BoletosApi() {
           bordaEsquerda: c.bordaEsquerda, bordaDireita: c.bordaDireita,
           espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
         })) || [];
-        const dadosBoletos = mapearDadosBoletos(boletosSelecionados);
+        const dadosBoletos = dadosBoletosCalc;
         const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosBoletos, undefined, imprimirFundo);
         const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
         downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
@@ -556,7 +609,7 @@ export default function BoletosApi() {
               </div>
             )}
 
-            <Button className="gap-2" onClick={handleImprimirSelecionados}
+            <Button className="gap-2" onClick={() => handleImprimirSelecionados()}
               disabled={selecionados.size === 0 || (!canPrint && !isLoadingPermissoes)}
               title={isLoadingPermissoes ? "Carregando..." : selecionados.size === 0 ? "Selecione boletos" : !canPrint ? "Sem permissão" : "Imprimir selecionados"}
             >
@@ -660,6 +713,45 @@ export default function BoletosApi() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Alerta de conflito de código de barras */}
+      <AlertDialog open={showBarcodeAlert} onOpenChange={setShowBarcodeAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Código de Barras Diferente
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Os seguintes boletos já possuem código de barras salvo, mas o novo cálculo gerou um valor diferente:</p>
+                <div className="max-h-[200px] overflow-y-auto space-y-2">
+                  {barcodeConflicts.map((c, i) => (
+                    <div key={i} className="border border-border rounded p-2 text-xs">
+                      <p className="font-semibold">Nota: {c.nota}</p>
+                      <p className="text-muted-foreground">Anterior: {c.antigo}</p>
+                      <p className="text-muted-foreground">Novo: {c.novo}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="font-semibold">Deseja emitir os boletos com o novo código de barras?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowBarcodeAlert(false);
+                if (pendingPrintAction) pendingPrintAction();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Emitir com novo código
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
