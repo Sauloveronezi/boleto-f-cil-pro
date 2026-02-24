@@ -1566,7 +1566,6 @@ export type Database = {
           BR_NFSubSeries: string | null
           carteira: string | null
           CashDiscount1Days: string | null
-          cashdiscount1duedate: string | null
           CashDiscount1DueDate: string | null
           CashDiscount1Percent: string | null
           cashdiscount2days: string | null
@@ -1654,7 +1653,6 @@ export type Database = {
           BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
-          cashdiscount1duedate?: string | null
           CashDiscount1DueDate?: string | null
           CashDiscount1Percent?: string | null
           cashdiscount2days?: string | null
@@ -1742,7 +1740,6 @@ export type Database = {
           BR_NFSubSeries?: string | null
           carteira?: string | null
           CashDiscount1Days?: string | null
-          cashdiscount1duedate?: string | null
           CashDiscount1DueDate?: string | null
           CashDiscount1Percent?: string | null
           cashdiscount2days?: string | null
