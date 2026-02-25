@@ -337,62 +337,113 @@ export async function renderBoletoV2(
     const value = formatValue(rawValue, field.format);
     if (!value) continue;
 
-    // Sanitize: pdf-lib WinAnsi cannot encode control chars like \n \r \t
-    const sanitizedValue = value.replace(/[\n\r\t]/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    if (!sanitizedValue) continue;
-
     const font = getFont(fonts, field.font_family, field.bold);
     let fontSize = field.font_size || 10;
     const textColor = hexToRgb(field.color || '#000000');
 
-    // Shrink to fit
-    let textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
-    const minFontSize = 5;
-    if (textWidth > w - 2 && textWidth > 0) {
-      const scale = (w - 2) / textWidth;
-      fontSize = Math.max(minFontSize, fontSize * scale);
-      textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
-    }
+    // Check if this is a multiline field (instructions, etc.)
+    const isMultiline = field.key === 'instrucoes' || field.key === 'via2_instrucoes' || value.includes('\n');
 
-    // Truncate with ellipsis if still overflows
-    let displayValue = sanitizedValue;
-    if (textWidth > w - 2) {
-      let truncated = sanitizedValue;
-      while (truncated.length > 1 && font.widthOfTextAtSize(truncated + '…', fontSize) > w - 2) {
-        truncated = truncated.slice(0, -1);
+    if (isMultiline) {
+      // === Multiline rendering ===
+      const lines = value.split('\n').map(l => l.replace(/[\r\t]/g, ' ').trim()).filter(Boolean);
+      const lineHeight = fontSize * 1.3;
+      const labelOffset = drawGrid ? labelSize + 1.5 : 0;
+      let currentY = y + h - labelOffset - fontSize;
+
+      for (const line of lines) {
+        if (currentY < y) break; // Saiu da área do campo
+
+        let displayLine = line;
+        let lineW = font.widthOfTextAtSize(displayLine, fontSize);
+        // Shrink individual line
+        let lineFontSize = fontSize;
+        if (lineW > w - 2 && lineW > 0) {
+          const scale = (w - 2) / lineW;
+          lineFontSize = Math.max(5, fontSize * scale);
+          lineW = font.widthOfTextAtSize(displayLine, lineFontSize);
+        }
+        // Truncate if still overflows
+        if (lineW > w - 2) {
+          while (displayLine.length > 1 && font.widthOfTextAtSize(displayLine + '…', lineFontSize) > w - 2) {
+            displayLine = displayLine.slice(0, -1);
+          }
+          displayLine += '…';
+          lineW = font.widthOfTextAtSize(displayLine, lineFontSize);
+        }
+
+        let txX = x + 1;
+        if (field.align === 'center') txX = x + (w - lineW) / 2;
+        if (field.align === 'right') txX = x + w - lineW - 1;
+
+        page.drawText(displayLine, {
+          x: txX,
+          y: currentY,
+          size: lineFontSize,
+          font,
+          color: rgb(textColor.r, textColor.g, textColor.b),
+        });
+        currentY -= lineHeight;
       }
-      displayValue = truncated + '…';
-      textWidth = font.widthOfTextAtSize(displayValue, fontSize);
-    }
 
-    // Alinhamento horizontal
-    let txX = x + 1;
-    if (field.align === 'center') txX = x + (w - textWidth) / 2;
-    if (field.align === 'right') txX = x + w - textWidth - 1;
-
-    // Vertical: place text below the label line when grid is drawn
-    const labelOffset = drawGrid ? labelSize + 1.5 : 0;
-    const availH = h - labelOffset;
-    const txY = y + (availH - fontSize) / 2;
-
-    // Collision check for critical fields
-    const criticalFields = ['linha_digitavel', 'codigo_barras', 'valor_documento', 'data_vencimento'];
-    if (criticalFields.includes(field.key) || criticalFields.includes(field.key.replace('via2_', ''))) {
-      if (checkCollision(x, y, w, h, field.key)) {
-        console.error(`[templateRendererV2] CRITICAL FIELD COLLISION: "${field.key}"`);
+      if (!field.key.startsWith('mask_')) {
+        occupiedRects.push({ x, y, w, h, key: field.key });
       }
-    }
+    } else {
+      // === Single-line rendering ===
+      // Sanitize: pdf-lib WinAnsi cannot encode control chars
+      const sanitizedValue = value.replace(/[\n\r\t]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (!sanitizedValue) continue;
 
-    page.drawText(displayValue, {
-      x: txX,
-      y: txY,
-      size: fontSize,
-      font,
-      color: rgb(textColor.r, textColor.g, textColor.b),
-    });
+      // Shrink to fit
+      let textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
+      const minFontSize = 5;
+      if (textWidth > w - 2 && textWidth > 0) {
+        const scale = (w - 2) / textWidth;
+        fontSize = Math.max(minFontSize, fontSize * scale);
+        textWidth = font.widthOfTextAtSize(sanitizedValue, fontSize);
+      }
 
-    if (!field.key.startsWith('mask_')) {
-      occupiedRects.push({ x, y, w, h, key: field.key });
+      // Truncate with ellipsis if still overflows
+      let displayValue = sanitizedValue;
+      if (textWidth > w - 2) {
+        let truncated = sanitizedValue;
+        while (truncated.length > 1 && font.widthOfTextAtSize(truncated + '…', fontSize) > w - 2) {
+          truncated = truncated.slice(0, -1);
+        }
+        displayValue = truncated + '…';
+        textWidth = font.widthOfTextAtSize(displayValue, fontSize);
+      }
+
+      // Alinhamento horizontal
+      let txX = x + 1;
+      if (field.align === 'center') txX = x + (w - textWidth) / 2;
+      if (field.align === 'right') txX = x + w - textWidth - 1;
+
+      // Vertical: place text below the label line when grid is drawn
+      const labelOffset = drawGrid ? labelSize + 1.5 : 0;
+      const availH = h - labelOffset;
+      const txY = y + (availH - fontSize) / 2;
+
+      // Collision check for critical fields
+      const criticalFields = ['linha_digitavel', 'codigo_barras', 'valor_documento', 'data_vencimento'];
+      if (criticalFields.includes(field.key) || criticalFields.includes(field.key.replace('via2_', ''))) {
+        if (checkCollision(x, y, w, h, field.key)) {
+          console.error(`[templateRendererV2] CRITICAL FIELD COLLISION: "${field.key}"`);
+        }
+      }
+
+      page.drawText(displayValue, {
+        x: txX,
+        y: txY,
+        size: fontSize,
+        font,
+        color: rgb(textColor.r, textColor.g, textColor.b),
+      });
+
+      if (!field.key.startsWith('mask_')) {
+        occupiedRects.push({ x, y, w, h, key: field.key });
+      }
     }
   }
 

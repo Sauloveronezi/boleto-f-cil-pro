@@ -410,6 +410,9 @@ export default function BoletosApi() {
             beneficiarioCnpj: empresa?.cnpj || '',
             beneficiarioEndereco: benefEndereco,
             textoInstrucaoPadrao: configuracao?.texto_instrucao_padrao || '',
+            taxaJurosMensal: configuracao?.taxa_juros_mensal || 0,
+            multaPercentual: configuracao?.multa_percentual || 0,
+            diasCarencia: configuracao?.dias_carencia || 0,
           };
           const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
           // Inject bank logo and formatted code

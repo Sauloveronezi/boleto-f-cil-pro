@@ -256,6 +256,9 @@ export interface ConfigBancoParaCalculo {
   beneficiarioCnpj?: string;
   beneficiarioEndereco?: string;
   textoInstrucaoPadrao?: string;
+  taxaJurosMensal?: number;
+  multaPercentual?: number;
+  diasCarencia?: number;
 }
 
 /**
@@ -347,6 +350,15 @@ export function mapBoletoApiToDadosBoleto(
   if (!dados.instrucoes) {
     // Build instruction text from bank config: include rates + custom text
     const instrParts: string[] = [];
+    // Calcular juros e multa a partir do cadastro do banco
+    const juros = configBanco?.taxaJurosMensal;
+    const multa = configBanco?.multaPercentual;
+    if (multa && multa > 0) {
+      instrParts.push(`APÓS O VENCIMENTO COBRAR MULTA DE ${multa.toFixed(1).replace('.', ',')}%`);
+    }
+    if (juros && juros > 0) {
+      instrParts.push(`COBRAR JUROS DE ${juros.toFixed(1).replace('.', ',')}% AO MÊS`);
+    }
     if (configBanco?.textoInstrucaoPadrao) {
       instrParts.push(configBanco.textoInstrucaoPadrao);
     }
