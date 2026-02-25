@@ -12,6 +12,7 @@ import {
   calcularModulo11,
   calcularModulo10,
   gerarLinhaDigitavel,
+  calcularDVNossoNumeroItau,
 } from './barcodeCalculator';
 
 export interface MapeamentoCampo {
@@ -391,7 +392,25 @@ export function mapBoletoApiToDadosBoleto(
 
   // Garantir nosso_numero para cálculo de barras
   const nossoNumeroRaw = dados.nosso_numero || row.numero_cobranca || '';
-  dados.nosso_numero = nossoNumeroRaw;
+
+  // Formatar nosso_numero visual: carteira/número-dígito
+  const carteiraDigits = carteira.replace(/\D/g, '');
+  switch (codigoBanco) {
+    case '341': { // Itaú: carteira/NNNNNNNN-D
+      const nnItau = nossoNumeroRaw.replace(/\D/g, '').slice(-8).padStart(8, '0');
+      const dvItau = calcularDVNossoNumeroItau(agencia, conta, carteiraDigits, nnItau);
+      dados.nosso_numero = `${carteiraDigits}/${nnItau}-${dvItau}`;
+      break;
+    }
+    case '237': { // Bradesco: carteira/NNNNNNNNNNN-D
+      const nnBrad = nossoNumeroRaw.replace(/\D/g, '').slice(-11).padStart(11, '0');
+      const dvBrad = calcularModulo11(nnBrad);
+      dados.nosso_numero = `${carteiraDigits.padStart(2, '0')}/${nnBrad}-${dvBrad}`;
+      break;
+    }
+    default:
+      dados.nosso_numero = nossoNumeroRaw;
+  }
 
   // ===== Calcular código de barras e linha digitável =====
   // Usar valor do mapeamento (valor_cobrado ou valor_documento) para cálculo do barras
