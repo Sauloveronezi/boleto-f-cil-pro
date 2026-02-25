@@ -552,6 +552,7 @@ serve(async (req) => {
     // Preparar registros finais com cliente_id
     // Usar Map para deduplicar - mantém apenas o ÚLTIMO registro de cada chave única
     const registrosPorChave = new Map<string, any>();
+    const registrosDuplicados: { chave: string; numero_nota: string; numero_cobranca: string }[] = [];
 
     for (const reg of registrosPreparados) {
       // Tentar buscar cliente_id se tiver CNPJ, mas NÃO é obrigatório
@@ -589,10 +590,14 @@ serve(async (req) => {
         }
       }
 
-      // Se já existe, sobrescreve (mantém o último)
+      // Se já existe, sobrescreve (mantém o último) e registra como duplicado
       if (registrosPorChave.has(chaveUnica)) {
-        // Log de duplicata silencioso (não é erro, apenas deduplicação)
         console.log(`[sync-api-boletos] Deduplicando registro: ${chaveUnica}`);
+        registrosDuplicados.push({
+          chave: chaveUnica,
+          numero_nota: reg.numeroNota,
+          numero_cobranca: reg.numeroCobranca,
+        });
       }
       registrosPorChave.set(chaveUnica, registroBase);
     }
@@ -686,6 +691,8 @@ serve(async (req) => {
       registros_processados: dadosApi.length,
       registros_atualizados: registrosAtualizados,
       registros_com_erro: registrosComErro.length,
+      registros_duplicados: registrosDuplicados.length,
+      duplicados: registrosDuplicados.length > 0 ? registrosDuplicados : undefined,
       erros: erros.length > 0 ? erros.slice(0, 10) : undefined,
       duracao_ms: duracao
     }), {
