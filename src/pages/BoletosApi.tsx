@@ -76,6 +76,8 @@ export default function BoletosApi() {
   const [pendingPrintAction, setPendingPrintAction] = useState<(() => Promise<void>) | null>(null);
   const [boletosComFalha, setBoletosComFalha] = useState<any[]>([]);
   const [showFalhaDialog, setShowFalhaDialog] = useState(false);
+  const [idsComErro, setIdsComErro] = useState<Set<string>>(new Set());
+  const [filtrarComErros, setFiltrarComErros] = useState(false);
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
@@ -235,6 +237,7 @@ export default function BoletosApi() {
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (ocultarEmitidos && b.cod_barras_calculado) return false;
+      if (filtrarComErros && !idsComErro.has(b.id)) return false;
       if (filtros.transportadora) {
         const transportadora = getTransportadora(b);
         if (!String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase())) return false;
@@ -314,7 +317,7 @@ export default function BoletosApi() {
       }
       return true;
     }) || [];
-  }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos]);
+  }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos, filtrarComErros, idsComErro]);
 
   const todosIds = useMemo(() => boletosFiltrados.map((b: any) => b.id), [boletosFiltrados]);
   const todosSelecionados = todosIds.length > 0 && todosIds.every((id: string) => selecionados.has(id));
@@ -520,6 +523,20 @@ export default function BoletosApi() {
     if (boletosInvalidos.length > 0) {
       setBoletosComFalha(boletosInvalidos);
       setShowFalhaDialog(true);
+      // Marcar IDs com erro para destaque na tabela
+      setIdsComErro(prev => {
+        const novo = new Set(prev);
+        boletosInvalidos.forEach((b: any) => novo.add(b.id));
+        return novo;
+      });
+    }
+    // Remover IDs válidos do set de erros (caso tenham sido corrigidos)
+    if (boletosValidos.length > 0) {
+      setIdsComErro(prev => {
+        const novo = new Set(prev);
+        boletosValidos.forEach((b: any) => novo.delete(b.id));
+        return novo.size !== prev.size ? novo : prev;
+      });
     }
 
     // Se NENHUM boleto é válido, abortar completamente
@@ -852,6 +869,10 @@ export default function BoletosApi() {
                   <Checkbox id="ocultar-emitidos" checked={ocultarEmitidos} onCheckedChange={(checked) => setOcultarEmitidos(!!checked)} />
                   <Label htmlFor="ocultar-emitidos" className="text-sm cursor-pointer">Ocultar já emitidos</Label>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="filtrar-com-erros" checked={filtrarComErros} onCheckedChange={(checked) => setFiltrarComErros(!!checked)} />
+                  <Label htmlFor="filtrar-com-erros" className="text-sm cursor-pointer text-destructive">Apenas com erros ({idsComErro.size})</Label>
+                </div>
                 <div className="flex items-end">
                   <Button variant="ghost" onClick={handleLimparFiltros} className="w-full">Limpar Filtros</Button>
                 </div>
@@ -890,6 +911,7 @@ export default function BoletosApi() {
                 <Badge variant="secondary">{boletosFiltrados.length} registro(s)</Badge>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-green-100 dark:bg-green-950/50 border border-green-300 dark:border-green-800" /> Já emitido</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-destructive/10 border border-destructive/30" /> Erro na emissão</span>
                   <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-primary/10 border border-primary/30" /> Selecionado</span>
                 </div>
               </div>
@@ -923,11 +945,14 @@ export default function BoletosApi() {
                 <TableBody>
                   {boletosFiltrados.map((boleto: any) => {
                     const jaEmitido = !!boleto.cod_barras_calculado;
+                    const temErro = idsComErro.has(boleto.id);
                     const rowClass = selecionados.has(boleto.id)
                       ? 'bg-primary/10'
-                      : jaEmitido
-                        ? 'bg-green-50 dark:bg-green-950/30'
-                        : '';
+                      : temErro
+                        ? 'bg-destructive/10 dark:bg-destructive/20'
+                        : jaEmitido
+                          ? 'bg-green-50 dark:bg-green-950/30'
+                          : '';
                     return (
                     <TableRow key={boleto.id} className={rowClass}>
                       <TableCell>
