@@ -213,6 +213,8 @@ serve(async (req) => {
       const firstUrl = new URL(endpointBase);
       firstUrl.searchParams.set('$top', String(API_PAGE_SIZE));
       firstUrl.searchParams.set('$skip', '0');
+      // Adicionar $inlinecount para saber total real de registros (OData v2)
+      firstUrl.searchParams.set('$inlinecount', 'allpages');
       nextUrl = firstUrl.toString();
     }
 
@@ -231,11 +233,18 @@ serve(async (req) => {
       }
 
       const rawApiResponse = await apiResponse.json();
+
+      // Logar total de registros disponíveis (OData v2: d.__count, OData v4: @odata.count)
+      const inlineCount = rawApiResponse?.d?.__count || rawApiResponse?.['@odata.count'] || rawApiResponse?.['odata.count'];
+      if (inlineCount && pageCount === 1) {
+        console.log(`[sync-api-boletos] Total de registros na API (inlinecount): ${inlineCount}`);
+      }
+
       const pageData = extractArrayFromApiResponse(rawApiResponse, integracao.json_path);
 
       if (Array.isArray(pageData) && pageData.length > 0) {
         dadosApi.push(...pageData);
-        console.log(`[sync-api-boletos] Página ${pageCount}: ${pageData.length} registros (total acumulado: ${dadosApi.length})`);
+        console.log(`[sync-api-boletos] Página ${pageCount}: ${pageData.length} registros (total acumulado: ${dadosApi.length}${inlineCount ? ` de ${inlineCount}` : ''})`);
       }
 
       // Detectar próxima página via OData __next ou odata.nextLink
