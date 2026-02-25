@@ -8,6 +8,10 @@ const corsHeaders = {
 
 // Tamanho do batch para processamento
 const BATCH_SIZE = 100;
+// Tamanho da página para paginação da API
+const API_PAGE_SIZE = 5000;
+// Máximo de páginas para evitar loop infinito
+const MAX_PAGES = 200;
 
 // Função para construir headers de autenticação
 function buildAuthHeaders(auth: {
@@ -184,37 +188,85 @@ serve(async (req) => {
       throw new Error('API Key não configurada.');
     }
 
-    // Chamar API
+    // Chamar API com paginação automática
     const urlObj = new URL(integracao.endpoint_base);
     urlObj.searchParams.delete('$filter');
     urlObj.searchParams.delete('filter');
-    const endpointSemFiltros = urlObj.toString();
+    // Não remover $top se já definido pelo usuário
+    const userDefinedTop = urlObj.searchParams.get('$top');
+    const endpointBase = urlObj.toString();
 
-    console.log(`[sync-api-boletos] Chamando API: ${endpointSemFiltros}`);
+    const allHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...customHeaders,
+      ...authHeaders,
+    };
 
-    const apiResponse = await fetch(endpointSemFiltros, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...customHeaders,
-        ...authHeaders,
-      }
-    });
+    // Loop de paginação
+    const dadosApi: any[] = [];
+    let nextUrl: string | null = endpointBase;
+    let pageCount = 0;
 
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      throw new Error(`Erro na API: ${apiResponse.status} - ${errorText.substring(0, 200)}`);
+    // Se não tem $top definido pelo usuário, adicionar para paginar
+    if (!userDefinedTop) {
+      const firstUrl = new URL(endpointBase);
+      firstUrl.searchParams.set('$top', String(API_PAGE_SIZE));
+      firstUrl.searchParams.set('$skip', '0');
+      nextUrl = firstUrl.toString();
     }
 
-    const rawApiResponse = await apiResponse.json();
-    const dadosApi = extractArrayFromApiResponse(rawApiResponse, integracao.json_path);
+    while (nextUrl && pageCount < MAX_PAGES) {
+      pageCount++;
+      console.log(`[sync-api-boletos] Página ${pageCount}: ${nextUrl}`);
 
-    if (!Array.isArray(dadosApi) || dadosApi.length === 0) {
+      const apiResponse = await fetch(nextUrl, {
+        method: 'GET',
+        headers: allHeaders,
+      });
+
+      if (!apiResponse.ok) {
+        const errorText = await apiResponse.text();
+        throw new Error(`Erro na API (página ${pageCount}): ${apiResponse.status} - ${errorText.substring(0, 200)}`);
+      }
+
+      const rawApiResponse = await apiResponse.json();
+      const pageData = extractArrayFromApiResponse(rawApiResponse, integracao.json_path);
+
+      if (Array.isArray(pageData) && pageData.length > 0) {
+        dadosApi.push(...pageData);
+        console.log(`[sync-api-boletos] Página ${pageCount}: ${pageData.length} registros (total acumulado: ${dadosApi.length})`);
+      }
+
+      // Detectar próxima página via OData __next ou odata.nextLink
+      const odataNext = rawApiResponse?.d?.__next 
+        || rawApiResponse?.['odata.nextLink'] 
+        || rawApiResponse?.['@odata.nextLink']
+        || null;
+
+      if (odataNext) {
+        nextUrl = odataNext;
+      } else if (!userDefinedTop && Array.isArray(pageData) && pageData.length >= API_PAGE_SIZE) {
+        // Paginação manual via $skip/$top
+        const skipUrl = new URL(endpointBase);
+        skipUrl.searchParams.set('$top', String(API_PAGE_SIZE));
+        skipUrl.searchParams.set('$skip', String(dadosApi.length));
+        nextUrl = skipUrl.toString();
+      } else {
+        // Sem mais páginas
+        nextUrl = null;
+      }
+    }
+
+    if (pageCount >= MAX_PAGES) {
+      console.warn(`[sync-api-boletos] Limite de ${MAX_PAGES} páginas atingido. Total: ${dadosApi.length} registros.`);
+    }
+
+    if (dadosApi.length === 0) {
       throw new Error('Resposta da API não contém lista de dados');
     }
 
-    console.log(`[sync-api-boletos] Registros recebidos: ${dadosApi.length}`);
+    console.log(`[sync-api-boletos] Total de registros recebidos: ${dadosApi.length} em ${pageCount} página(s)`);
 
     // Buscar clientes para mapear CNPJ -> id
     const { data: clientes } = await supabase
@@ -519,7 +571,8 @@ serve(async (req) => {
         sincronizado_em: new Date().toISOString(),
         // Resolver carteira a partir do código do banco (campo 'banco' ou 'BankInternalID')
         carteira: resolverCarteira(reg.banco) || resolverCarteira(reg.colunasDinamicas?.BankInternalID) || null,
-      
+      };
+
       // Adicionar colunas dinâmicas (prefixo dyn_)
       if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
         for (const [coluna, valor] of Object.entries(reg.colunasDinamicas)) {
