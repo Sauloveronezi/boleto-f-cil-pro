@@ -11,14 +11,31 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.4.0',
+    date: '2026-02-24',
+    changes: [
+      { type: 'feat', description: 'Filtros dinâmicos com dois níveis: Primário (sempre visível) e Secundário (menu suspenso colapsável)' },
+      { type: 'feat', description: 'Filtros de intervalo (De → Até) para campos numéricos (nº nota, valor) e datas (emissão, vencimento)' },
+      { type: 'feat', description: 'Filtro cascata Estado/Cidade: selecionar UF filtra automaticamente as cidades disponíveis' },
+      { type: 'feat', description: 'Configuração de colunas e filtros por nível (primário/secundário) no diálogo de administração' },
+      { type: 'feat', description: 'Validação estrita de código de barras: exige exatamente 44 dígitos numéricos para emissão' },
+      { type: 'feat', description: 'Bloqueio de emissão para boletos com código de barras inválido, com diálogo de erro detalhado' },
+      { type: 'feat', description: 'Destaque visual (vermelho) na tabela para boletos com erro na geração do código de barras' },
+      { type: 'feat', description: 'Filtro "Apenas com erros" para visualizar somente títulos com falha na emissão' },
+      { type: 'feat', description: 'Legenda de cores na tabela: Já emitido (verde), Erro na emissão (vermelho), Selecionado (azul)' },
+      { type: 'fix', description: 'Campos removidos da visualização agora voltam à área de seleção (visível: false, sem exclusão de dados)' },
+      { type: 'refactor', description: 'Separação de boletos válidos/inválidos antes da geração do PDF, com relatório por registro' },
+    ]
+  },
+  {
     version: '0.3.0',
     date: '2026-01-13',
     changes: [
       { type: 'feat', description: 'Templates de Boleto: cadastro, upload de PDF e mapeamento visual' },
       { type: 'feat', description: 'Pré-visualização com PDF de fundo e edição inline (mover/redimensionar/alinhamento)' },
       { type: 'feat', description: 'Importar mapeamento por coordenadas (CSV/JSON) com conversão em mm (top-left)' },
-      { type: 'feat', description: 'Botão “Baixar CSV Modelo” para acelerar criação de layouts' },
-      { type: 'feat', description: 'Página “Gerar Boletos (PDF)” com modos individual, merge e zip' },
+      { type: 'feat', description: 'Botão "Baixar CSV Modelo" para acelerar criação de layouts' },
+      { type: 'feat', description: 'Página "Gerar Boletos (PDF)" com modos individual, merge e zip' },
       { type: 'fix', description: 'Boletos via API: exibição correta do CNPJ a partir de múltiplos campos' },
       { type: 'feat', description: 'Editor de Layout: opção para mostrar/ocultar fundo importado' },
       { type: 'refactor', description: 'Renderização com pdf-lib: shrink‑to‑fit, alinhamento real por largura do texto' },
