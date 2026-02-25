@@ -78,6 +78,8 @@ export default function BoletosApi() {
   const [showFalhaDialog, setShowFalhaDialog] = useState(false);
   const [idsComErro, setIdsComErro] = useState<Set<string>>(new Set());
   const [filtrarComErros, setFiltrarComErros] = useState(false);
+  const [duplicadosSync, setDuplicadosSync] = useState<{ chave: string; numero_nota: string; numero_cobranca: string }[]>([]);
+  const [showDuplicadosDialog, setShowDuplicadosDialog] = useState(false);
 
   const { data: clientes } = useClientes();
   const { data: integracoes } = useApiIntegracoes();
@@ -340,7 +342,18 @@ export default function BoletosApi() {
     try {
       const result = await syncApi.mutateAsync({ integracao_id: integracaoSelecionada });
       if (result.success) {
-        toast({ title: 'Sincronização concluída', description: `${result.registros_novos} novos, ${result.registros_atualizados} atualizados` });
+        const descParts = [`${result.registros_atualizados || 0} processados`];
+        if (result.registros_duplicados > 0) {
+          descParts.push(`${result.registros_duplicados} duplicados`);
+        }
+        toast({ title: 'Sincronização concluída', description: descParts.join(', ') });
+        
+        // Mostrar duplicados se houver
+        if (result.duplicados && result.duplicados.length > 0) {
+          setDuplicadosSync(result.duplicados);
+          setShowDuplicadosDialog(true);
+        }
+        
         refetch();
       }
     } catch (error: any) {
@@ -1059,6 +1072,38 @@ export default function BoletosApi() {
                 </div>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Dialog de registros duplicados na sincronização */}
+      <Dialog open={showDuplicadosDialog} onOpenChange={setShowDuplicadosDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" />
+              Registros duplicados na API ({duplicadosSync.length})
+            </DialogTitle>
+            <DialogDescription>
+              Os registros abaixo apareceram mais de uma vez na resposta da API (mesma combinação de Nota + Cobrança). Apenas a última ocorrência foi mantida.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nº Nota</TableHead>
+                  <TableHead>Nº Cobrança</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {duplicadosSync.map((d, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="font-mono text-sm">{d.numero_nota}</TableCell>
+                    <TableCell className="font-mono text-sm">{d.numero_cobranca}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </DialogContent>
       </Dialog>
