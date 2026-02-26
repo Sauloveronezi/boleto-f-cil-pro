@@ -288,7 +288,13 @@ serve(async (req) => {
     console.log(`[sync-api-boletos] Total de registros recebidos: ${dadosApi.length} em ${pageCount} página(s)`);
 
     // Buscar lista de colunas existentes na tabela vv_b_boletos_api (para validação)
-    const { data: colunasExistentes } = await supabase.rpc('vv_b_get_table_columns', { p_table_name: 'vv_b_boletos_api' }).catch(() => ({ data: null }));
+    let colunasExistentes: any[] | null = null;
+    try {
+      const rpcResult = await supabase.rpc('vv_b_list_dynamic_columns');
+      colunasExistentes = rpcResult.data;
+    } catch (_e) {
+      console.warn('[sync-api-boletos] Não foi possível buscar colunas dinâmicas, usando fallback hardcoded.');
+    }
     // Fallback: usar set hardcoded das colunas conhecidas
     const colunasConhecidas = new Set<string>(colunasExistentes?.map((c: any) => c.column_name) || [
       'id','integracao_id','numero_nota','cliente_id','numero_cobranca','data_emissao','data_vencimento',
