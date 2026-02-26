@@ -578,12 +578,13 @@ serve(async (req) => {
     for (const reg of registrosPreparados) {
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Extrair documento com fallback case-insensitive do item original
+      // Extrair documento usando AccountingDocument (diferente de PaymentDocument que já mapeia para numero_nota)
       const documentoVal = String(
-        reg.colunasDinamicas?.PaymentDocument 
+        reg.colunasDinamicas?.AccountingDocument 
         || reg.colunasDinamicas?.documento 
-        || getCI(reg.jsonOriginal, 'PaymentDocument')
+        || getCI(reg.jsonOriginal, 'AccountingDocument')
         || getCI(reg.jsonOriginal, 'documento')
+        || getCI(reg.jsonOriginal, 'PaymentDocument')
         || ''
       ).trim();
 
