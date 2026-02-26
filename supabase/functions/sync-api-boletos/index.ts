@@ -583,10 +583,13 @@ serve(async (req) => {
         carteira: resolverCarteira(reg.banco) || resolverCarteira(reg.colunasDinamicas?.BankInternalID) || null,
       };
 
-      // Adicionar colunas dinâmicas (prefixo dyn_)
+      // Adicionar colunas dinâmicas (prefixo dyn_) - excluir campos já tratados acima
+      const camposReservados = new Set(['cliente_id', 'integracao_id', 'numero_nota', 'numero_cobranca', 'id']);
       if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
         for (const [coluna, valor] of Object.entries(reg.colunasDinamicas)) {
-          registroBase[coluna] = valor;
+          if (!camposReservados.has(coluna)) {
+            registroBase[coluna] = valor;
+          }
         }
       }
 
