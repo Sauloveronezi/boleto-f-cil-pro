@@ -1,0 +1,1 @@
+ALTER TABLE public.vv_b_api_integracoes ADD COLUMN IF NOT EXISTS ignorar_validacao boolean DEFAULT false;
