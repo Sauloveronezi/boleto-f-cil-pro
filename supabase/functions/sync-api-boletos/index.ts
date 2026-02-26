@@ -578,9 +578,11 @@ serve(async (req) => {
     for (const reg of registrosPreparados) {
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Extrair documento usando AccountingDocument (diferente de PaymentDocument que já mapeia para numero_nota)
+      // Extrair documento usando o ID do SAP (campo verdadeiramente único por registro)
+      // Fallback para AccountingDocument, depois PaymentDocument
       const documentoVal = String(
-        reg.colunasDinamicas?.AccountingDocument 
+        getCI(reg.jsonOriginal, 'ID')
+        || reg.colunasDinamicas?.AccountingDocument 
         || reg.colunasDinamicas?.documento 
         || getCI(reg.jsonOriginal, 'AccountingDocument')
         || getCI(reg.jsonOriginal, 'documento')
