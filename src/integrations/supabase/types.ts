@@ -1612,6 +1612,7 @@ export type Database = {
           paymentamountinfunctionalcrcy: string | null
           PaymentAmountInFunctionalCrcy: string | null
           PaymentCurrency: string | null
+          PaymentDocument: string | null
           PaymentDueDate: string | null
           PaymentMethod: string | null
           PaymentOrigin: string | null
@@ -1700,6 +1701,7 @@ export type Database = {
           paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
           PaymentCurrency?: string | null
+          PaymentDocument?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
           PaymentOrigin?: string | null
@@ -1788,6 +1790,7 @@ export type Database = {
           paymentamountinfunctionalcrcy?: string | null
           PaymentAmountInFunctionalCrcy?: string | null
           PaymentCurrency?: string | null
+          PaymentDocument?: string | null
           PaymentDueDate?: string | null
           PaymentMethod?: string | null
           PaymentOrigin?: string | null
