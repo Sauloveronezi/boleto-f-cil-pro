@@ -1599,6 +1599,7 @@ export type Database = {
           endereco: string | null
           FinancialAccountType: string | null
           id: string
+          ID: string | null
           integracao_id: string | null
           json_original: Json | null
           linha_digitavel_calculada: string | null
@@ -1686,6 +1687,7 @@ export type Database = {
           endereco?: string | null
           FinancialAccountType?: string | null
           id?: string
+          ID?: string | null
           integracao_id?: string | null
           json_original?: Json | null
           linha_digitavel_calculada?: string | null
@@ -1773,6 +1775,7 @@ export type Database = {
           endereco?: string | null
           FinancialAccountType?: string | null
           id?: string
+          ID?: string | null
           integracao_id?: string | null
           json_original?: Json | null
           linha_digitavel_calculada?: string | null
