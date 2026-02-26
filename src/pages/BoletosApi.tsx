@@ -78,7 +78,7 @@ export default function BoletosApi() {
   const [showFalhaDialog, setShowFalhaDialog] = useState(false);
   const [idsComErro, setIdsComErro] = useState<Set<string>>(new Set());
   const [filtrarComErros, setFiltrarComErros] = useState(false);
-  const [duplicadosSync, setDuplicadosSync] = useState<{ chave: string; numero_nota: string; numero_cobranca: string }[]>([]);
+  const [duplicadosSync, setDuplicadosSync] = useState<{ chave: string; numero_nota: string; numero_cobranca: string; documento?: string; paymentrundate?: string }[]>([]);
   const [showDuplicadosDialog, setShowDuplicadosDialog] = useState(false);
 
   const { data: clientes } = useClientes();
@@ -342,9 +342,12 @@ export default function BoletosApi() {
     try {
       const result = await syncApi.mutateAsync({ integracao_id: integracaoSelecionada });
       if (result.success) {
-        const descParts = [`${result.registros_atualizados || 0} processados`];
-        if (result.registros_duplicados > 0) {
-          descParts.push(`${result.registros_duplicados} duplicados`);
+        const recebidos = result.registros_recebidos || result.registros_processados || 0;
+        const gravados = result.registros_atualizados || 0;
+        const duplicados = result.registros_duplicados || 0;
+        const descParts = [`${recebidos} recebidos da API`, `${gravados} gravados`];
+        if (duplicados > 0) {
+          descParts.push(`${duplicados} duplicados na origem`);
         }
         toast({ title: 'Sincronização concluída', description: descParts.join(', ') });
         
@@ -1084,7 +1087,7 @@ export default function BoletosApi() {
               Registros duplicados na API ({duplicadosSync.length})
             </DialogTitle>
             <DialogDescription>
-              Os registros abaixo apareceram mais de uma vez na resposta da API (mesma combinação de Nota + Cobrança). Apenas a última ocorrência foi mantida.
+              Os registros abaixo apareceram mais de uma vez na resposta da API (mesma chave: Nota + Cobrança + Documento + PaymentRunDate). Apenas a última ocorrência foi mantida. Os duplicados foram registrados na tabela de erros para auditoria.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 mt-2">
@@ -1093,6 +1096,8 @@ export default function BoletosApi() {
                 <TableRow>
                   <TableHead>Nº Nota</TableHead>
                   <TableHead>Nº Cobrança</TableHead>
+                  <TableHead>Documento</TableHead>
+                  <TableHead>PaymentRunDate</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1100,6 +1105,8 @@ export default function BoletosApi() {
                   <TableRow key={i}>
                     <TableCell className="font-mono text-sm">{d.numero_nota}</TableCell>
                     <TableCell className="font-mono text-sm">{d.numero_cobranca}</TableCell>
+                    <TableCell className="font-mono text-sm">{d.documento || '-'}</TableCell>
+                    <TableCell className="font-mono text-sm">{d.paymentrundate || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

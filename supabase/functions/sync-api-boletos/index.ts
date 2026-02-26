@@ -13,6 +13,16 @@ const API_PAGE_SIZE = 5000;
 // Máximo de páginas para evitar loop infinito
 const MAX_PAGES = 200;
 
+// Helper: leitura case-insensitive de chaves de um objeto
+function getCI(obj: any, key: string): any {
+  if (!obj || typeof obj !== 'object') return undefined;
+  const lower = key.toLowerCase();
+  for (const k of Object.keys(obj)) {
+    if (k.toLowerCase() === lower) return obj[k];
+  }
+  return undefined;
+}
+
 // Função para construir headers de autenticação
 function buildAuthHeaders(auth: {
   tipo: string;
@@ -79,6 +89,13 @@ function parseODataDate(value: any): string | null {
   }
   
   return null;
+}
+
+// Normalizar data para formato YYYY-MM-DD (para chave de dedup)
+function normalizeDateForKey(value: any): string {
+  if (!value) return '';
+  const parsed = parseODataDate(value);
+  return parsed || String(value).trim();
 }
 
 // Função para obter valor em caminho JSON
@@ -192,7 +209,6 @@ serve(async (req) => {
     const urlObj = new URL(integracao.endpoint_base);
     urlObj.searchParams.delete('$filter');
     urlObj.searchParams.delete('filter');
-    // Não remover $top se já definido pelo usuário
     const userDefinedTop = urlObj.searchParams.get('$top');
     const endpointBase = urlObj.toString();
 
@@ -208,12 +224,10 @@ serve(async (req) => {
     let nextUrl: string | null = endpointBase;
     let pageCount = 0;
 
-    // Se não tem $top definido pelo usuário, adicionar para paginar
     if (!userDefinedTop) {
       const firstUrl = new URL(endpointBase);
       firstUrl.searchParams.set('$top', String(API_PAGE_SIZE));
       firstUrl.searchParams.set('$skip', '0');
-      // Adicionar $inlinecount para saber total real de registros (OData v2)
       firstUrl.searchParams.set('$inlinecount', 'allpages');
       nextUrl = firstUrl.toString();
     }
@@ -234,7 +248,6 @@ serve(async (req) => {
 
       const rawApiResponse = await apiResponse.json();
 
-      // Logar total de registros disponíveis (OData v2: d.__count, OData v4: @odata.count)
       const inlineCount = rawApiResponse?.d?.__count || rawApiResponse?.['@odata.count'] || rawApiResponse?.['odata.count'];
       if (inlineCount && pageCount === 1) {
         console.log(`[sync-api-boletos] Total de registros na API (inlinecount): ${inlineCount}`);
@@ -247,7 +260,6 @@ serve(async (req) => {
         console.log(`[sync-api-boletos] Página ${pageCount}: ${pageData.length} registros (total acumulado: ${dadosApi.length}${inlineCount ? ` de ${inlineCount}` : ''})`);
       }
 
-      // Detectar próxima página via OData __next ou odata.nextLink
       const odataNext = rawApiResponse?.d?.__next 
         || rawApiResponse?.['odata.nextLink'] 
         || rawApiResponse?.['@odata.nextLink']
@@ -256,13 +268,11 @@ serve(async (req) => {
       if (odataNext) {
         nextUrl = odataNext;
       } else if (!userDefinedTop && Array.isArray(pageData) && pageData.length >= API_PAGE_SIZE) {
-        // Paginação manual via $skip/$top
         const skipUrl = new URL(endpointBase);
         skipUrl.searchParams.set('$top', String(API_PAGE_SIZE));
         skipUrl.searchParams.set('$skip', String(dadosApi.length));
         nextUrl = skipUrl.toString();
       } else {
-        // Sem mais páginas
         nextUrl = null;
       }
     }
@@ -276,6 +286,29 @@ serve(async (req) => {
     }
 
     console.log(`[sync-api-boletos] Total de registros recebidos: ${dadosApi.length} em ${pageCount} página(s)`);
+
+    // Buscar lista de colunas existentes na tabela vv_b_boletos_api (para validação)
+    const { data: colunasExistentes } = await supabase.rpc('vv_b_get_table_columns', { p_table_name: 'vv_b_boletos_api' }).catch(() => ({ data: null }));
+    // Fallback: usar set hardcoded das colunas conhecidas
+    const colunasConhecidas = new Set<string>(colunasExistentes?.map((c: any) => c.column_name) || [
+      'id','integracao_id','numero_nota','cliente_id','numero_cobranca','data_emissao','data_vencimento',
+      'valor','dados_extras','sincronizado_em','created_at','updated_at','deleted','usuario_delete_id',
+      'data_delete','json_original','cliente','valor_desconto','data_desconto','empresa','banco',
+      'dyn_conta','dyn_nome_do_cliente','dyn_cidade','dyn_zonatransporte','dyn_desconto1','customer',
+      'documento','endereco','bairro','uf','pais','cep','serie','bankcontrolkey',
+      'PaytAmountInCoCodeCurrency','PaymentAmountInFunctionalCrcy','FinancialAccountType','PaymentMethod',
+      'DocumentReferenceID','BR_NFPartnerFunction','CashDiscountAmtInTransacCrcy','CashDiscountAmtInCoCodeCrcy',
+      'CashDiscountAmountInFuncnlCrcy','CashDiscount1Days','CashDiscount2Days','CashDiscount1Percent',
+      'PostingDate','PaymentDueDate','paymentrundate','paymentamountinfunctionalcrcy',
+      'paytamountincocodecurrency','br_nfenumber','PaymentRunIsProposal','paymentrunisproposal',
+      'BankInternalID','BankAccountLongID','PaymentCurrency','PaymentOrigin','taxnumber1',
+      'AccountingDocument','billingdocument','companycode','payeeadditionalname','payeeregion',
+      'accountingdocumenttype','paymentreference','br_nfnumber','br_nfsubseries',
+      'yy1_custtranspzone_sdh','yy1_custtranspzonpais_sdh','br_nfsourcedocumenttype','br_nfpartnercnpj',
+      'nosso_numero','cod_barras','valor_com_desconto','doc_contabil','carteira','BR_NFSubSeries',
+      'AmountInFunctionalCurrency','amountinfunctionalcurrency','cashdiscount2days',
+      'CashDiscount1DueDate','cod_barras_calculado','linha_digitavel_calculada','ID','PaymentDocument'
+    ]);
 
     // Buscar clientes para mapear CNPJ -> id
     const { data: clientes } = await supabase
@@ -304,7 +337,6 @@ serve(async (req) => {
       .select('*')
       .is('deleted', null);
 
-    // Mapear código do banco -> configuração (agência+conta+carteira)
     const bancoIdPorCodigo = new Map<string, string>();
     for (const b of (bancosDb || [])) {
       bancoIdPorCodigo.set(b.codigo_banco.trim(), b.id);
@@ -317,7 +349,6 @@ serve(async (req) => {
       configsPorBancoId.set(cfg.banco_id, arr);
     }
 
-    // Função para resolver carteira a partir do código do banco
     function resolverCarteira(codigoBanco: string | undefined | null): string | null {
       if (!codigoBanco) return null;
       const codigoLimpo = String(codigoBanco).trim().padStart(3, '0');
@@ -325,7 +356,6 @@ serve(async (req) => {
       if (!bancoId) return null;
       const configs = configsPorBancoId.get(bancoId);
       if (!configs || configs.length === 0) return null;
-      // Retorna a carteira da primeira configuração encontrada
       return configs[0].carteira || null;
     }
 
@@ -333,9 +363,10 @@ serve(async (req) => {
     let registrosAtualizados = 0;
     const erros: any[] = [];
     const clientesParaCriar: Map<string, any> = new Map();
-    const registrosComErro: any[] = []; // Para registrar na tabela de erros
+    const registrosComErro: any[] = [];
+    const avisosColunas: string[] = []; // avisos de colunas desconhecidas
 
-    // Primeiro passo: preparar todos os dados e identificar clientes a criar
+    // Primeiro passo: preparar todos os dados
     const registrosPreparados: any[] = [];
 
     for (const item of dadosApi) {
@@ -352,10 +383,7 @@ serve(async (req) => {
         let empresa: number | undefined = item?.empresa;
         let cliente: string | undefined = item?.cliente ?? item?.CustomerName;
         
-        // Campos dinâmicos para dados_extras (campos que começam com dados_extras.)
         const dadosExtras: Record<string, any> = {};
-        
-        // Colunas dinâmicas reais (prefixo dyn_)
         const colunasDinamicas: Record<string, any> = {};
 
         // Aplicar mapeamentos personalizados
@@ -363,10 +391,8 @@ serve(async (req) => {
           for (const map of mapeamentos) {
             const valorApi = getValueByPath(item, map.campo_api);
             if (valorApi !== undefined) {
-              // Verificar se é campo dinâmico antigo (dados_extras.*)
               if (map.campo_destino.startsWith('dados_extras.')) {
                 const nomeCampo = map.campo_destino.replace('dados_extras.', '');
-                // Aplicar conversão de tipo
                 switch (map.tipo_dado) {
                   case 'number': dadosExtras[nomeCampo] = Number(valorApi); break;
                   case 'date': dadosExtras[nomeCampo] = parseODataDate(valorApi); break;
@@ -374,7 +400,6 @@ serve(async (req) => {
                   default: dadosExtras[nomeCampo] = String(valorApi); break;
                 }
               } 
-              // Coluna dinâmica real (prefixo dyn_)
               else if (map.campo_destino.startsWith('dyn_')) {
                 switch (map.tipo_dado) {
                   case 'number': colunasDinamicas[map.campo_destino] = Number(valorApi); break;
@@ -384,7 +409,6 @@ serve(async (req) => {
                 }
               } 
               else {
-                // Campos fixos da tabela - atribuir às variáveis específicas
                 switch (map.campo_destino) {
                   case 'numero_nota': numeroNota = String(valorApi); break;
                   case 'numero_cobranca': numeroCobranca = String(valorApi); break;
@@ -397,10 +421,7 @@ serve(async (req) => {
                   case 'banco': banco = String(valorApi); break;
                   case 'empresa': empresa = Number(valorApi); break;
                   case 'cliente': cliente = String(valorApi); break;
-                  default:
-                    // TODOS os outros campos mapeados devem ir para colunasDinamicas
-                    // para serem salvos como colunas reais na tabela
-                    // Converter valor de acordo com o tipo_dado
+                  default: {
                     let valorConvertido: any = valorApi;
                     switch (map.tipo_dado) {
                       case 'number':
@@ -412,8 +433,7 @@ serve(async (req) => {
                       case 'boolean':
                         valorConvertido = Boolean(valorApi);
                         break;
-                      default:
-                        // String - converter datas OData automaticamente se detectadas
+                      default: {
                         const strVal = String(valorApi);
                         if (strVal.match(/^\/Date\(\d+\)\/?$/)) {
                           valorConvertido = parseODataDate(strVal);
@@ -421,26 +441,26 @@ serve(async (req) => {
                           valorConvertido = strVal;
                         }
                         break;
+                      }
                     }
                     colunasDinamicas[map.campo_destino] = valorConvertido;
                     break;
+                  }
                 }
               }
             }
           }
         }
 
-        // Validar campos obrigatórios MÍNIMOS (apenas numero_nota e numero_cobranca)
+        // Validar campos obrigatórios MÍNIMOS
         const camposFaltando: string[] = [];
         if (!numeroNota) camposFaltando.push('numero_nota');
         if (!numeroCobranca) camposFaltando.push('numero_cobranca');
 
-        // Verificar flag de ignorar validação (pode vir no body ou na config da integração)
         const ignorarValidacao = integracao.ignorar_validacao === true || integracao.ignorar_validacao === 'true';
 
         if (camposFaltando.length > 0) {
           if (ignorarValidacao) {
-             // Preencher com valor padrão para não falhar no banco
              if (!numeroNota) numeroNota = `MISSING_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
              if (!numeroCobranca) numeroCobranca = `MISSING_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
           } else {
@@ -456,11 +476,9 @@ serve(async (req) => {
           }
         }
 
-        // CNPJ é opcional - se vier, tentaremos vincular ao cliente
         const cnpjNormalizado = cnpjCliente ? normalizeCnpj(cnpjCliente) : null;
         let clienteId = cnpjNormalizado ? (cnpjToId.get(cnpjNormalizado) ?? null) : null;
 
-        // Marcar cliente para criação apenas se tiver CNPJ e não existir
         if (cnpjNormalizado && !clienteId && !clientesParaCriar.has(cnpjNormalizado)) {
           clientesParaCriar.set(cnpjNormalizado, {
             cnpj: cnpjCliente,
@@ -476,7 +494,6 @@ serve(async (req) => {
           });
         }
 
-        // Garantir que colunas dinâmicas (dyn_) também estejam em dados_extras (fallback)
         Object.assign(dadosExtras, colunasDinamicas);
 
         registrosPreparados.push({
@@ -492,8 +509,8 @@ serve(async (req) => {
           empresa,
           cliente,
           dadosExtras: Object.keys(dadosExtras).length > 0 ? dadosExtras : null,
-          colunasDinamicas, // Colunas reais criadas dinamicamente
-          jsonOriginal: item // Guardar JSON original
+          colunasDinamicas,
+          jsonOriginal: item
         });
 
       } catch (err: any) {
@@ -536,7 +553,6 @@ serve(async (req) => {
         }
       }
 
-      // Buscar novamente todos os clientes para garantir mapeamento correto
       const { data: todosClientes } = await supabase
         .from('vv_b_clientes')
         .select('id, cnpj')
@@ -549,20 +565,31 @@ serve(async (req) => {
       }
     }
 
-    // Preparar registros finais com cliente_id
-    // Usar Map para deduplicar - mantém apenas o ÚLTIMO registro de cada chave única
+    // Preparar registros finais com dedup
     const registrosPorChave = new Map<string, any>();
-    const registrosDuplicados: { chave: string; numero_nota: string; numero_cobranca: string }[] = [];
+    const registrosDuplicados: { chave: string; numero_nota: string; numero_cobranca: string; documento: string; paymentrundate: string }[] = [];
 
     for (const reg of registrosPreparados) {
-      // Tentar buscar cliente_id se tiver CNPJ, mas NÃO é obrigatório
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Criar chave única baseada em numero_nota + numero_cobranca + documento + paymentrundate
-      // Esta é a chave usada no ON CONFLICT, deve corresponder ao unique constraint do banco
-      const documentoVal = reg.colunasDinamicas?.PaymentDocument || reg.colunasDinamicas?.documento || '';
-      const paymentrundateVal = reg.colunasDinamicas?.paymentrundate || '';
-      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}|${documentoVal}|${paymentrundateVal}`;
+      // Extrair documento com fallback case-insensitive do item original
+      const documentoVal = String(
+        reg.colunasDinamicas?.PaymentDocument 
+        || reg.colunasDinamicas?.documento 
+        || getCI(reg.jsonOriginal, 'PaymentDocument')
+        || getCI(reg.jsonOriginal, 'documento')
+        || ''
+      ).trim();
+
+      // Extrair paymentrundate com fallback case-insensitive
+      const paymentrundateRaw = 
+        reg.colunasDinamicas?.paymentrundate 
+        || getCI(reg.jsonOriginal, 'PaymentRunDate')
+        || getCI(reg.jsonOriginal, 'paymentrundate')
+        || '';
+      const paymentrundateVal = normalizeDateForKey(paymentrundateRaw);
+
+      const chaveUnica = `${String(reg.numeroNota).trim()}|${String(reg.numeroCobranca).trim()}|${documentoVal}|${paymentrundateVal}`;
 
       // Construir registro base
       const registroBase: Record<string, any> = {
@@ -583,16 +610,25 @@ serve(async (req) => {
         dados_extras: reg.dadosExtras,
         json_original: reg.jsonOriginal,
         sincronizado_em: new Date().toISOString(),
-        // Resolver carteira a partir do código do banco (campo 'banco' ou 'BankInternalID')
         carteira: resolverCarteira(reg.banco) || resolverCarteira(reg.colunasDinamicas?.BankInternalID) || null,
       };
 
-      // Adicionar colunas dinâmicas (prefixo dyn_) - excluir campos já tratados acima
+      // Adicionar colunas dinâmicas - com validação de existência
       const camposReservados = new Set(['cliente_id', 'integracao_id', 'numero_nota', 'numero_cobranca', 'documento', 'paymentrundate', 'id']);
       if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
         for (const [coluna, valor] of Object.entries(reg.colunasDinamicas)) {
-          if (!camposReservados.has(coluna)) {
+          if (camposReservados.has(coluna)) continue;
+          // Validar se a coluna existe na tabela
+          if (colunasConhecidas.has(coluna)) {
             registroBase[coluna] = valor;
+          } else {
+            // Coluna não existe: salvar em dados_extras ao invés de falhar
+            if (!registroBase.dados_extras) registroBase.dados_extras = {};
+            registroBase.dados_extras[coluna] = valor;
+            if (!avisosColunas.includes(coluna)) {
+              avisosColunas.push(coluna);
+              console.warn(`[sync-api-boletos] Coluna '${coluna}' não existe na tabela, salvo em dados_extras`);
+            }
           }
         }
       }
@@ -605,9 +641,31 @@ serve(async (req) => {
           numero_nota: reg.numeroNota,
           numero_cobranca: reg.numeroCobranca,
           documento: documentoVal,
+          paymentrundate: paymentrundateVal,
         });
       }
       registrosPorChave.set(chaveUnica, registroBase);
+    }
+
+    // Registrar duplicados da API na tabela de erros para auditoria
+    if (registrosDuplicados.length > 0) {
+      console.log(`[sync-api-boletos] Salvando ${registrosDuplicados.length} duplicados da API na tabela de erros`);
+      const errosDuplicados = registrosDuplicados.map(d => ({
+        integracao_id,
+        json_original: {}, // O JSON original já está no registro que foi mantido
+        tipo_erro: 'duplicado_api',
+        mensagem_erro: `Registro duplicado na API de origem. Chave: ${d.chave}`,
+        campo_erro: 'numero_nota,numero_cobranca,documento,paymentrundate',
+        valor_erro: d.chave,
+      }));
+      
+      const { error: erroDupInsert } = await supabase
+        .from('vv_b_boletos_api_erros')
+        .insert(errosDuplicados);
+
+      if (erroDupInsert) {
+        console.error('[sync-api-boletos] Erro ao salvar duplicados:', erroDupInsert.message);
+      }
     }
 
     // Converter Map para array (registros únicos)
@@ -644,7 +702,6 @@ serve(async (req) => {
         erros.push({ tipo: 'batch_exception', batch: i + 1, erro: batchErr.message });
       }
 
-      // Log de progresso a cada 10 batches
       if ((i + 1) % 10 === 0) {
         console.log(`[sync-api-boletos] Progresso: ${i + 1}/${batches.length} batches processados`);
       }
@@ -691,16 +748,18 @@ serve(async (req) => {
       .update({ ultima_sincronizacao: new Date().toISOString() })
       .eq('id', integracao_id);
 
-    console.log(`[sync-api-boletos] Concluído. Status: ${status}, Processados: ${registrosAtualizados}, Erros: ${registrosComErro.length}, Duração: ${duracao}ms`);
+    console.log(`[sync-api-boletos] Concluído. Status: ${status}, Recebidos: ${dadosApi.length}, Gravados: ${registrosAtualizados}, Duplicados: ${registrosDuplicados.length}, Erros: ${registrosComErro.length}, Duração: ${duracao}ms`);
 
     return new Response(JSON.stringify({
       success: true,
       status,
+      registros_recebidos: dadosApi.length,
       registros_processados: dadosApi.length,
       registros_atualizados: registrosAtualizados,
       registros_com_erro: registrosComErro.length,
       registros_duplicados: registrosDuplicados.length,
       duplicados: registrosDuplicados.length > 0 ? registrosDuplicados : undefined,
+      avisos_colunas: avisosColunas.length > 0 ? avisosColunas : undefined,
       erros: erros.length > 0 ? erros.slice(0, 10) : undefined,
       duracao_ms: duracao
     }), {
