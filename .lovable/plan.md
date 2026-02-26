@@ -1,68 +1,57 @@
 
+Objetivo: garantir que a sincronização salve corretamente o retorno da API, elimine duplicação na tabela principal e deixe claro para você por que os 5 itens aparecem como duplicados.
 
-# Duplicar Template Bradesco como Modelo Universal
+Diagnóstico validado no ambiente atual:
+1) A função `sync-api-boletos` está retornando sucesso com `registros_processados=105`, `registros_atualizados=100` e `registros_duplicados=5`.
+2) A tabela `public.vv_b_boletos_api` está com 100 registros ativos e sem duplicidade na chave composta atual `(numero_nota, numero_cobranca, documento, paymentrundate)`.
+3) A constraint única no banco está correta: `uq_boletos_nota_cobranca_doc_prd`.
+4) Os 5 “duplicados” vêm da resposta da API de origem (mesma chave completa), não de duplicação gerada no banco.
+5) A UI está desatualizada na mensagem: ainda fala “Nota + Cobrança”, embora o backend já deduplique por 4 campos. Isso passa a impressão de erro.
 
-## Objetivo
-Criar um novo template de boleto "Modelo Universal" baseado no PDF enviado (boletos_341_20260223.pdf), com coordenadas ajustadas, sem textos fixos de banco especifico, e com correcao do codigo de barras na segunda via.
+Plano de correção (implementação):
+1) Fortalecer a deduplicação no Edge Function (`supabase/functions/sync-api-boletos/index.ts`)
+- Criar helper para leitura case-insensitive de chaves (ex.: `PaymentRunDate`, `paymentrundate`, `PAYMENTRUNDATE`).
+- Extrair `documento` e `paymentrundate` com fallback robusto (mapeado + raw item).
+- Normalizar valores antes da chave:
+  - `trim()` em strings
+  - normalização de data para formato único (`YYYY-MM-DD`) quando possível
+- Manter chave única final: `numero_nota|numero_cobranca|documento|paymentrundate`.
 
-## Etapas
+2) Garantir rastreabilidade do retorno completo da API sem duplicar tabela principal
+- Continuar deduplicando antes do `upsert` (evita conflito no mesmo batch).
+- Para cada duplicado detectado na origem, registrar em `vv_b_boletos_api_erros` com:
+  - `tipo_erro = 'duplicado_api'`
+  - `mensagem_erro` descritiva com a chave
+  - `json_original` completo do registro descartado
+- Resultado: nada “se perde”; tudo fica auditável, enquanto a tabela principal permanece sem duplicidade.
 
-### 1. Copiar o PDF enviado para o projeto
-- Copiar `user-uploads://boletos_341_20260223.pdf` para `public/templates/boleto_universal_referencia.pdf`
-- Este PDF sera o fundo base do novo template
+3) Evitar falha de lote por coluna dinâmica não existente
+- Antes de montar payload final, validar se a coluna de destino existe.
+- Se não existir, salvar o dado em `dados_extras` e registrar aviso no log da sync (sem abortar o batch inteiro).
+- Isso evita cenário “não salva nada” por erro de schema em um único campo dinâmico.
 
-### 2. Criar arquivo de campos do template universal
-- Novo arquivo: `src/data/defaultUniversalTemplateFields.ts`
-- Baseado no `defaultBoletoTemplateFields.ts` (Bradesco), com os seguintes ajustes:
-  - **local_pagamento**: source_ref sera `local_pagamento` (sem texto fixo hardcoded - o texto generico "PAGAVEL EM QUALQUER BANCO ATE O VENCIMENTO" sera aplicado pelo mapper)
-  - Coordenadas recalibradas conforme o PDF enviado (posicoes dos campos no boleto Itau)
-  - Via 2 gerada automaticamente com offset Y de 148mm (mesmo padrao)
-  - **Codigo de barras da via 2**: o campo `via2_codigo_barras` tera o mesmo `source_ref: 'codigo_barras'` que a via 1, garantindo que o barcode seja renderizado corretamente em ambas as vias sem duplicacao indevida
+4) Corrigir comunicação no frontend (`src/pages/BoletosApi.tsx`)
+- Atualizar tipo de `duplicadosSync` para incluir `documento` e `paymentrundate`.
+- Atualizar modal:
+  - texto explicando chave de 4 campos
+  - colunas visíveis: Nº Nota, Nº Cobrança, Documento, PaymentRunDate
+- Ajustar toast de sucesso para refletir claramente:
+  - total recebido da API
+  - total gravado/upsertado
+  - total duplicado na origem
+- Isso elimina a percepção de “não salvou” quando, na prática, houve deduplicação correta.
 
-### 3. Adicionar seed function no hook
-- Arquivo: `src/hooks/useBoletoTemplates.ts`
-- Novo ID: `b0000000-0000-0000-0000-000000000099` (Universal)
-- Nova funcao `useSeedUniversalTemplate()` que:
-  - Cria o template com `bank_code: null` (compativel com qualquer banco)
-  - `is_default: false`
-  - `background_pdf_url: '/templates/boleto_universal_referencia.pdf'`
-  - Insere todos os campos do novo arquivo de definicoes
+5) Ajuste de consistência de filtro soft delete na leitura
+- Padronizar consultas de leitura de API para aceitar ativos como `deleted IS NULL` ou `deleted = ''` quando aplicável (consistência com regra do projeto e dados legados).
 
-### 4. Atualizar local_pagamento no mapper
-- Arquivo: `src/lib/boletoDataMapper.ts`
-- Alterar o fallback de `local_pagamento` para usar texto generico quando o banco nao for identificado:
-  - Manter mapa por banco para quando o codigo do banco for identificado
-  - Default: "PAGAVEL EM QUALQUER BANCO ATE O VENCIMENTO."
+Critérios de aceite:
+1) Após sincronizar, mensagem deve mostrar algo como: “105 recebidos, 100 gravados, 5 duplicados na origem”.
+2) Modal de duplicados deve exibir os 4 campos da chave.
+3) Query de validação no banco não deve retornar duplicados na chave de 4 campos.
+4) `vv_b_boletos_api_erros` deve registrar os duplicados como `duplicado_api` com `json_original`.
+5) Em caso de campo dinâmico desconhecido, sincronização deve continuar e salvar os demais registros (sem erro geral de batch).
 
-### 5. Adicionar botao na tela de Templates
-- Arquivo: `src/pages/TemplatesBoleto.tsx`
-- Novo botao "Template Universal" ao lado dos existentes (Bradesco e Santander)
-- Ao clicar, executa `seedUniversal.mutate()` para criar/atualizar o template
-
-## Detalhes Tecnicos
-
-### Coordenadas ajustadas (Via 1, em mm)
-As coordenadas serao calibradas com base no PDF enviado. Os campos principais e suas posicoes estimadas:
-
-| Campo | bbox [x, y, x2, y2] |
-|-------|---------------------|
-| linha_digitavel | [70, 12, 205, 16] |
-| local_pagamento | [5, 21, 145, 27] |
-| data_vencimento | [147, 21, 205, 27] |
-| beneficiario_nome | [5, 31, 145, 37] |
-| agencia_codigo | [147, 31, 205, 37] |
-| data_documento | [5, 43, 35, 49] |
-| numero_documento | [37, 43, 82, 49] |
-| nosso_numero | [147, 43, 205, 49] |
-| valor_documento | [147, 53, 205, 59] |
-| instrucoes | [5, 62, 145, 89] |
-| pagador_nome | [5, 100, 155, 106] |
-| codigo_barras | [5, 120, 195, 136] |
-
-### Arquivos alterados
-1. **Novo**: `src/data/defaultUniversalTemplateFields.ts` - definicoes de campos
-2. **Editado**: `src/hooks/useBoletoTemplates.ts` - nova seed function
-3. **Editado**: `src/pages/TemplatesBoleto.tsx` - botao na interface
-4. **Editado**: `src/lib/boletoDataMapper.ts` - local_pagamento generico
-5. **Copiado**: PDF para `public/templates/boleto_universal_referencia.pdf`
-
+Ordem de execução recomendada:
+1) Edge Function (dedupe + auditoria + robustez de colunas)
+2) Frontend (mensagens/diálogo)
+3) Validação SQL + teste de sincronização ponta a ponta na tela `/boletos-api`.
