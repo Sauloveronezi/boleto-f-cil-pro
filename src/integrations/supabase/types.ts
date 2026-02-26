@@ -1067,6 +1067,7 @@ export type Database = {
           endpoint_base: string | null
           headers_autenticacao: Json | null
           id: string
+          ignorar_validacao: boolean | null
           json_path: string | null
           modelo_boleto_id: string | null
           modo_demo: boolean | null
@@ -1092,6 +1093,7 @@ export type Database = {
           endpoint_base?: string | null
           headers_autenticacao?: Json | null
           id?: string
+          ignorar_validacao?: boolean | null
           json_path?: string | null
           modelo_boleto_id?: string | null
           modo_demo?: boolean | null
@@ -1117,6 +1119,7 @@ export type Database = {
           endpoint_base?: string | null
           headers_autenticacao?: Json | null
           id?: string
+          ignorar_validacao?: boolean | null
           json_path?: string | null
           modelo_boleto_id?: string | null
           modo_demo?: boolean | null
