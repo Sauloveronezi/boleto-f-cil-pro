@@ -558,10 +558,11 @@ serve(async (req) => {
       // Tentar buscar cliente_id se tiver CNPJ, mas NÃO é obrigatório
       const clienteId = reg.cnpjNormalizado ? (cnpjToId.get(reg.cnpjNormalizado) ?? null) : null;
       
-      // Criar chave única baseada em numero_nota + numero_cobranca + documento (PaymentDocument)
-      // Esta é a chave usada no ON CONFLICT, deve corresponder ao unique index do banco
+      // Criar chave única baseada em numero_nota + numero_cobranca + documento + paymentrundate
+      // Esta é a chave usada no ON CONFLICT, deve corresponder ao unique constraint do banco
       const documentoVal = reg.colunasDinamicas?.PaymentDocument || reg.colunasDinamicas?.documento || '';
-      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}|${documentoVal}`;
+      const paymentrundateVal = reg.colunasDinamicas?.paymentrundate || '';
+      const chaveUnica = `${reg.numeroNota}|${reg.numeroCobranca}|${documentoVal}|${paymentrundateVal}`;
 
       // Construir registro base
       const registroBase: Record<string, any> = {
@@ -570,6 +571,7 @@ serve(async (req) => {
         cliente_id: clienteId,
         numero_cobranca: reg.numeroCobranca,
         documento: documentoVal || '',
+        paymentrundate: paymentrundateVal || '',
         data_emissao: reg.dataEmissao,
         data_vencimento: reg.dataVencimento,
         valor: reg.valor,
@@ -586,7 +588,7 @@ serve(async (req) => {
       };
 
       // Adicionar colunas dinâmicas (prefixo dyn_) - excluir campos já tratados acima
-      const camposReservados = new Set(['cliente_id', 'integracao_id', 'numero_nota', 'numero_cobranca', 'documento', 'id']);
+      const camposReservados = new Set(['cliente_id', 'integracao_id', 'numero_nota', 'numero_cobranca', 'documento', 'paymentrundate', 'id']);
       if (reg.colunasDinamicas && typeof reg.colunasDinamicas === 'object') {
         for (const [coluna, valor] of Object.entries(reg.colunasDinamicas)) {
           if (!camposReservados.has(coluna)) {
@@ -626,7 +628,7 @@ serve(async (req) => {
         const { data, error: upsertError } = await supabase
           .from('vv_b_boletos_api')
           .upsert(batch, {
-            onConflict: 'numero_nota,numero_cobranca,documento',
+            onConflict: 'numero_nota,numero_cobranca,documento,paymentrundate',
             ignoreDuplicates: false
           })
           .select('id');
