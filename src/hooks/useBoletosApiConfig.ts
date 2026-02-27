@@ -16,6 +16,40 @@ export interface BoletosApiConfigItem {
 
 const QUERY_KEY = 'boletos-api-config';
 
+const normalizeFiltroChave = (chaveOriginal: string) => {
+  const chave = chaveOriginal.trim();
+  const chaveSemEspacos = chave.replace(/\s+/g, '_');
+  const lower = chaveSemEspacos.toLowerCase();
+
+  // Legado do módulo antigo
+  if (['dataemissaoinicio', 'data_emissao_inicio', 'dataemissaofim', 'data_emissao_fim'].includes(lower)) {
+    return 'data_emissao';
+  }
+
+  if (['datavencimentoinicio', 'data_vencimento_inicio', 'datavencimentofim', 'data_vencimento_fim', 'data_vencimento'].includes(lower)) {
+    return 'data_vencimento';
+  }
+
+  if (['clienteid', 'cliente_id', 'cliente'].includes(lower)) {
+    return 'cliente';
+  }
+
+  if (['estado', 'uf'].includes(lower)) {
+    return 'uf';
+  }
+
+  if (['cidade', 'dyn_cidade'].includes(lower)) {
+    return 'dyn_cidade';
+  }
+
+  if (['transportadora', 'dyn_zonatransporte'].includes(lower)) {
+    return 'transportadora';
+  }
+
+  // Sufixos de range
+  return chaveSemEspacos.replace(/_(de|ate)$/i, '');
+};
+
 export function useBoletosApiConfig() {
   return useQuery({
     queryKey: [QUERY_KEY],
@@ -42,21 +76,65 @@ export function useBoletosApiConfigColunas() {
 
 export function useBoletosApiConfigFiltros() {
   const { data, ...rest } = useBoletosApiConfig();
-  // Derive filters from columns that have uso_filtro set (new unified model)
-  // Also support legacy tipo='filtro' entries
   const allItems = data || [];
-  const visiveis = allItems.filter(c => {
-    // New model: columns with uso_filtro != 'nenhum'
-    if (c.tipo === 'coluna' && c.uso_filtro && c.uso_filtro !== 'nenhum') return c.visivel;
-    // Legacy: tipo='filtro'
-    if (c.tipo === 'filtro' && c.visivel) return true;
-    return false;
+
+  const colunas = allItems.filter(c => c.tipo === 'coluna');
+
+  const filtrosDaColuna = colunas
+    .filter(c => c.visivel && c.uso_filtro && c.uso_filtro !== 'nenhum')
+    .map(c => ({ ...c, chave: normalizeFiltroChave(c.chave) }));
+
+  const basesComUsoNaColuna = new Set(
+    filtrosDaColuna.map(c => normalizeFiltroChave(c.chave))
+  );
+
+  const filtrosLegados = allItems
+    .filter(c => c.tipo === 'filtro' && c.visivel)
+    .map((f) => {
+      const chaveBase = normalizeFiltroChave(f.chave);
+      const colunaCorrespondente = colunas.find(c => normalizeFiltroChave(c.chave) === chaveBase);
+
+      // Se já existe configuração de uso_filtro na coluna, ignora legado para evitar duplicidade
+      if (colunaCorrespondente && basesComUsoNaColuna.has(chaveBase)) return null;
+
+      // Se houver coluna correspondente sem uso_filtro definido, usa a coluna como base (melhor UX e ordem)
+      if (colunaCorrespondente) {
+        return {
+          ...colunaCorrespondente,
+          chave: chaveBase,
+          uso_filtro: (f.nivel || 'primario') as 'primario' | 'secundario',
+        } as BoletosApiConfigItem;
+      }
+
+      return {
+        ...f,
+        chave: chaveBase,
+        uso_filtro: (f.nivel || 'primario') as 'primario' | 'secundario',
+      } as BoletosApiConfigItem;
+    })
+    .filter(Boolean) as BoletosApiConfigItem[];
+
+  // Dedupe final por chave base (ex: data_emissao_de + data_emissao_ate => data_emissao)
+  const merged = [...filtrosDaColuna, ...filtrosLegados];
+  const unicosMap = new Map<string, BoletosApiConfigItem>();
+
+  merged.forEach((item) => {
+    const chaveBase = normalizeFiltroChave(item.chave);
+    const existente = unicosMap.get(chaveBase);
+
+    // Prioriza item do tipo coluna sobre legado
+    if (!existente || (existente.tipo === 'filtro' && item.tipo === 'coluna')) {
+      unicosMap.set(chaveBase, { ...item, chave: chaveBase });
+    }
   });
+
+  const visiveis = Array.from(unicosMap.values()).sort((a, b) => (a.ordem || 99) - (b.ordem || 99));
+
   return {
     data: visiveis,
     primarios: visiveis.filter(f => (f.uso_filtro === 'primario') || (f.tipo === 'filtro' && f.nivel === 'primario')),
     secundarios: visiveis.filter(f => (f.uso_filtro === 'secundario') || (f.tipo === 'filtro' && f.nivel === 'secundario')),
-    allFiltros: allItems.filter(c => c.tipo === 'filtro' || (c.uso_filtro && c.uso_filtro !== 'nenhum')),
+    allFiltros: visiveis,
     ...rest,
   };
 }
@@ -188,3 +266,4 @@ export function useDeleteBoletosApiConfig() {
     },
   });
 }
+

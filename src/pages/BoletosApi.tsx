@@ -237,15 +237,54 @@ export default function BoletosApi() {
     return Array.from(set).sort();
   }, [boletos, filtros.estado]);
 
-  // Filtrar boletos
+  const getOpcoesZonaTransporte = (chaveFiltro: string) => {
+    const set = new Set<string>();
+
+    boletos?.forEach((b: any) => {
+      if (bancoSelecionado) {
+        const bancoFiltro = bancos?.find(banco => banco.id === bancoSelecionado);
+        if (bancoFiltro) {
+          const codigoBoleto = b.banco?.replace(/\D/g, '').substring(0, 3);
+          if (codigoBoleto !== bancoFiltro.codigo_banco.trim()) return;
+        }
+      }
+
+      if (filtros.estado) {
+        const uf = b.uf || getNested(b, 'dados_extras.uf') || '';
+        if (String(uf).trim().toUpperCase() !== filtros.estado.toUpperCase()) return;
+      }
+
+      if (filtros.cidade) {
+        const cidade = b.dyn_cidade || getNested(b, 'dados_extras.cidade') || '';
+        if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return;
+      }
+
+      if (filtros.cnpj) {
+        const cnpj = getCnpj(b);
+        if (!String(cnpj).includes(filtros.cnpj)) return;
+      }
+
+      if (filtros.clienteNome) {
+        const nome = b.dyn_nome_do_cliente || b.cliente?.razao_social || '';
+        if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return;
+      }
+
+      const valorRaw = (chaveFiltro === 'transportadora' || chaveFiltro === 'dyn_zonatransporte')
+        ? getTransportadora(b)
+        : getCellValue(b, chaveFiltro);
+
+      const valor = String(valorRaw || '').trim();
+      if (valor && valor !== '-') set.add(valor);
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  };
+
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (ocultarEmitidos && b.cod_barras_calculado) return false;
       if (filtrarComErros && !idsComErro.has(b.id)) return false;
-      if (filtros.transportadora) {
-        const transportadora = getTransportadora(b);
-        if (!String(transportadora).toLowerCase().includes(filtros.transportadora.toLowerCase())) return false;
-      }
+
       if (bancoSelecionado) {
         const bancoFiltro = bancos?.find(banco => banco.id === bancoSelecionado);
         if (bancoFiltro) {
@@ -253,28 +292,32 @@ export default function BoletosApi() {
           if (codigoBoleto !== bancoFiltro.codigo_banco.trim()) return false;
         }
       }
+
       // Filtro estado
       if (filtros.estado) {
         const uf = b.uf || getNested(b, 'dados_extras.uf') || '';
         if (String(uf).trim().toUpperCase() !== filtros.estado.toUpperCase()) return false;
       }
+
       // Filtro cidade
       if (filtros.cidade) {
         const cidade = b.dyn_cidade || getNested(b, 'dados_extras.cidade') || '';
         if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return false;
       }
+
       // Filtro CNPJ (texto livre)
       if (filtros.cnpj) {
         const cnpj = getCnpj(b);
         if (!String(cnpj).includes(filtros.cnpj)) return false;
       }
+
       // Filtro cliente nome (texto livre)
       if (filtros.clienteNome) {
         const nome = b.dyn_nome_do_cliente || b.cliente?.razao_social || '';
         if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return false;
       }
-      // Range filters for numbers (de->até)
-      // numero_nota range
+
+      // Range filters para número da nota
       if (filtros.numero_nota_de) {
         const val = String(b.numero_nota || '');
         if (val < filtros.numero_nota_de) return false;
@@ -283,46 +326,71 @@ export default function BoletosApi() {
         const val = String(b.numero_nota || '');
         if (val > filtros.numero_nota_ate) return false;
       }
-      // valor range
+
+      // Range filters para valor
       if (filtros.valor_de) {
         if ((b.valor || 0) < parseFloat(filtros.valor_de)) return false;
       }
       if (filtros.valor_ate) {
         if ((b.valor || 0) > parseFloat(filtros.valor_ate)) return false;
       }
+
+      // Multi-select por checkboxes (ex.: Zona Transp)
+      const multiSelectKeys = Object.keys(filtros).filter(k => k.endsWith('__multi'));
+      for (const key of multiSelectKeys) {
+        const selecionadosMulti = (filtros[key] || '')
+          .split('||')
+          .map(v => v.trim())
+          .filter(Boolean);
+
+        if (selecionadosMulti.length === 0) continue;
+
+        const baseChave = key.replace(/__multi$/, '');
+        const valorLinha = baseChave === 'transportadora' || baseChave === 'dyn_zonatransporte'
+          ? getTransportadora(b)
+          : getCellValue(b, baseChave);
+
+        const valorNormalizado = String(valorLinha || '').trim().toLowerCase();
+        const encontrado = selecionadosMulti.some(item => item.toLowerCase() === valorNormalizado);
+        if (!encontrado) return false;
+      }
+
       // Date range filters - generic for any date field
-      // Check for chave-specific date keys (e.g., data_emissao_de, data_emissao_ate)
       const dateFilterKeys = Object.keys(filtros).filter(k => k.endsWith('_de') || k.endsWith('_ate'));
       for (const key of dateFilterKeys) {
         const val = filtros[key];
         if (!val) continue;
         const isAte = key.endsWith('_ate');
         const baseChave = isAte ? key.replace(/_ate$/, '') : key.replace(/_de$/, '');
-        // Get the raw value for this field
+
         const rawVal = getCellValue(b, baseChave);
         if (rawVal === '-') continue;
-        // Try to extract a date string (YYYY-MM-DD or dd/MM/yyyy)
+
         let dateStr = '';
         if (typeof rawVal === 'string' && rawVal.includes('/')) {
-          // dd/MM/yyyy -> YYYY-MM-DD
           const parts = rawVal.split('/');
           if (parts.length === 3) dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
         } else {
           dateStr = String(b[baseChave] || getNested(b, `dados_extras.${baseChave}`) || '').substring(0, 10);
         }
+
         if (!dateStr) continue;
         if (isAte && dateStr > val) return false;
         if (!isAte && dateStr < val) return false;
       }
+
       // Generic text filters for any other configured filter
       const handledKeys = new Set([
-        'transportadora', 'estado', 'cidade', 'cnpj', 'clienteNome', 'clienteId',
+        'estado', 'cidade', 'cnpj', 'clienteNome', 'clienteId',
       ]);
+      Object.keys(filtros).filter(k => k.endsWith('__multi')).forEach((k) => handledKeys.add(k));
+
       for (const [key, val] of Object.entries(filtros)) {
-        if (!val || handledKeys.has(key) || key.endsWith('_de') || key.endsWith('_ate')) continue;
+        if (!val || handledKeys.has(key) || key.endsWith('_de') || key.endsWith('_ate') || key.endsWith('__multi')) continue;
         const cellVal = getCellValue(b, key);
-        if (!String(cellVal).toLowerCase().includes(val.toLowerCase())) return false;
+        if (!String(cellVal).toLowerCase().includes(String(val).toLowerCase())) return false;
       }
+
       return true;
     }) || [];
   }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos, filtrarComErros, idsComErro]);
@@ -703,11 +771,18 @@ export default function BoletosApi() {
   };
 
   // Detect filter type from key
-  const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'text' | 'cnpj' | 'cliente' => {
+  const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'transportadora' | 'text' | 'cnpj' | 'cliente' => {
     const lower = chave.toLowerCase();
     if (lower.includes('data') || lower.includes('date') || lower === 'postingdate') return 'date';
     if (lower === 'estado' || lower === 'uf' || lower === 'payeeregion') return 'estado';
     if (lower === 'cidade' || lower === 'dyn_cidade') return 'cidade';
+    if (
+      lower === 'transportadora' ||
+      lower === 'dyn_zonatransporte' ||
+      lower.includes('zonatransporte') ||
+      lower.includes('transportadora') ||
+      lower.includes('transpzone')
+    ) return 'transportadora';
     if (lower === 'cnpj' || lower.includes('taxnumber') || lower.includes('cnpj')) return 'cnpj';
     if (lower === 'clienteid' || lower === 'cliente' || lower === 'dyn_nome_do_cliente' || lower.includes('nome')) return 'cliente';
     if (lower === 'valor' || lower.includes('amount') || lower === 'numero_nota' || lower === 'numero_cobranca' || lower === 'nosso_numero') return 'number';
@@ -753,6 +828,75 @@ export default function BoletosApi() {
       );
     }
 
+    // Zona de transporte - seleção múltipla por checkbox
+    if (tipo === 'transportadora') {
+      const multiKey = `${chave}__multi`;
+      const selecionadas = (filtros[multiKey] || '').split('||').filter(Boolean);
+      const opcoesZona = getOpcoesZonaTransporte(chave);
+
+      const toggleSelecionada = (zona: string, checked: boolean) => {
+        const set = new Set(selecionadas);
+        if (checked) set.add(zona);
+        else set.delete(zona);
+
+        const valor = Array.from(set).join('||');
+        setFiltros((prev) => {
+          const next = { ...prev };
+          if (valor) next[multiKey] = valor;
+          else delete next[multiKey];
+          return next;
+        });
+      };
+
+      return (
+        <div key={chave}>
+          <Label className="text-xs">{label}</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="mt-1 w-full justify-between font-normal">
+                <span className="truncate">
+                  {selecionadas.length > 0 ? `${selecionadas.length} selecionada(s)` : 'Selecionar zonas'}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-[320px] p-3">
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                {opcoesZona.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma zona encontrada com os filtros atuais.</p>
+                ) : (
+                  opcoesZona.map((zona) => (
+                    <label key={zona} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={selecionadas.includes(zona)}
+                        onCheckedChange={(checked) => toggleSelecionada(zona, !!checked)}
+                      />
+                      <span className="truncate">{zona}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {selecionadas.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-2"
+                  onClick={() => setFiltros((prev) => {
+                    const next = { ...prev };
+                    delete next[multiKey];
+                    return next;
+                  })}
+                >
+                  Limpar seleção
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+      );
+    }
+
     // CNPJ - texto digitado
     if (tipo === 'cnpj') {
       return (
@@ -785,7 +929,6 @@ export default function BoletosApi() {
 
     // Data - range de->até
     if (tipo === 'date') {
-      // Use chave-specific keys to avoid duplicates
       const keyDe = `${chave}_de`;
       const keyAte = `${chave}_ate`;
       return (
