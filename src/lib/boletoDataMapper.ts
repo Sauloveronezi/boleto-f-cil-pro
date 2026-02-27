@@ -333,8 +333,10 @@ export function mapBoletoApiToDadosBoleto(
   const codigoBanco = extractBankCode(rawBancoCodigo);
   dados.banco_codigo = codigoBanco;
   dados.banco_nome = configBanco?.nomeBanco || dados.banco_nome || '';
-  dados.beneficiario_nome = configBanco?.beneficiarioNome || dados.beneficiario_nome || '';
-  dados.beneficiario_cnpj = configBanco?.beneficiarioCnpj || dados.beneficiario_cnpj || '';
+  const benefNome = configBanco?.beneficiarioNome || dados.beneficiario_nome || '';
+  const benefCnpj = configBanco?.beneficiarioCnpj || dados.beneficiario_cnpj || '';
+  dados.beneficiario_cnpj = benefCnpj;
+  dados.beneficiario_nome = benefNome && benefCnpj ? `${benefNome} - ${benefCnpj}` : benefNome;
   dados.beneficiario_endereco = configBanco?.beneficiarioEndereco || dados.beneficiario_endereco || '';
 
   // Campos fixos padrão (se não vieram do mapeamento)
