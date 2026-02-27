@@ -395,15 +395,39 @@ export default function BoletosApi() {
     }) || [];
   }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos, filtrarComErros, idsComErro]);
 
+  // Helper: get raw sortable value (dates as ISO, numbers as number)
+  const getSortValue = (boleto: any, chave: string): string | number => {
+    // For date columns, return raw ISO string for correct sorting
+    if (chave === 'data_emissao' || chave === 'data_vencimento') {
+      const raw = boleto[chave];
+      return raw ? String(raw).substring(0, 10) : '';
+    }
+    if (chave === 'valor') {
+      return boleto.valor ?? 0;
+    }
+    const display = getCellValue(boleto, chave);
+    const str = String(display ?? '');
+    // Detect dd/MM/yyyy pattern and convert to sortable yyyy-mm-dd
+    const dateMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (dateMatch) {
+      return `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+    }
+    return str;
+  };
+
   // Sorting
   const boletosSorted = useMemo(() => {
     if (!sortColumn) return boletosFiltrados;
     return [...boletosFiltrados].sort((a: any, b: any) => {
-      const valA = getCellValue(a, sortColumn);
-      const valB = getCellValue(b, sortColumn);
-      const strA = String(valA ?? '');
-      const strB = String(valB ?? '');
-      // Try numeric comparison
+      const valA = getSortValue(a, sortColumn);
+      const valB = getSortValue(b, sortColumn);
+      // Both numbers
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDirection === 'asc' ? valA - valB : valB - valA;
+      }
+      const strA = String(valA);
+      const strB = String(valB);
+      // Try numeric comparison for formatted strings
       const numA = parseFloat(strA.replace(/[^\d.,-]/g, '').replace(',', '.'));
       const numB = parseFloat(strB.replace(/[^\d.,-]/g, '').replace(',', '.'));
       if (!isNaN(numA) && !isNaN(numB)) {
