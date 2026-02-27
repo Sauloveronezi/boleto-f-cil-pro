@@ -125,6 +125,58 @@ export function BoletosApiConfigDialog() {
     return (config?.filter(c => c.tipo === 'coluna') || []).sort((a, b) => a.ordem - b.ordem);
   }, [config]);
 
+  const normalizarChaveFiltro = (chaveOriginal: string) => {
+    const chave = chaveOriginal.trim();
+    const chaveSemEspacos = chave.replace(/\s+/g, '_');
+    const lower = chaveSemEspacos.toLowerCase();
+
+    if (['dataemissaoinicio', 'data_emissao_inicio', 'dataemissaofim', 'data_emissao_fim'].includes(lower)) {
+      return 'data_emissao';
+    }
+
+    if (['datavencimentoinicio', 'data_vencimento_inicio', 'datavencimentofim', 'data_vencimento_fim', 'data_vencimento'].includes(lower)) {
+      return 'data_vencimento';
+    }
+
+    if (['clienteid', 'cliente_id', 'cliente'].includes(lower)) {
+      return 'cliente';
+    }
+
+    if (['estado', 'uf'].includes(lower)) {
+      return 'uf';
+    }
+
+    if (['cidade', 'dyn_cidade'].includes(lower)) {
+      return 'dyn_cidade';
+    }
+
+    if (['transportadora', 'dyn_zonatransporte'].includes(lower)) {
+      return 'transportadora';
+    }
+
+    return chaveSemEspacos.replace(/_(de|ate)$/i, '');
+  };
+
+  const usoFiltroLegacyPorChave = useMemo(() => {
+    const map = new Map<string, 'primario' | 'secundario'>();
+
+    (config || [])
+      .filter(c => c.tipo === 'filtro' && c.visivel)
+      .forEach((f) => {
+        const chaveBase = normalizarChaveFiltro(f.chave);
+        if (!map.has(chaveBase)) {
+          map.set(chaveBase, (f.nivel || 'primario') as 'primario' | 'secundario');
+        }
+      });
+
+    return map;
+  }, [config]);
+
+  const getUsoFiltroEfetivo = (item: BoletosApiConfigItem): 'nenhum' | 'primario' | 'secundario' => {
+    if (item.uso_filtro && item.uso_filtro !== 'nenhum') return item.uso_filtro;
+    return usoFiltroLegacyPorChave.get(normalizarChaveFiltro(item.chave)) || 'nenhum';
+  };
+
   // Columns from table not yet added
   const colunasNaoAdicionadas = useMemo(() => {
     const chavesExistentes = new Set(colunas.map(c => c.chave));
@@ -336,7 +388,7 @@ export function BoletosApiConfigDialog() {
                       {/* Uso filtro selector */}
                       {editingId !== item.id && (
                         <Select
-                          value={item.uso_filtro || 'nenhum'}
+                          value={getUsoFiltroEfetivo(item)}
                           onValueChange={(v) => updateUsoFiltro.mutate({ id: item.id, uso_filtro: v as any })}
                         >
                           <SelectTrigger className="h-7 w-[130px] text-xs">
