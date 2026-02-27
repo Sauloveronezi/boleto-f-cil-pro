@@ -54,6 +54,7 @@ import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type Mapeamento
 import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates';
 import { renderBoletosV2, downloadPdfV2 } from '@/lib/templateRendererV2';
 import { useBoletosApiConfigColunas, useBoletosApiConfigFiltros, BoletosApiConfigItem } from '@/hooks/useBoletosApiConfig';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { BoletosApiConfigDialog } from '@/components/boleto/BoletosApiConfigDialog';
 
 const ESTADOS_BRASIL = [
@@ -93,11 +94,12 @@ export default function BoletosApi() {
   const { data: colunasVisiveis } = useBoletosApiConfigColunas();
   const { data: filtrosVisiveis, primarios: filtrosPrimarios, secundarios: filtrosSecundarios } = useBoletosApiConfigFiltros();
   const [showSecundarios, setShowSecundarios] = useState(false);
-  
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const { data: boletos, isLoading, refetch } = useBoletosApi({
-    dataEmissaoInicio: filtros.dataEmissaoInicio || undefined,
-    dataEmissaoFim: filtros.dataEmissaoFim || undefined,
+    dataEmissaoInicio: filtros.data_emissao_de || undefined,
+    dataEmissaoFim: filtros.data_emissao_ate || undefined,
     clienteId: filtros.clienteId || undefined,
     cnpj: filtros.cnpj || undefined,
     estado: filtros.estado || undefined,
@@ -288,38 +290,61 @@ export default function BoletosApi() {
       if (filtros.valor_ate) {
         if ((b.valor || 0) > parseFloat(filtros.valor_ate)) return false;
       }
-      // data_emissao range
-      if (filtros.dataEmissaoInicio) {
-        const dt = String(b.data_emissao || '').substring(0, 10);
-        if (dt < filtros.dataEmissaoInicio) return false;
-      }
-      if (filtros.dataEmissaoFim) {
-        const dt = String(b.data_emissao || '').substring(0, 10);
-        if (dt > filtros.dataEmissaoFim) return false;
-      }
-      // data_vencimento range
-      if (filtros.dataVencimentoInicio) {
-        const dt = String(b.data_vencimento || '').substring(0, 10);
-        if (dt < filtros.dataVencimentoInicio) return false;
-      }
-      if (filtros.dataVencimentoFim) {
-        const dt = String(b.data_vencimento || '').substring(0, 10);
-        if (dt > filtros.dataVencimentoFim) return false;
+      // Date range filters - generic for any date field
+      // Check for chave-specific date keys (e.g., data_emissao_de, data_emissao_ate)
+      const dateFilterKeys = Object.keys(filtros).filter(k => k.endsWith('_de') || k.endsWith('_ate'));
+      for (const key of dateFilterKeys) {
+        const val = filtros[key];
+        if (!val) continue;
+        const isAte = key.endsWith('_ate');
+        const baseChave = isAte ? key.replace(/_ate$/, '') : key.replace(/_de$/, '');
+        // Get the raw value for this field
+        const rawVal = getCellValue(b, baseChave);
+        if (rawVal === '-') continue;
+        // Try to extract a date string (YYYY-MM-DD or dd/MM/yyyy)
+        let dateStr = '';
+        if (typeof rawVal === 'string' && rawVal.includes('/')) {
+          // dd/MM/yyyy -> YYYY-MM-DD
+          const parts = rawVal.split('/');
+          if (parts.length === 3) dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        } else {
+          dateStr = String(b[baseChave] || getNested(b, `dados_extras.${baseChave}`) || '').substring(0, 10);
+        }
+        if (!dateStr) continue;
+        if (isAte && dateStr > val) return false;
+        if (!isAte && dateStr < val) return false;
       }
       // Generic text filters for any other configured filter
       const handledKeys = new Set([
         'transportadora', 'estado', 'cidade', 'cnpj', 'clienteNome', 'clienteId',
-        'numero_nota_de', 'numero_nota_ate', 'valor_de', 'valor_ate',
-        'dataEmissaoInicio', 'dataEmissaoFim', 'dataVencimentoInicio', 'dataVencimentoFim',
       ]);
       for (const [key, val] of Object.entries(filtros)) {
-        if (!val || handledKeys.has(key)) continue;
+        if (!val || handledKeys.has(key) || key.endsWith('_de') || key.endsWith('_ate')) continue;
         const cellVal = getCellValue(b, key);
         if (!String(cellVal).toLowerCase().includes(val.toLowerCase())) return false;
       }
       return true;
     }) || [];
   }, [boletos, filtros, bancoSelecionado, bancos, ocultarEmitidos, filtrarComErros, idsComErro]);
+
+  // Sorting
+  const boletosSorted = useMemo(() => {
+    if (!sortColumn) return boletosFiltrados;
+    return [...boletosFiltrados].sort((a: any, b: any) => {
+      const valA = getCellValue(a, sortColumn);
+      const valB = getCellValue(b, sortColumn);
+      const strA = String(valA ?? '');
+      const strB = String(valB ?? '');
+      // Try numeric comparison
+      const numA = parseFloat(strA.replace(/[^\d.,-]/g, '').replace(',', '.'));
+      const numB = parseFloat(strB.replace(/[^\d.,-]/g, '').replace(',', '.'));
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return sortDirection === 'asc' ? numA - numB : numB - numA;
+      }
+      const cmp = strA.localeCompare(strB, 'pt-BR', { sensitivity: 'base' });
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [boletosFiltrados, sortColumn, sortDirection]);
 
   const todosIds = useMemo(() => boletosFiltrados.map((b: any) => b.id), [boletosFiltrados]);
   const todosSelecionados = todosIds.length > 0 && todosIds.every((id: string) => selecionados.has(id));
@@ -760,8 +785,9 @@ export default function BoletosApi() {
 
     // Data - range de->até
     if (tipo === 'date') {
-      const keyDe = chave.includes('vencimento') ? 'dataVencimentoInicio' : 'dataEmissaoInicio';
-      const keyAte = chave.includes('vencimento') ? 'dataVencimentoFim' : 'dataEmissaoFim';
+      // Use chave-specific keys to avoid duplicates
+      const keyDe = `${chave}_de`;
+      const keyAte = `${chave}_ate`;
       return (
         <div key={chave} className="col-span-1 md:col-span-2">
           <Label className="text-xs">{label}</Label>
@@ -955,14 +981,32 @@ export default function BoletosApi() {
                       <Checkbox checked={todosSelecionados} onCheckedChange={handleSelecionarTodos} />
                     </TableHead>
                     {colunasVisiveis.map(col => (
-                      <TableHead key={col.chave} className={col.chave === 'valor' ? 'text-right' : ''}>
-                        {col.label}
+                      <TableHead
+                        key={col.chave}
+                        className={`cursor-pointer select-none hover:bg-muted/50 ${col.chave === 'valor' ? 'text-right' : ''}`}
+                        onClick={() => {
+                          if (sortColumn === col.chave) {
+                            setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setSortColumn(col.chave);
+                            setSortDirection('asc');
+                          }
+                        }}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          {col.label}
+                          {sortColumn === col.chave ? (
+                            sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </span>
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {boletosFiltrados.map((boleto: any) => {
+                  {boletosSorted.map((boleto: any) => {
                     const jaEmitido = !!boleto.cod_barras_calculado;
                     const temErro = idsComErro.has(boleto.id);
                     const rowClass = selecionados.has(boleto.id)

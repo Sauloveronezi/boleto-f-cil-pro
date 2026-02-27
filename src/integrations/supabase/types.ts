@@ -1846,6 +1846,7 @@ export type Database = {
           ordem: number
           tipo: string
           updated_at: string
+          uso_filtro: string
           usuario_delete_id: string | null
           visivel: boolean
         }
@@ -1861,6 +1862,7 @@ export type Database = {
           ordem?: number
           tipo: string
           updated_at?: string
+          uso_filtro?: string
           usuario_delete_id?: string | null
           visivel?: boolean
         }
@@ -1876,6 +1878,7 @@ export type Database = {
           ordem?: number
           tipo?: string
           updated_at?: string
+          uso_filtro?: string
           usuario_delete_id?: string | null
           visivel?: boolean
         }
