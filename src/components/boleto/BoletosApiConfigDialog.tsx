@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Settings, Plus, Trash2, Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
+import { Settings, Plus, Trash2, Eye, EyeOff, Pencil, Check, X, ArrowUp, ArrowDown, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,8 @@ import {
   useAddBoletosApiConfig,
   useToggleBoletosApiConfig,
   useDeleteBoletosApiConfig,
-  useUpdateBoletosApiConfigNivel,
+  useUpdateBoletosApiConfigUsoFiltro,
+  useUpdateBoletosApiConfigOrdem,
   BoletosApiConfigItem,
 } from '@/hooks/useBoletosApiConfig';
 import { supabase } from '@/integrations/supabase/client';
@@ -108,21 +109,21 @@ export function BoletosApiConfigDialog() {
   const addConfig = useAddBoletosApiConfig();
   const toggleConfig = useToggleBoletosApiConfig();
   const deleteConfig = useDeleteBoletosApiConfig();
-  const updateNivel = useUpdateBoletosApiConfigNivel();
+  const updateUsoFiltro = useUpdateBoletosApiConfigUsoFiltro();
+  const updateOrdem = useUpdateBoletosApiConfigOrdem();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [novoTipo, setNovoTipo] = useState<'coluna' | 'filtro'>('coluna');
   const [novaChave, setNovaChave] = useState('');
   const [novoLabel, setNovoLabel] = useState('');
   const [novoCampo, setNovoCampo] = useState('');
-  const [novoNivel, setNovoNivel] = useState<'primario' | 'secundario'>('primario');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const colunas = config?.filter(c => c.tipo === 'coluna') || [];
-  const filtros = config?.filter(c => c.tipo === 'filtro') || [];
+  const colunas = useMemo(() => {
+    return (config?.filter(c => c.tipo === 'coluna') || []).sort((a, b) => a.ordem - b.ordem);
+  }, [config]);
 
   // Columns from table not yet added
   const colunasNaoAdicionadas = useMemo(() => {
@@ -141,11 +142,11 @@ export function BoletosApiConfigDialog() {
   const handleAdd = () => {
     if (!novaChave.trim() || !novoLabel.trim()) return;
     addConfig.mutate({
-      tipo: novoTipo,
+      tipo: 'coluna',
       chave: novaChave.trim(),
       label: novoLabel.trim(),
       campo_boleto: novoCampo.trim() || novaChave.trim(),
-      nivel: novoTipo === 'filtro' ? novoNivel : 'primario',
+      uso_filtro: 'nenhum',
     });
     setNovaChave('');
     setNovoLabel('');
@@ -159,6 +160,7 @@ export function BoletosApiConfigDialog() {
       label,
       campo_boleto: chave,
       ordem: colunas.length + 1,
+      uso_filtro: 'nenhum',
     });
   };
 
@@ -176,99 +178,32 @@ export function BoletosApiConfigDialog() {
     setEditingId(null);
   };
 
-  const renderList = (items: BoletosApiConfigItem[], titulo: string) => (
-    <div>
-      <h4 className="font-semibold text-sm text-foreground mb-2">{titulo}</h4>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nenhum item configurado</p>
-      ) : (
-        <div className="space-y-1">
-          {items.map(item => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between p-2 rounded border border-border bg-muted/30 overflow-hidden"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <Badge variant={item.visivel ? 'default' : 'secondary'} className="text-xs shrink-0 max-w-[120px] truncate">
-                  {item.chave}
-                </Badge>
-                {editingId === item.id ? (
-                  <div className="flex items-center gap-1 flex-1 min-w-0">
-                    <Input
-                      value={editingLabel}
-                      onChange={e => setEditingLabel(e.target.value)}
-                      className="h-7 text-sm"
-                      autoFocus
-                      onKeyDown={e => { if (e.key === 'Enter') handleSaveLabel(item.id); if (e.key === 'Escape') setEditingId(null); }}
-                    />
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveLabel(item.id)}>
-                      <Check className="h-3.5 w-3.5 text-green-600" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="text-sm truncate">{item.label}</span>
-                    {item.campo_boleto && item.campo_boleto !== item.chave && (
-                      <span className="text-xs text-muted-foreground truncate">→ {item.campo_boleto}</span>
-                    )}
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                {/* Nivel selector for filters */}
-                {item.tipo === 'filtro' && editingId !== item.id && (
-                  <Select
-                    value={item.nivel || 'primario'}
-                    onValueChange={(v) => updateNivel.mutate({ id: item.id, nivel: v as any })}
-                  >
-                    <SelectTrigger className="h-7 w-[90px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="primario">Primário</SelectItem>
-                      <SelectItem value="secundario">Secundário</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                {editingId !== item.id && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => { setEditingId(item.id); setEditingLabel(item.label); }}
-                    title="Editar label"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => toggleConfig.mutate({ id: item.id, visivel: !item.visivel })}
-                  title={item.visivel ? 'Ocultar' : 'Mostrar'}
-                >
-                  {item.visivel ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => toggleConfig.mutate({ id: item.id, visivel: false })}
-                  title="Remover da visualização"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const handleMoveItem = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= colunas.length) return;
+
+    const updates = [
+      { id: colunas[index].id, ordem: colunas[newIndex].ordem },
+      { id: colunas[newIndex].id, ordem: colunas[index].ordem },
+    ];
+    updateOrdem.mutate(updates);
+  };
+
+  const getUsoFiltroLabel = (uso: string) => {
+    switch (uso) {
+      case 'primario': return 'Filtro Primário';
+      case 'secundario': return 'Filtro Secundário';
+      default: return 'Sem filtro';
+    }
+  };
+
+  const getUsoFiltroBadgeVariant = (uso: string): 'default' | 'secondary' | 'outline' => {
+    switch (uso) {
+      case 'primario': return 'default';
+      case 'secundario': return 'secondary';
+      default: return 'outline';
+    }
+  };
 
   return (
     <Dialog>
@@ -286,22 +221,10 @@ export function BoletosApiConfigDialog() {
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Adicionar novo manual */}
+          {/* Adicionar novo */}
           <div className="border border-border rounded-lg p-4 space-y-3">
-            <h4 className="font-semibold text-sm">Adicionar novo</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Tipo</Label>
-                <Select value={novoTipo} onValueChange={(v) => setNovoTipo(v as any)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="coluna">Coluna</SelectItem>
-                    <SelectItem value="filtro">Filtro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <h4 className="font-semibold text-sm">Adicionar coluna manualmente</h4>
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Chave (identificador)</Label>
                 <Input
@@ -329,20 +252,6 @@ export function BoletosApiConfigDialog() {
                   className="mt-1"
                 />
               </div>
-              {novoTipo === 'filtro' && (
-                <div>
-                  <Label className="text-xs">Nível do filtro</Label>
-                  <Select value={novoNivel} onValueChange={(v) => setNovoNivel(v as any)}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="primario">Primário (sempre visível)</SelectItem>
-                      <SelectItem value="secundario">Secundário (menu suspenso)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
             <Button
               size="sm"
@@ -356,10 +265,126 @@ export function BoletosApiConfigDialog() {
           </div>
 
           {/* Colunas configuradas */}
-          {renderList(colunas, 'Colunas da Tabela')}
+          <div>
+            <h4 className="font-semibold text-sm text-foreground mb-2">
+              Colunas da Tabela ({colunas.length})
+            </h4>
+            <p className="text-xs text-muted-foreground mb-3">
+              Use as setas para reordenar. Selecione o tipo de filtro para cada coluna.
+            </p>
+            {colunas.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma coluna configurada</p>
+            ) : (
+              <div className="space-y-1">
+                {colunas.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-2 rounded border border-border bg-muted/30 overflow-hidden"
+                  >
+                    {/* Reorder buttons */}
+                    <div className="flex flex-col gap-0.5 mr-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        disabled={index === 0 || updateOrdem.isPending}
+                        onClick={() => handleMoveItem(index, 'up')}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        disabled={index === colunas.length - 1 || updateOrdem.isPending}
+                        onClick={() => handleMoveItem(index, 'down')}
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </Button>
+                    </div>
 
-          {/* Filtros configurados */}
-          {renderList(filtros, 'Filtros Disponíveis')}
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Badge variant={item.visivel ? 'default' : 'secondary'} className="text-xs shrink-0 max-w-[120px] truncate">
+                        {item.chave}
+                      </Badge>
+                      {editingId === item.id ? (
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          <Input
+                            value={editingLabel}
+                            onChange={e => setEditingLabel(e.target.value)}
+                            className="h-7 text-sm"
+                            autoFocus
+                            onKeyDown={e => { if (e.key === 'Enter') handleSaveLabel(item.id); if (e.key === 'Escape') setEditingId(null); }}
+                          />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSaveLabel(item.id)}>
+                            <Check className="h-3.5 w-3.5 text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm truncate">{item.label}</span>
+                          {item.campo_boleto && item.campo_boleto !== item.chave && (
+                            <span className="text-xs text-muted-foreground truncate">→ {item.campo_boleto}</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {/* Uso filtro selector */}
+                      {editingId !== item.id && (
+                        <Select
+                          value={item.uso_filtro || 'nenhum'}
+                          onValueChange={(v) => updateUsoFiltro.mutate({ id: item.id, uso_filtro: v as any })}
+                        >
+                          <SelectTrigger className="h-7 w-[130px] text-xs">
+                            <Filter className="h-3 w-3 mr-1" />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nenhum">Sem filtro</SelectItem>
+                            <SelectItem value="primario">Filtro Primário</SelectItem>
+                            <SelectItem value="secundario">Filtro Secundário</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {editingId !== item.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => { setEditingId(item.id); setEditingLabel(item.label); }}
+                          title="Editar label"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => toggleConfig.mutate({ id: item.id, visivel: !item.visivel })}
+                        title={item.visivel ? 'Ocultar' : 'Mostrar'}
+                      >
+                        {item.visivel ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => deleteConfig.mutate(item.id)}
+                        title="Excluir coluna"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Colunas disponíveis para adicionar */}
           <div>
