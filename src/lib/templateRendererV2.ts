@@ -276,7 +276,7 @@ export async function renderBoletoV2(
     // Grid borders + labels (when no background OR debug mode)
     // Skip border for barcode fields and fields with empty labels
     const drawGrid = showBorders || (!usarFundo);
-    const skipBorder = field.is_barcode;
+    const skipBorder = field.is_barcode || field.is_digitable_line;
     if (drawGrid && !skipBorder) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
       const labelText = field.label || '';
