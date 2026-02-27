@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -105,6 +105,17 @@ export default function BoletosApi() {
     estado: filtros.estado || undefined,
     cidade: filtros.cidade || undefined
   });
+
+  // Carregar IDs com erro persistidos do banco ao montar / quando boletos mudam
+  useEffect(() => {
+    if (boletos && boletos.length > 0) {
+      const erros = new Set<string>();
+      boletos.forEach((b: any) => {
+        if (b.erro_emissao) erros.add(b.id);
+      });
+      setIdsComErro(erros);
+    }
+  }, [boletos]);
 
   const { data: templatesV2 } = useBoletoTemplates();
   const { data: templateFieldsV2 } = useBoletoTemplateFields(modeloSelecionado || undefined);
@@ -655,7 +666,7 @@ export default function BoletosApi() {
       }
     }
 
-    // Se há boletos inválidos, exibir diálogo de erro
+    // Se há boletos inválidos, exibir diálogo de erro e persistir no banco
     if (boletosInvalidos.length > 0) {
       setBoletosComFalha(boletosInvalidos);
       setShowFalhaDialog(true);
@@ -665,14 +676,28 @@ export default function BoletosApi() {
         boletosInvalidos.forEach((b: any) => novo.add(b.id));
         return novo;
       });
+      // Persistir erro no banco de dados
+      for (const b of boletosInvalidos) {
+        await supabase
+          .from('vv_b_boletos_api')
+          .update({ erro_emissao: 'Código de barras inválido ou linha digitável ausente' })
+          .eq('id', b.id);
+      }
     }
-    // Remover IDs válidos do set de erros (caso tenham sido corrigidos)
+    // Remover IDs válidos do set de erros e limpar erro no banco
     if (boletosValidos.length > 0) {
       setIdsComErro(prev => {
         const novo = new Set(prev);
         boletosValidos.forEach((b: any) => novo.delete(b.id));
         return novo.size !== prev.size ? novo : prev;
       });
+      // Limpar erro no banco para boletos que emitiram com sucesso
+      for (const b of boletosValidos) {
+        await supabase
+          .from('vv_b_boletos_api')
+          .update({ erro_emissao: null })
+          .eq('id', b.id);
+      }
     }
 
     // Se NENHUM boleto é válido, abortar completamente
