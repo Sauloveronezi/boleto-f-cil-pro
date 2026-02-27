@@ -165,9 +165,17 @@ function gerarCampoLivreFromData(
   // Nosso número: apenas dígitos para cálculos bancários
   const nossoNumero = nossoNumeroRaw.replace(/\D/g, '');
 
+  // Conta sem DV: se tem hífen ou barra, pegar só a parte principal
+  const contaSemDV = conta.split(/[-\/]/)[0].replace(/\D/g, '');
+
   switch (codigoBanco) {
-    case '237': // Bradesco
-      return `${ag}${carteira.replace(/\D/g, '').padStart(2, '0')}${nossoNumero.slice(-11).padStart(11, '0')}${ct.slice(-7)}0`.slice(0, 25);
+    case '237': { // Bradesco
+      // Carteira Bradesco: exatamente 2 dígitos (ex: "004" → "04")
+      const cartBrad = carteira.replace(/\D/g, '').slice(-2).padStart(2, '0');
+      // Conta Bradesco: 7 dígitos sem DV
+      const contaBrad = contaSemDV.padStart(7, '0').slice(-7);
+      return `${ag}${cartBrad}${nossoNumero.slice(-11).padStart(11, '0')}${contaBrad}0`.slice(0, 25);
+    }
     case '341': { // Itaú
       const cart = carteira.replace(/\D/g, '').padStart(3, '0');
       // Se o nosso número já contém o prefixo da carteira, remover
@@ -178,7 +186,8 @@ function gerarCampoLivreFromData(
       // Usar os PRIMEIROS 8 dígitos (o 9º é o DV, não faz parte do cálculo)
       const nn = nnLimpo.length > 8 ? nnLimpo.slice(0, 8) : nnLimpo.padStart(8, '0');
       const agIt = ag.slice(-4);
-      const ctIt = ct.slice(-5);
+      // Conta Itaú: 5 dígitos sem DV
+      const ctIt = contaSemDV.padStart(5, '0').slice(-5);
       const dac1 = calcularModulo10(`${agIt}${ctIt}${cart}${nn}`);
       const dac2 = calcularModulo10(`${agIt}${ctIt}`);
       return `${cart}${nn}${dac1}${agIt}${ctIt}${dac2}000`;
@@ -440,9 +449,10 @@ export function mapBoletoApiToDadosBoleto(
       break;
     }
     case '237': { // Bradesco: carteira/NNNNNNNNNNN-D
+      const cartBradVisual = carteiraDigits.slice(-2).padStart(2, '0');
       const nnBrad = nossoNumeroRaw.replace(/\D/g, '').slice(-11).padStart(11, '0');
       const dvBrad = calcularModulo11(nnBrad);
-      dados.nosso_numero = `${carteiraDigits.padStart(2, '0')}/${nnBrad}-${dvBrad}`;
+      dados.nosso_numero = `${cartBradVisual}/${nnBrad}-${dvBrad}`;
       break;
     }
     default:
