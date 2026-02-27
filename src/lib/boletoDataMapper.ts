@@ -349,21 +349,56 @@ export function mapBoletoApiToDadosBoleto(
     dados.local_pagamento = localPagamentoMap[codigoBanco] || 'PAGÁVEL EM QUALQUER BANCO ATÉ O VENCIMENTO.';
   }
   if (!dados.instrucoes) {
-    // Build instruction text from bank config: include rates + custom text
-    const instrParts: string[] = [];
-    // Calcular juros e multa a partir do cadastro do banco
-    const juros = configBanco?.taxaJurosMensal;
-    const multa = configBanco?.multaPercentual;
-    if (multa && multa > 0) {
-      instrParts.push(`APÓS O VENCIMENTO COBRAR MULTA DE ${multa.toFixed(1).replace('.', ',')}%`);
-    }
-    if (juros && juros > 0) {
-      instrParts.push(`COBRAR JUROS DE ${juros.toFixed(1).replace('.', ',')}% AO MÊS`);
-    }
+    // Usar texto_instrucao_padrao do banco com substituição de variáveis
+    const valorDoc = Number(dados.valor_documento || dados.valor_cobrado || row.valor || 0);
+    const jurosPerc = configBanco?.taxaJurosMensal || 0;
+    const multaPerc = configBanco?.multaPercentual || 0;
+    const valorMulta = valorDoc > 0 && multaPerc > 0 ? (multaPerc / 100) * valorDoc : 0;
+    const jurosDiario = valorDoc > 0 && jurosPerc > 0 ? ((jurosPerc / 100) / 30) * valorDoc : 0;
+    const valorDesconto = Number(row.valor_desconto || 0);
+    const dataDesconto = row.data_desconto || row.CashDiscount1DueDate || '';
+
+    // Formatar valores em moeda pt-BR
+    const fmtCurrency = (v: number) => v > 0
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+      : 'R$ 0,00';
+    // Formatar data dd/mm/yyyy
+    const fmtDate = (d: string) => {
+      if (!d) return '';
+      if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+        const [a, m, dd] = d.substring(0, 10).split('-');
+        return `${dd}/${m}/${a}`;
+      }
+      return d;
+    };
+
     if (configBanco?.textoInstrucaoPadrao) {
-      instrParts.push(configBanco.textoInstrucaoPadrao);
+      // Substituir variáveis no texto cadastrado
+      let texto = configBanco.textoInstrucaoPadrao;
+      texto = texto.replace(/\{VALOR_MULTA\}/gi, fmtCurrency(valorMulta));
+      texto = texto.replace(/\{VALOR_JUROS_DIARIO\}/gi, fmtCurrency(jurosDiario));
+      texto = texto.replace(/\{VALOR_JUROS\}/gi, fmtCurrency(jurosDiario));
+      texto = texto.replace(/\{PERCENTUAL_MULTA\}/gi, `${multaPerc.toFixed(1).replace('.', ',')}%`);
+      texto = texto.replace(/\{PERCENTUAL_JUROS\}/gi, `${jurosPerc.toFixed(1).replace('.', ',')}%`);
+      texto = texto.replace(/\{VALOR_DESCONTO\}/gi, fmtCurrency(valorDesconto));
+      texto = texto.replace(/\{DATAVENCIMENTODESCONTO\}/gi, fmtDate(dataDesconto));
+      texto = texto.replace(/\{DATA_DESCONTO\}/gi, fmtDate(dataDesconto));
+      texto = texto.replace(/\{VALOR_DOCUMENTO\}/gi, fmtCurrency(valorDoc));
+      dados.instrucoes = texto;
+    } else {
+      // Fallback sem texto configurado
+      const instrParts: string[] = [];
+      if (valorMulta > 0) {
+        instrParts.push(`APÓS O VENCIMENTO COBRAR MULTA DE ${fmtCurrency(valorMulta)}`);
+      }
+      if (jurosDiario > 0) {
+        instrParts.push(`Cobrar juros de ${fmtCurrency(jurosDiario)} de mora diária`);
+      }
+      if (valorDesconto > 0 && dataDesconto) {
+        instrParts.push(`Até ${fmtDate(dataDesconto)} desconto de ${fmtCurrency(valorDesconto)}`);
+      }
+      dados.instrucoes = instrParts.join('\n') || '';
     }
-    dados.instrucoes = instrParts.join('\n') || '';
   }
   if (!dados.especie_documento) dados.especie_documento = 'DM';
   if (!dados.aceite) dados.aceite = codigoBanco === '033' ? 'NAO ACEITO' : 'N';
