@@ -1600,6 +1600,7 @@ export type Database = {
           dyn_zonatransporte: string | null
           empresa: number | null
           endereco: string | null
+          erro_emissao: string | null
           FinancialAccountType: string | null
           id: string
           ID: string | null
@@ -1689,6 +1690,7 @@ export type Database = {
           dyn_zonatransporte?: string | null
           empresa?: number | null
           endereco?: string | null
+          erro_emissao?: string | null
           FinancialAccountType?: string | null
           id?: string
           ID?: string | null
@@ -1778,6 +1780,7 @@ export type Database = {
           dyn_zonatransporte?: string | null
           empresa?: number | null
           endereco?: string | null
+          erro_emissao?: string | null
           FinancialAccountType?: string | null
           id?: string
           ID?: string | null

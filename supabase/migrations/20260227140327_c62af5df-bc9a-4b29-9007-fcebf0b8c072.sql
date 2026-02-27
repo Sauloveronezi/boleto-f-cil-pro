@@ -1,0 +1,1 @@
+ALTER TABLE public.vv_b_boletos_api ADD COLUMN IF NOT EXISTS erro_emissao text DEFAULT NULL;
