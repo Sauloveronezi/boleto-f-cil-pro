@@ -385,10 +385,19 @@ export default function Bancos() {
                         <TooltipTrigger>
                           <HelpCircle className="h-4 w-4 text-muted-foreground" />
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p>
-                            Este texto aparecerá nas instruções do boleto. Você pode usar
-                            variáveis como {'{{taxa_juros}}'} e {'{{multa}}'}.
+                        <TooltipContent className="max-w-sm text-left" side="right">
+                          <p className="font-semibold mb-1">Variáveis disponíveis:</p>
+                          <ul className="text-xs space-y-0.5 list-disc pl-3">
+                            <li><code>{'{VALOR_MULTA}'}</code> — Multa em R$ (% × valor)</li>
+                            <li><code>{'{VALOR_JUROS_DIARIO}'}</code> — Juros diário em R$</li>
+                            <li><code>{'{PERCENTUAL_MULTA}'}</code> — Multa em %</li>
+                            <li><code>{'{PERCENTUAL_JUROS}'}</code> — Juros mensal em %</li>
+                            <li><code>{'{VALOR_DESCONTO}'}</code> — Desconto em R$</li>
+                            <li><code>{'{DATAVENCIMENTODESCONTO}'}</code> — Data limite desconto</li>
+                            <li><code>{'{VALOR_DOCUMENTO}'}</code> — Valor do título</li>
+                          </ul>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Exemplo: APÓS O VENCIMENTO COBRAR MULTA DE {'{VALOR_MULTA}'}
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -397,7 +406,7 @@ export default function Bancos() {
                   <Textarea
                     value={formData.texto_instrucao_padrao || ''}
                     onChange={(e) => updateField('texto_instrucao_padrao', e.target.value)}
-                    placeholder="Ex: Não receber após 30 dias do vencimento. Cobrar juros de {{taxa_juros}}% ao mês..."
+                    placeholder={"APÓS O VENCIMENTO COBRAR MULTA DE {VALOR_MULTA}\nCobrar juros de {VALOR_JUROS_DIARIO} de mora diária\nAté {DATAVENCIMENTODESCONTO} desconto de {VALOR_DESCONTO}"}
                     rows={3}
                   />
                 </div>
