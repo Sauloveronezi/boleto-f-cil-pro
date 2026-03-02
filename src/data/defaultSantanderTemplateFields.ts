@@ -14,6 +14,17 @@ const VIA2_OFFSET_Y = 148;
 
 // Campos da primeira via (Recibo do Pagador)
 const camposVia1Santander: DefaultFieldDef[] = [
+  // === Logo do banco ===
+  {
+    key: 'banco_logo',
+    label: '',
+    source_ref: 'banco_logo_url',
+    bbox: [5, 5, 25, 15],
+    font_size: 1,
+    display_order: 0,
+    page: 1,
+  },
+
   // === Cabeçalho / Linha digitável ===
   {
     key: 'linha_digitavel',

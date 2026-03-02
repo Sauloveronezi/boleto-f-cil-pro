@@ -342,6 +342,19 @@ export function mapBoletoApiToDadosBoleto(
   const codigoBanco = extractBankCode(rawBancoCodigo);
   dados.banco_codigo = codigoBanco;
   dados.banco_nome = configBanco?.nomeBanco || dados.banco_nome || '';
+
+  // Injetar logo do banco baseada no código
+  if (!dados.banco_logo_url || dados.banco_logo_url === '/placeholder.svg') {
+    const logoMap: Record<string, string> = {
+      '237': '/logos/banco_237.png',
+      '341': '/logos/banco_341.png',
+      '033': '/logos/banco_033.png',
+      '001': '/logos/banco_001.png',
+      '104': '/logos/banco_104.png',
+      '748': '/logos/banco_748.png',
+    };
+    dados.banco_logo_url = logoMap[codigoBanco] || '';
+  }
   const benefNome = configBanco?.beneficiarioNome || dados.beneficiario_nome || '';
   const benefCnpj = configBanco?.beneficiarioCnpj || dados.beneficiario_cnpj || '';
   dados.beneficiario_cnpj = benefCnpj;
