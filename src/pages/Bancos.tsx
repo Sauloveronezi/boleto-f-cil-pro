@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Building2, Settings, Percent, Calendar, FileText, Loader2, HelpCircle } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Building2, Settings, Percent, Calendar, FileText, Loader2, HelpCircle, Upload, ImageIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +41,9 @@ export default function Bancos() {
   const [bancoEditando, setBancoEditando] = useState<Banco | null>(null);
   const [configEditando, setConfigEditando] = useState<ConfiguracaoBanco | null>(null);
   const [formData, setFormData] = useState<Partial<ConfiguracaoBanco>>({});
+  const [logoUrl, setLogoUrl] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (isLoadingPermissoes) {
     return (
@@ -82,24 +84,30 @@ export default function Bancos() {
     
     setIsSaving(true);
     try {
+      // Save logo_url on the banco table
+      if (logoUrl !== (bancoEditando.logo_url || '')) {
+        const { error: logoError } = await supabase
+          .from('vv_b_bancos')
+          .update({ logo_url: logoUrl || null })
+          .eq('id', bancoEditando.id);
+        if (logoError) throw logoError;
+      }
+
       const dadosSalvar = {
         ...formData,
         banco_id: bancoEditando.id,
-        // Ensure numbers are numbers
         taxa_juros_mensal: Number(formData.taxa_juros_mensal),
         multa_percentual: Number(formData.multa_percentual),
         dias_carencia: Number(formData.dias_carencia),
       };
 
       if (configEditando?.id) {
-        // Update
         const { error } = await supabase
           .from('vv_b_configuracoes_banco')
           .update(dadosSalvar)
           .eq('id', configEditando.id);
         if (error) throw error;
       } else {
-        // Insert
         const { error } = await supabase
           .from('vv_b_configuracoes_banco')
           .insert(dadosSalvar);
@@ -112,6 +120,7 @@ export default function Bancos() {
       });
       
       queryClient.invalidateQueries({ queryKey: ['configuracoes_banco'] });
+      queryClient.invalidateQueries({ queryKey: ['bancos'] });
       setBancoEditando(null);
       setConfigEditando(null);
       setFormData({});
@@ -137,6 +146,7 @@ export default function Bancos() {
       return;
     }
     setBancoEditando(banco);
+    setLogoUrl(banco.logo_url || '');
     const config = getConfiguracao(banco.id);
     setConfigEditando(config || null);
     setFormData(config || {
@@ -151,6 +161,33 @@ export default function Bancos() {
       convenio: '',
       texto_instrucao_padrao: ''
     });
+  };
+
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !bancoEditando) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `banco_${bancoEditando.codigo_banco}.${fileExt}`;
+      const filePath = `logos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('boleto_templates')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('boleto_templates')
+        .getPublicUrl(filePath);
+
+      setLogoUrl(urlData.publicUrl);
+      toast({ title: 'Logo enviada', description: 'A logo foi carregada com sucesso.' });
+    } catch (error) {
+      console.error('Erro upload logo:', error);
+      toast({ title: 'Erro no upload', description: 'Não foi possível enviar a logo.', variant: 'destructive' });
+    }
   };
 
   const updateField = (field: keyof ConfiguracaoBanco, value: any) => {
@@ -187,9 +224,18 @@ export default function Bancos() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <Building2 className="h-6 w-6 text-primary" />
-                      </div>
+                      {banco.logo_url ? (
+                        <img 
+                          src={banco.logo_url} 
+                          alt={banco.nome_banco} 
+                          className="h-10 w-10 object-contain rounded-lg border border-border p-0.5"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <Building2 className="h-6 w-6 text-primary" />
+                        </div>
+                      )}
                       <div>
                         <CardTitle className="text-lg">{banco.nome_banco}</CardTitle>
                         <p className="text-sm text-muted-foreground">Código: {banco.codigo_banco}</p>
@@ -261,7 +307,7 @@ export default function Bancos() {
 
         {/* Modal de Edição */}
         <Dialog open={!!bancoEditando} onOpenChange={() => setBancoEditando(null)}>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
@@ -271,6 +317,52 @@ export default function Bancos() {
 
             {bancoEditando && (
               <div className="space-y-6">
+                {/* Logo do Banco */}
+                <div className="space-y-3">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    Logo do Banco
+                  </h3>
+                  <div className="flex items-center gap-4">
+                    {logoUrl ? (
+                      <img 
+                        src={logoUrl} 
+                        alt="Logo" 
+                        className="h-16 w-24 object-contain border border-border rounded-lg p-1"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="h-16 w-24 border-2 border-dashed border-muted-foreground/30 rounded-lg flex items-center justify-center">
+                        <ImageIcon className="h-6 w-6 text-muted-foreground/50" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2 flex-1">
+                      <Input
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="URL da logo ou faça upload"
+                        className="text-sm"
+                      />
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        Upload
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Taxas */}
                 <div className="space-y-4">
                   <h3 className="font-medium flex items-center gap-2">
