@@ -173,7 +173,27 @@ async function fetchPdf(url: string): Promise<ArrayBuffer> {
 // ===== Logo / imagem =====
 
 async function fetchImageBytes(url: string): Promise<{ bytes: ArrayBuffer; type: 'png' | 'jpg' }> {
-  const res = await fetch(url);
+  let fetchUrl = url;
+
+  // If it's a storage path (not a full URL and not a local path), generate signed URL
+  if (url && !url.startsWith('http') && !url.startsWith('/') && !url.startsWith('data:')) {
+    const { data, error } = await supabase.storage
+      .from('boleto_templates')
+      .createSignedUrl(url, 3600);
+    if (!error && data?.signedUrl) {
+      fetchUrl = data.signedUrl;
+    } else {
+      // Try as local public path fallback
+      const localCode = url.match(/banco_(\d+)/)?.[1];
+      if (localCode) {
+        fetchUrl = `/logos/banco_${localCode}.png`;
+      } else {
+        throw new Error(`Não foi possível gerar URL para imagem: ${url}`);
+      }
+    }
+  }
+
+  const res = await fetch(fetchUrl);
   if (!res.ok) throw new Error(`Erro ao baixar imagem: ${res.status}`);
   const buf = await res.arrayBuffer();
   const header = new Uint8Array(buf.slice(0, 4));
@@ -276,7 +296,8 @@ export async function renderBoletoV2(
     // Grid borders + labels (when no background OR debug mode)
     // Skip border for barcode fields and fields with empty labels
     const drawGrid = showBorders || (!usarFundo);
-    const skipBorder = field.is_barcode || field.is_digitable_line;
+    const headerKeys = ['banco_logo', 'banco_nome', 'banco_codigo_formatado', 'via2_banco_logo', 'via2_banco_nome', 'via2_banco_codigo_formatado'];
+    const skipBorder = field.is_barcode || field.is_digitable_line || headerKeys.includes(field.key);
     if (drawGrid && !skipBorder) {
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
       const labelText = field.label || '';
@@ -305,13 +326,17 @@ export async function renderBoletoV2(
           const img = imageCache[logoUrl];
           // Fit image proportionally inside bbox
           const imgDims = img.scale(1);
-          const scaleX = w / imgDims.width;
-          const scaleY = h / imgDims.height;
+          // Add 1pt padding to avoid edge clipping
+          const pad = 1;
+          const availW = w - pad * 2;
+          const availH = h - pad * 2;
+          const scaleX = availW / imgDims.width;
+          const scaleY = availH / imgDims.height;
           const scale = Math.min(scaleX, scaleY);
           const drawW = imgDims.width * scale;
           const drawH = imgDims.height * scale;
-          const imgX = x + (w - drawW) / 2;
-          const imgY = y + (h - drawH) / 2;
+          const imgX = x + pad + (availW - drawW) / 2;
+          const imgY = y + pad + (availH - drawH) / 2;
           page.drawImage(img, { x: imgX, y: imgY, width: drawW, height: drawH });
         } catch (e) {
           console.warn(`[templateRendererV2] Falha ao renderizar logo: ${e}`);
