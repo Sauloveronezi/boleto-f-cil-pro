@@ -9,23 +9,23 @@ import { DefaultFieldDef } from './defaultBoletoTemplateFields';
 const VIA2_OFFSET_Y = 148;
 
 const camposVia1: DefaultFieldDef[] = [
-  // === Cabeçalho: Logo do banco ===
+  // === Cabeçalho: Logo do banco (miniatura 18×10mm) ===
   {
     key: 'banco_logo',
     label: '',
     source_ref: 'banco_logo_url',
-    bbox: [5, 2, 25, 14],
+    bbox: [5, 3, 23, 13],
     font_size: 1,
     align: 'left',
     display_order: 0,
     page: 1,
   },
-  // === Cabeçalho: Código do banco (ex: 341-7) ===
+  // === Cabeçalho: Código do banco (ex: 237-2) ===
   {
     key: 'banco_codigo_formatado',
     label: '',
     source_ref: 'banco_codigo_formatado',
-    bbox: [26, 2, 50, 14],
+    bbox: [24, 3, 50, 13],
     font_size: 14,
     bold: true,
     align: 'center',

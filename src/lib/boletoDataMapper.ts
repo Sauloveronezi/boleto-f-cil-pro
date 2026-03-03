@@ -355,6 +355,12 @@ export function mapBoletoApiToDadosBoleto(
     };
     dados.banco_logo_url = logoMap[codigoBanco] || '';
   }
+
+  // Gerar código do banco formatado (ex: "237-2", "341-7")
+  if (!dados.banco_codigo_formatado && codigoBanco) {
+    const dvBanco = calcularModulo11(codigoBanco.padStart(3, '0'));
+    dados.banco_codigo_formatado = `${codigoBanco}-${dvBanco}`;
+  }
   const benefNome = configBanco?.beneficiarioNome || dados.beneficiario_nome || '';
   const benefCnpj = configBanco?.beneficiarioCnpj || dados.beneficiario_cnpj || '';
   dados.beneficiario_cnpj = benefCnpj;
