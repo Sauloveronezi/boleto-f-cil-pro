@@ -550,6 +550,7 @@ export default function BoletosApi() {
             conta: contaApi || configuracao?.conta || '',
             carteira: configuracao?.carteira || '09',
             nomeBanco: banco.nome_banco || '',
+            logoUrl: banco.logo_url || '',
             beneficiarioNome: empresa?.razao_social || '',
             beneficiarioCnpj: empresa?.cnpj || '',
             beneficiarioEndereco: benefEndereco,
@@ -559,10 +560,6 @@ export default function BoletosApi() {
             diasCarencia: configuracao?.dias_carencia || 0,
           };
           const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
-          // Inject bank logo and formatted code
-          dados.banco_logo_url = banco.logo_url || '';
-          const dvBanco: Record<string, string> = { '237': '2', '341': '7', '033': '7', '001': '9', '104': '0' };
-          dados.banco_codigo_formatado = `${banco.codigo_banco.trim()}-${dvBanco[banco.codigo_banco.trim()] || '0'}`;
           if (!dados.linha_digitavel) {
             boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
           }

@@ -95,6 +95,7 @@ export default function GerarBoletosPDF() {
       conta: config.conta || '',
       carteira: config.carteira || '09',
       nomeBanco: (bancoRef as any).nome_banco || '',
+      logoUrl: (bancoRef as any).logo_url || '',
       textoInstrucaoPadrao: config.texto_instrucao_padrao || '',
       taxaJurosMensal: config.taxa_juros_mensal || 0,
       multaPercentual: config.multa_percentual || 0,

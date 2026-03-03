@@ -262,6 +262,7 @@ export interface ConfigBancoParaCalculo {
   conta: string;
   carteira: string;
   nomeBanco?: string;
+  logoUrl?: string;
   beneficiarioNome?: string;
   beneficiarioCnpj?: string;
   beneficiarioEndereco?: string;
@@ -297,7 +298,10 @@ function mapeamentoFallback(row: Record<string, any>): Record<string, string> {
 
   // Valor: valor original = valor + valor_desconto
   const valor = row.valor != null ? Number(row.valor) : 0;
-  const valorDesconto = row.valor_desconto != null ? Number(row.valor_desconto) : 0;
+  // Desconto: priorizar PaymentAmountInFunctionalCrcy da API SAP
+  const valorDesconto = Number(
+    row.PaymentAmountInFunctionalCrcy || row.paymentamountinfunctionalcrcy || row.valor_desconto || 0
+  );
   const valorOriginal = valor + valorDesconto;
   result.valor_documento = valorOriginal ? String(valorOriginal) : '';
   result.valor_titulo = result.valor_documento;
@@ -343,8 +347,10 @@ export function mapBoletoApiToDadosBoleto(
   dados.banco_codigo = codigoBanco;
   dados.banco_nome = configBanco?.nomeBanco || dados.banco_nome || '';
 
-  // Injetar logo do banco baseada no código
-  if (!dados.banco_logo_url || dados.banco_logo_url === '/placeholder.svg') {
+  // Injetar logo do banco: prioridade configBanco.logoUrl > dados existentes > mapa local
+  if (configBanco?.logoUrl) {
+    dados.banco_logo_url = configBanco.logoUrl;
+  } else if (!dados.banco_logo_url || dados.banco_logo_url === '/placeholder.svg') {
     const logoMap: Record<string, string> = {
       '237': '/logos/banco_237.png',
       '341': '/logos/banco_341.png',
@@ -414,6 +420,15 @@ export function mapBoletoApiToDadosBoleto(
       texto = texto.replace(/\{DATAVENCIMENTODESCONTO\}/gi, fmtDate(dataDesconto));
       texto = texto.replace(/\{DATA_DESCONTO\}/gi, fmtDate(dataDesconto));
       texto = texto.replace(/\{VALOR_DOCUMENTO\}/gi, fmtCurrency(valorDoc));
+
+      // Remover linhas de desconto quando valor_desconto for 0
+      if (valorDesconto <= 0) {
+        texto = texto
+          .split('\n')
+          .filter(line => !/desconto/i.test(line))
+          .join('\n');
+      }
+
       dados.instrucoes = texto;
     } else {
       // Fallback sem texto configurado
