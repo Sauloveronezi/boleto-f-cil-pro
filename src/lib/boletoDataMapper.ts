@@ -346,6 +346,7 @@ export function mapBoletoApiToDadosBoleto(
   const codigoBanco = extractBankCode(rawBancoCodigo);
   dados.banco_codigo = codigoBanco;
   dados.banco_nome = configBanco?.nomeBanco || dados.banco_nome || '';
+  console.log('[boletoDataMapper] banco_nome=', dados.banco_nome, 'banco_codigo_formatado=', dados.banco_codigo_formatado, 'banco_logo_url=', dados.banco_logo_url);
 
   // Injetar logo do banco: prioridade configBanco.logoUrl > dados existentes > mapa local
   if (configBanco?.logoUrl) {
