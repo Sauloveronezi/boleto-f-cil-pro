@@ -56,7 +56,7 @@ const camposVia1: DefaultFieldDef[] = [
     bold: true,
     align: 'right',
     is_digitable_line: true,
-    display_order: 2,
+    display_order: 3,
     page: 1,
   },
 

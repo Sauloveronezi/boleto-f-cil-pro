@@ -51,7 +51,7 @@ import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, E
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
 import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper';
-import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate } from '@/hooks/useBoletoTemplates';
+import { useBoletoTemplates, useBoletoTemplateFields, useSeedDefaultTemplate, useSeedUniversalTemplate } from '@/hooks/useBoletoTemplates';
 import { renderBoletosV2, downloadPdfV2 } from '@/lib/templateRendererV2';
 import { useBoletosApiConfigColunas, useBoletosApiConfigFiltros, BoletosApiConfigItem } from '@/hooks/useBoletosApiConfig';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -120,6 +120,7 @@ export default function BoletosApi() {
   const { data: templatesV2 } = useBoletoTemplates();
   const { data: templateFieldsV2 } = useBoletoTemplateFields(modeloSelecionado || undefined);
   const seedDefault = useSeedDefaultTemplate();
+  const seedUniversal = useSeedUniversalTemplate();
 
   // Carregar mapeamento dinâmico de campos do boleto
   const { data: mapeamentosCampo = [] } = useQuery({
@@ -731,8 +732,47 @@ export default function BoletosApi() {
     }
 
     // Tentar template V2
+    const UNIVERSAL_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000099';
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
     if (templateV2 && templateFieldsV2 && templateFieldsV2.length > 0) {
+      // Auto-seed universal template to ensure latest field definitions
+      if (modeloSelecionado === UNIVERSAL_TEMPLATE_ID) {
+        try {
+          await seedUniversal.mutateAsync();
+          console.log('[BoletosApi] Universal template re-seeded');
+          // Re-fetch fields after seed
+          const { data: freshFields } = await supabase
+            .from('vv_b_boleto_template_fields')
+            .select('*')
+            .eq('template_id', UNIVERSAL_TEMPLATE_ID)
+            .is('deleted', null)
+            .order('display_order');
+          if (freshFields && freshFields.length > 0) {
+            const parsedFields = freshFields.map((row: any) => ({
+              ...row,
+              bbox: row.bbox as [number, number, number, number],
+            }));
+            try {
+              const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
+              toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
+              const renderOpts = imprimirFundo
+                ? { usarFundo: true }
+                : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
+              const pdfBytes = await renderBoletosV2(templateV2, parsedFields, dadosValidos, renderOpts);
+              const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+              downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
+              await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
+              toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${templateV2.name}"${msgExtra}` });
+            } catch (error: any) {
+              console.error('[BoletosApi] Erro V2 Universal:', error);
+              toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('[BoletosApi] Falha ao re-seed universal:', e);
+        }
+      }
       try {
         const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
         toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
