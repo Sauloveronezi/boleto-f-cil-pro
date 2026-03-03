@@ -1554,6 +1554,8 @@ export type Database = {
           accountingdocumenttype: string | null
           amountinfunctionalcurrency: string | null
           AmountInFunctionalCurrency: string | null
+          amountintransactioncurrency: number | null
+          AmountInTransactionCurrency: string | null
           bairro: string | null
           banco: string | null
           BankAccountLongID: string | null
@@ -1644,6 +1646,8 @@ export type Database = {
           accountingdocumenttype?: string | null
           amountinfunctionalcurrency?: string | null
           AmountInFunctionalCurrency?: string | null
+          amountintransactioncurrency?: number | null
+          AmountInTransactionCurrency?: string | null
           bairro?: string | null
           banco?: string | null
           BankAccountLongID?: string | null
@@ -1734,6 +1738,8 @@ export type Database = {
           accountingdocumenttype?: string | null
           amountinfunctionalcurrency?: string | null
           AmountInFunctionalCurrency?: string | null
+          amountintransactioncurrency?: number | null
+          AmountInTransactionCurrency?: string | null
           bairro?: string | null
           banco?: string | null
           BankAccountLongID?: string | null
