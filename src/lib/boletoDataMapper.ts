@@ -392,6 +392,11 @@ export function mapBoletoApiToDadosBoleto(
     const multaPerc = configBanco?.multaPercentual || 0;
     const valorMulta = valorDoc > 0 && multaPerc > 0 ? (multaPerc / 100) * valorDoc : 0;
     const jurosDiario = valorDoc > 0 && jurosPerc > 0 ? ((jurosPerc / 100) / 30) * valorDoc : 0;
+    const jurosMensal = valorDoc > 0 && jurosPerc > 0 ? (jurosPerc / 100) * valorDoc : 0;
+    // Se juros diário arredonda a 0, usar valor mensal
+    const usarJurosMensal = jurosDiario < 0.01 && jurosMensal > 0;
+    const valorJurosExibir = usarJurosMensal ? jurosMensal : jurosDiario;
+    const labelJuros = usarJurosMensal ? 'de mora mensal' : 'de mora diária';
     const valorDesconto = Number(row.valor_desconto || 0);
     const dataDesconto = row.data_desconto || row.CashDiscount1DueDate || '';
 
@@ -413,14 +418,20 @@ export function mapBoletoApiToDadosBoleto(
       // Substituir variáveis no texto cadastrado
       let texto = configBanco.textoInstrucaoPadrao;
       texto = texto.replace(/\{VALOR_MULTA[}\)]/gi, fmtCurrency(valorMulta));
-      texto = texto.replace(/\{VALOR_JUROS_DIARIO[}\)]/gi, fmtCurrency(jurosDiario));
-      texto = texto.replace(/\{VALOR_JUROS[}\)]/gi, fmtCurrency(jurosDiario));
+      texto = texto.replace(/\{VALOR_JUROS_DIARIO[}\)]/gi, fmtCurrency(valorJurosExibir));
+      texto = texto.replace(/\{VALOR_JUROS[}\)]/gi, fmtCurrency(valorJurosExibir));
       texto = texto.replace(/\{PERCENTUAL_MULTA[}\)]/gi, `${multaPerc.toFixed(1).replace('.', ',')}%`);
       texto = texto.replace(/\{PERCENTUAL_JUROS[}\)]/gi, `${jurosPerc.toFixed(1).replace('.', ',')}%`);
       texto = texto.replace(/\{VALOR_DESCONTO[}\)]/gi, fmtCurrency(valorDesconto));
       texto = texto.replace(/\{DATAVENCIMENTODESCONTO[}\)]/gi, fmtDate(dataDesconto));
       texto = texto.replace(/\{DATA_DESCONTO[}\)]/gi, fmtDate(dataDesconto));
       texto = texto.replace(/\{VALOR_DOCUMENTO[}\)]/gi, fmtCurrency(valorDoc));
+
+      // Substituir label de juros (diário/mensal) se template usar texto dinâmico
+      if (usarJurosMensal) {
+        texto = texto.replace(/mora diária/gi, 'mora mensal');
+        texto = texto.replace(/juros diários/gi, 'juros mensais');
+      }
 
       // Remover linhas de desconto quando valor_desconto for 0
       if (valorDesconto <= 0) {
@@ -437,8 +448,8 @@ export function mapBoletoApiToDadosBoleto(
       if (valorMulta > 0) {
         instrParts.push(`APÓS O VENCIMENTO COBRAR MULTA DE ${fmtCurrency(valorMulta)}`);
       }
-      if (jurosDiario > 0) {
-        instrParts.push(`Cobrar juros de ${fmtCurrency(jurosDiario)} de mora diária`);
+      if (valorJurosExibir > 0) {
+        instrParts.push(`Cobrar juros de ${fmtCurrency(valorJurosExibir)} ${labelJuros}`);
       }
       if (valorDesconto > 0 && dataDesconto) {
         instrParts.push(`Até ${fmtDate(dataDesconto)} desconto de ${fmtCurrency(valorDesconto)}`);
