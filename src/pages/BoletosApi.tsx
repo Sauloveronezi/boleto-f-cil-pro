@@ -71,7 +71,7 @@ export default function BoletosApi() {
   const [ocultarEmitidos, setOcultarEmitidos] = useState(true);
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
   const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
-  const [imprimirFundo, setImprimirFundo] = useState(true);
+  const [imprimirFundo, setImprimirFundo] = useState(false);
   const [barcodeConflicts, setBarcodeConflicts] = useState<{ nota: string; antigo: string; novo: string }[]>([]);
   const [showBarcodeAlert, setShowBarcodeAlert] = useState(false);
   const [pendingPrintAction, setPendingPrintAction] = useState<(() => Promise<void>) | null>(null);
