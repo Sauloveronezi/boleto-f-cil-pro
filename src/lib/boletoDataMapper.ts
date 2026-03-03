@@ -411,15 +411,15 @@ export function mapBoletoApiToDadosBoleto(
     if (configBanco?.textoInstrucaoPadrao) {
       // Substituir variáveis no texto cadastrado
       let texto = configBanco.textoInstrucaoPadrao;
-      texto = texto.replace(/\{VALOR_MULTA\}/gi, fmtCurrency(valorMulta));
-      texto = texto.replace(/\{VALOR_JUROS_DIARIO\}/gi, fmtCurrency(jurosDiario));
-      texto = texto.replace(/\{VALOR_JUROS\}/gi, fmtCurrency(jurosDiario));
-      texto = texto.replace(/\{PERCENTUAL_MULTA\}/gi, `${multaPerc.toFixed(1).replace('.', ',')}%`);
-      texto = texto.replace(/\{PERCENTUAL_JUROS\}/gi, `${jurosPerc.toFixed(1).replace('.', ',')}%`);
-      texto = texto.replace(/\{VALOR_DESCONTO\}/gi, fmtCurrency(valorDesconto));
-      texto = texto.replace(/\{DATAVENCIMENTODESCONTO\}/gi, fmtDate(dataDesconto));
-      texto = texto.replace(/\{DATA_DESCONTO\}/gi, fmtDate(dataDesconto));
-      texto = texto.replace(/\{VALOR_DOCUMENTO\}/gi, fmtCurrency(valorDoc));
+      texto = texto.replace(/\{VALOR_MULTA[}\)]/gi, fmtCurrency(valorMulta));
+      texto = texto.replace(/\{VALOR_JUROS_DIARIO[}\)]/gi, fmtCurrency(jurosDiario));
+      texto = texto.replace(/\{VALOR_JUROS[}\)]/gi, fmtCurrency(jurosDiario));
+      texto = texto.replace(/\{PERCENTUAL_MULTA[}\)]/gi, `${multaPerc.toFixed(1).replace('.', ',')}%`);
+      texto = texto.replace(/\{PERCENTUAL_JUROS[}\)]/gi, `${jurosPerc.toFixed(1).replace('.', ',')}%`);
+      texto = texto.replace(/\{VALOR_DESCONTO[}\)]/gi, fmtCurrency(valorDesconto));
+      texto = texto.replace(/\{DATAVENCIMENTODESCONTO[}\)]/gi, fmtDate(dataDesconto));
+      texto = texto.replace(/\{DATA_DESCONTO[}\)]/gi, fmtDate(dataDesconto));
+      texto = texto.replace(/\{VALOR_DOCUMENTO[}\)]/gi, fmtCurrency(valorDoc));
 
       // Remover linhas de desconto quando valor_desconto for 0
       if (valorDesconto <= 0) {
