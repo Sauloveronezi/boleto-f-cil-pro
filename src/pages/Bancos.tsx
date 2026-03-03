@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Building2, Settings, Percent, Calendar, FileText, Loader2, HelpCircle, Upload, ImageIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,19 @@ import { useConfiguracoesBanco } from '@/hooks/useConfiguracoesBanco';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+
+function BancoLogoImg({ logoPath, alt, className }: { logoPath?: string | null; alt: string; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!logoPath) { setSrc(null); return; }
+    if (logoPath.startsWith('http') || logoPath.startsWith('/')) { setSrc(logoPath); return; }
+    supabase.storage.from('boleto_templates').createSignedUrl(logoPath, 3600).then(({ data }) => {
+      if (data?.signedUrl) setSrc(data.signedUrl);
+    });
+  }, [logoPath]);
+  if (!src) return null;
+  return <img src={src} alt={alt} className={className} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
+}
 
 export default function Bancos() {
   const { toast } = useToast();
@@ -84,14 +97,9 @@ export default function Bancos() {
     
     setIsSaving(true);
     try {
-      // Save logo_url on the banco table
-      if (logoUrl !== (bancoEditando.logo_url || '')) {
-        const { error: logoError } = await supabase
-          .from('vv_b_bancos')
-          .update({ logo_url: logoUrl || null })
-          .eq('id', bancoEditando.id);
-        if (logoError) throw logoError;
-      }
+      // Logo is already saved during upload (as storage path)
+      // Only update if user manually typed a URL
+      // (logoUrl at this point is a signed/preview URL, not what we store)
 
       const dadosSalvar = {
         ...formData,
@@ -136,7 +144,19 @@ export default function Bancos() {
     }
   };
 
-  const handleEditar = (banco: Banco) => {
+  const resolveLogoPreview = async (path: string): Promise<string> => {
+    if (!path) return '';
+    // If it's already a full URL (http/https or /), use as-is
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    // It's a storage path — generate signed URL
+    const { data, error } = await supabase.storage
+      .from('boleto_templates')
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) return '';
+    return data.signedUrl;
+  };
+
+  const handleEditar = async (banco: Banco) => {
     if (!canEdit) {
       toast({
         title: 'Sem permissão',
@@ -146,7 +166,9 @@ export default function Bancos() {
       return;
     }
     setBancoEditando(banco);
-    setLogoUrl(banco.logo_url || '');
+    // Resolve logo for preview
+    const previewUrl = await resolveLogoPreview(banco.logo_url || '');
+    setLogoUrl(previewUrl);
     const config = getConfiguracao(banco.id);
     setConfigEditando(config || null);
     setFormData(config || {
@@ -178,11 +200,16 @@ export default function Bancos() {
 
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from('boleto_templates')
-        .getPublicUrl(filePath);
+      // Store the storage path in DB (not public URL)
+      const { error: dbError } = await supabase
+        .from('vv_b_bancos')
+        .update({ logo_url: filePath })
+        .eq('id', bancoEditando.id);
+      if (dbError) console.warn('Erro ao salvar path no banco:', dbError);
 
-      setLogoUrl(urlData.publicUrl);
+      // Generate signed URL for preview only
+      const previewUrl = await resolveLogoPreview(filePath);
+      setLogoUrl(previewUrl);
       toast({ title: 'Logo enviada', description: 'A logo foi carregada com sucesso.' });
     } catch (error) {
       console.error('Erro upload logo:', error);
@@ -224,14 +251,8 @@ export default function Bancos() {
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      {banco.logo_url ? (
-                        <img 
-                          src={banco.logo_url} 
-                          alt={banco.nome_banco} 
-                          className="h-10 w-10 object-contain rounded-lg border border-border p-0.5"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      ) : (
+                      <BancoLogoImg logoPath={banco.logo_url} alt={banco.nome_banco} className="h-10 w-10 object-contain rounded-lg border border-border p-0.5" />
+                      {!banco.logo_url && (
                         <div className="p-2 bg-primary/10 rounded-lg">
                           <Building2 className="h-6 w-6 text-primary" />
                         </div>
