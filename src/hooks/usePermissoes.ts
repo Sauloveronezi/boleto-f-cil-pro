@@ -13,15 +13,20 @@ const defaultPermissao: Permissao = {
 };
 
 const defaultPermissoes: Permissoes = {
+  dashboard: { ...defaultPermissao },
   usuarios: { ...defaultPermissao },
   perfis: { ...defaultPermissao },
   clientes: { ...defaultPermissao },
   boletos: { ...defaultPermissao },
+  boletos_pdf: { ...defaultPermissao },
+  boletos_api: { ...defaultPermissao },
   notas: { ...defaultPermissao },
   bancos: { ...defaultPermissao },
   modelos: { ...defaultPermissao },
+  templates: { ...defaultPermissao },
+  cnab: { ...defaultPermissao },
+  importar_layout: { ...defaultPermissao },
   configuracoes: { ...defaultPermissao },
-  integracoes: { ...defaultPermissao }
 };
 
 export function usePermissoes() {

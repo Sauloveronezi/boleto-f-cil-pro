@@ -85,9 +85,9 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
   const { hasPermission } = usePermissoes();
   const [isOpen, setIsOpen] = useState(false);
 
-  const canCreate = hasPermission('integracoes', 'criar');
-  const canEdit = hasPermission('integracoes', 'editar');
-  const canDelete = hasPermission('integracoes', 'excluir');
+  const canCreate = hasPermission('boletos_api', 'criar');
+  const canEdit = hasPermission('boletos_api', 'editar');
+  const canDelete = hasPermission('boletos_api', 'excluir');
 
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);

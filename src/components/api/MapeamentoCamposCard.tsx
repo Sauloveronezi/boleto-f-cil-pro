@@ -88,7 +88,7 @@ export function MapeamentoCamposCard({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { hasPermission } = usePermissoes();
-  const canEdit = hasPermission('integracoes', 'editar');
+  const canEdit = hasPermission('boletos_api', 'editar');
 
   // Colunas conhecidas da tabela vv_b_boletos_api
   const todasColunasTabela = [

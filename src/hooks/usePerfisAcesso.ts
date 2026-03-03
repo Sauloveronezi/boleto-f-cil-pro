@@ -10,15 +10,20 @@ export interface Permissao {
 }
 
 export interface Permissoes {
+  dashboard: Permissao;
   usuarios: Permissao;
   perfis: Permissao;
   clientes: Permissao;
   boletos: Permissao;
+  boletos_pdf: Permissao;
+  boletos_api: Permissao;
   notas: Permissao;
   bancos: Permissao;
   modelos: Permissao;
+  templates: Permissao;
+  cnab: Permissao;
+  importar_layout: Permissao;
   configuracoes: Permissao;
-  integracoes: Permissao;
 }
 
 export interface PerfilAcesso {
@@ -40,27 +45,37 @@ const defaultPermissao: Permissao = {
 };
 
 export const defaultPermissoes: Permissoes = {
+  dashboard: { ...defaultPermissao },
   usuarios: { ...defaultPermissao },
   perfis: { ...defaultPermissao },
   clientes: { ...defaultPermissao },
   boletos: { ...defaultPermissao },
+  boletos_pdf: { ...defaultPermissao },
+  boletos_api: { ...defaultPermissao },
   notas: { ...defaultPermissao },
   bancos: { ...defaultPermissao },
   modelos: { ...defaultPermissao },
+  templates: { ...defaultPermissao },
+  cnab: { ...defaultPermissao },
+  importar_layout: { ...defaultPermissao },
   configuracoes: { ...defaultPermissao },
-  integracoes: { ...defaultPermissao }
 };
 
 export const MODULOS = [
-  { key: 'usuarios', label: 'Usuários' },
-  { key: 'perfis', label: 'Perfis de Acesso' },
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'boletos', label: 'Gerar Boletos' },
+  { key: 'boletos_pdf', label: 'Gerar Boletos (PDF)' },
+  { key: 'boletos_api', label: 'Boletos via API' },
   { key: 'clientes', label: 'Clientes' },
-  { key: 'boletos', label: 'Boletos' },
   { key: 'notas', label: 'Notas Fiscais' },
   { key: 'bancos', label: 'Bancos' },
   { key: 'modelos', label: 'Modelos de Layout' },
+  { key: 'templates', label: 'Templates de Boleto' },
+  { key: 'cnab', label: 'Padrões CNAB / Arquivos' },
+  { key: 'importar_layout', label: 'Importar Layout (IA)' },
   { key: 'configuracoes', label: 'Configurações' },
-  { key: 'integracoes', label: 'Integrações API' }
+  { key: 'usuarios', label: 'Usuários' },
+  { key: 'perfis', label: 'Perfis de Acesso' },
 ] as const;
 
 export const ACOES = [

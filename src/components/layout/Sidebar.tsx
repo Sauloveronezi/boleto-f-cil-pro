@@ -25,9 +25,9 @@ export function Sidebar() {
     {
       title: 'Principal',
       items: [
-        { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
+        ...(canAccess('dashboard') ? [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }] : [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }]),
         ...(canAccess('boletos') ? [{ icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' }] : []),
-        ...(canAccess('integracoes') ? [{ icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' }] : []),
+        ...(canAccess('boletos_api') ? [{ icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' }] : []),
       ]
     },
     {
@@ -42,16 +42,16 @@ export function Sidebar() {
       title: 'Configurações',
       items: [
         ...(canAccess('modelos') ? [{ icon: Palette, label: 'Modelos de Layout', href: '/modelos' }] : []),
-        ...(canAccess('modelos') ? [{ icon: Palette, label: 'Templates de Boleto', href: '/templates-boleto' }] : []),
-        ...(canAccess('configuracoes') ? [{ icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' }] : []),
-        ...(canAccess('modelos') ? [{ icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' }] : []),
+        ...(canAccess('templates') ? [{ icon: Palette, label: 'Templates de Boleto', href: '/templates-boleto' }] : []),
+        ...(canAccess('cnab') ? [{ icon: FileCode, label: 'Padrões CNAB', href: '/configuracao-cnab' }] : []),
+        ...(canAccess('importar_layout') ? [{ icon: Upload, label: 'Importar Layout (IA)', href: '/importar-layout' }] : []),
         ...(canAccess('configuracoes') ? [{ icon: Settings, label: 'Configurações', href: '/configuracoes' }] : []),
       ]
     },
     {
       title: 'Boletos (PDF)',
       items: [
-        ...(canAccess('boletos') ? [{ icon: FileText, label: 'Gerar Boletos (PDF)', href: '/gerar-boletos-pdf' }] : []),
+        ...(canAccess('boletos_pdf') ? [{ icon: FileText, label: 'Gerar Boletos (PDF)', href: '/gerar-boletos-pdf' }] : []),
       ]
     },
     {

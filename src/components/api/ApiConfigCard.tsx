@@ -48,8 +48,8 @@ export function ApiConfigCard() {
   const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
   const [syncingIntegracaoId, setSyncingIntegracaoId] = useState<string | null>(null);
 
-  const canCreate = hasPermission('integracoes', 'criar');
-  const canEdit = hasPermission('integracoes', 'editar');
+  const canCreate = hasPermission('boletos_api', 'criar');
+  const canEdit = hasPermission('boletos_api', 'editar');
 
   const handleAtualizarCampos = async (integracaoId: string) => {
     if (!canEdit) {

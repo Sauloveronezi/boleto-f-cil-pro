@@ -41,19 +41,19 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Protected modulo="dashboard" fallback={<AccessDenied />}><Dashboard /></Protected></ProtectedRoute>} />
             <Route path="/gerar-boletos" element={<ProtectedRoute><Protected modulo="boletos" fallback={<AccessDenied />}><GerarBoletos /></Protected></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Protected modulo="clientes" fallback={<AccessDenied />}><Clientes /></Protected></ProtectedRoute>} />
             <Route path="/notas" element={<ProtectedRoute><Protected modulo="notas" fallback={<AccessDenied />}><NotasFiscais /></Protected></ProtectedRoute>} />
             <Route path="/bancos" element={<ProtectedRoute><Protected modulo="bancos" fallback={<AccessDenied />}><Bancos /></Protected></ProtectedRoute>} />
             <Route path="/modelos" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><Modelos /></Protected></ProtectedRoute>} />
-            <Route path="/templates-boleto" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><TemplatesBoleto /></Protected></ProtectedRoute>} />
-            <Route path="/gerar-boletos-pdf" element={<ProtectedRoute><Protected modulo="boletos" fallback={<AccessDenied />}><GerarBoletosPDF /></Protected></ProtectedRoute>} />
-            <Route path="/importar-layout" element={<ProtectedRoute><Protected modulo="modelos" fallback={<AccessDenied />}><ImportarLayout /></Protected></ProtectedRoute>} />
+            <Route path="/templates-boleto" element={<ProtectedRoute><Protected modulo="templates" fallback={<AccessDenied />}><TemplatesBoleto /></Protected></ProtectedRoute>} />
+            <Route path="/gerar-boletos-pdf" element={<ProtectedRoute><Protected modulo="boletos_pdf" fallback={<AccessDenied />}><GerarBoletosPDF /></Protected></ProtectedRoute>} />
+            <Route path="/importar-layout" element={<ProtectedRoute><Protected modulo="importar_layout" fallback={<AccessDenied />}><ImportarLayout /></Protected></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><Configuracoes /></Protected></ProtectedRoute>} />
-            <Route path="/configuracao-cnab" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><ConfiguracaoCNAB /></Protected></ProtectedRoute>} />
-            <Route path="/arquivos-cnab" element={<ProtectedRoute><Protected modulo="configuracoes" fallback={<AccessDenied />}><ArquivosCNAB /></Protected></ProtectedRoute>} />
-            <Route path="/boletos-api" element={<ProtectedRoute><Protected modulo="integracoes" fallback={<AccessDenied />}><BoletosApi /></Protected></ProtectedRoute>} />
+            <Route path="/configuracao-cnab" element={<ProtectedRoute><Protected modulo="cnab" fallback={<AccessDenied />}><ConfiguracaoCNAB /></Protected></ProtectedRoute>} />
+            <Route path="/arquivos-cnab" element={<ProtectedRoute><Protected modulo="cnab" fallback={<AccessDenied />}><ArquivosCNAB /></Protected></ProtectedRoute>} />
+            <Route path="/boletos-api" element={<ProtectedRoute><Protected modulo="boletos_api" fallback={<AccessDenied />}><BoletosApi /></Protected></ProtectedRoute>} />
             <Route path="/usuarios" element={<ProtectedRoute><Protected modulo="usuarios" fallback={<AccessDenied />}><Usuarios /></Protected></ProtectedRoute>} />
             <Route path="/perfis-acesso" element={<ProtectedRoute><Protected modulo="perfis" fallback={<AccessDenied />}><PerfisAcesso /></Protected></ProtectedRoute>} />
             <Route path="/referencia-versoes" element={<ProtectedRoute><ReferenciaVersoes /></ProtectedRoute>} />
