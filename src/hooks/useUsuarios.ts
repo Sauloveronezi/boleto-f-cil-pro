@@ -44,21 +44,25 @@ export function useUsuarios() {
   const aprovarUsuario = useMutation({
     mutationFn: async ({ 
       usuarioId, 
-      perfilAcessoId, 
-      role 
+      perfilAcessoId
     }: { 
       usuarioId: string; 
-      perfilAcessoId: string; 
-      role: 'master' | 'admin' | 'operador' | 'visualizador';
+      perfilAcessoId: string;
     }) => {
-      const { data, error } = await supabase.rpc('vv_b_aprovar_usuario', {
-        p_usuario_id: usuarioId,
-        p_perfil_acesso_id: perfilAcessoId,
-        p_role: role
-      });
+      const { data: currentUser } = await supabase.auth.getUser();
+      if (!currentUser?.user) throw new Error('Usuário não autenticado');
+
+      const { error } = await supabase
+        .from('vv_b_usuarios')
+        .update({ 
+          ativo: true, 
+          perfil_acesso_id: perfilAcessoId,
+          aprovado_por: currentUser.user.id,
+          data_aprovacao: new Date().toISOString()
+        })
+        .eq('id', usuarioId);
       
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['usuarios'] });
