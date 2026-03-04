@@ -130,10 +130,38 @@ serve(async (req) => {
         throw new Error('ID do usuário e nova senha são obrigatórios')
       }
 
-      // Verificar se o usuário existe no Auth antes de tentar atualizar
+      // Verificar se o usuário existe no Auth
       const { data: targetUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
+      
       if (getUserError || !targetUser?.user) {
-        throw new Error('Usuário não encontrado no sistema de autenticação. Este registro pode estar desatualizado.')
+        // Usuário não existe no Auth - buscar email na tabela vv_b_usuarios e re-criar
+        const { data: usuarioDb, error: dbError } = await supabaseAdmin
+          .from('vv_b_usuarios')
+          .select('email, nome')
+          .eq('user_id', userId)
+          .or('deleted.is.null,deleted.eq.')
+          .single()
+
+        if (dbError || !usuarioDb) {
+          throw new Error('Usuário não encontrado no banco de dados nem no sistema de autenticação.')
+        }
+
+        // Re-criar o usuário no Auth com o mesmo ID
+        const { error: createError } = await supabaseAdmin.auth.admin.createUser({
+          id: userId,
+          email: usuarioDb.email,
+          password,
+          email_confirm: true
+        })
+
+        if (createError) {
+          throw new Error('Erro ao recriar usuário no Auth: ' + createError.message)
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, recreated: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
