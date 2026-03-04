@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useUsuarios, Usuario } from '@/hooks/useUsuarios';
 import { usePerfisAcesso } from '@/hooks/usePerfisAcesso';
-import { usePermissoes, UserRole } from '@/hooks/usePermissoes';
+import { usePermissoes } from '@/hooks/usePermissoes';
 import { useManageUsers } from '@/hooks/useManageUsers';
 import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound } from 'lucide-react';
 import { format } from 'date-fns';
@@ -26,7 +26,7 @@ export default function Usuarios() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
   const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
+  
   const [novoEmail, setNovoEmail] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [novoNome, setNovoNome] = useState('');
@@ -64,7 +64,6 @@ export default function Usuarios() {
     setSelectedUsuario(usuario);
     setDialogMode('aprovar');
     setSelectedPerfilId('');
-    setSelectedRole('operador');
     setDialogOpen(true);
   };
 
@@ -91,7 +90,7 @@ export default function Usuarios() {
     setNovaSenha('');
     setNovoNome('');
     setSelectedPerfilId('');
-    setSelectedRole('operador');
+    
     setDialogOpen(true);
   };
 
@@ -110,7 +109,7 @@ export default function Usuarios() {
         email: novoEmail, 
         password: novaSenha,
         perfilAcessoId: selectedPerfilId,
-        role: selectedRole,
+        role: 'operador',
         nome: novoNome || undefined
       });
       setDialogOpen(false);
@@ -135,8 +134,7 @@ export default function Usuarios() {
       if (!canEdit) return;
       await aprovarUsuario.mutateAsync({
         usuarioId: selectedUsuario.id,
-        perfilAcessoId: selectedPerfilId,
-        role: selectedRole
+        perfilAcessoId: selectedPerfilId
       });
     } else if (dialogMode === 'editar') {
       if (!canEdit) return;
@@ -399,20 +397,6 @@ export default function Usuarios() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Role do Sistema</Label>
-                  <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isMaster && <SelectItem value="master">Master</SelectItem>}
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="operador">Operador</SelectItem>
-                      <SelectItem value="visualizador">Visualizador</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             )}
 
@@ -448,22 +432,6 @@ export default function Usuarios() {
                   </Select>
                 </div>
 
-                {dialogMode === 'aprovar' && (
-                  <div className="space-y-2">
-                    <Label>Role do Sistema</Label>
-                    <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {isMaster && <SelectItem value="master">Master</SelectItem>}
-                        <SelectItem value="admin">Administrador</SelectItem>
-                        <SelectItem value="operador">Operador</SelectItem>
-                        <SelectItem value="visualizador">Visualizador</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
             )}
 
@@ -475,7 +443,7 @@ export default function Usuarios() {
                 onClick={handleConfirmar}
                 variant={dialogMode === 'excluir' ? 'destructive' : 'default'}
                 disabled={
-                  (dialogMode === 'criar' && (!novoEmail || !novaSenha || novaSenha.length < 6 || !selectedPerfilId || !selectedRole)) ||
+                  (dialogMode === 'criar' && (!novoEmail || !novaSenha || novaSenha.length < 6 || !selectedPerfilId)) ||
                   (dialogMode === 'senha' && (!novaSenha || novaSenha.length < 6)) ||
                   ((dialogMode === 'aprovar' || dialogMode === 'editar') && !selectedPerfilId) ||
                   aprovarUsuario.isPending ||
