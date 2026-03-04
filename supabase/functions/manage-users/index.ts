@@ -130,6 +130,12 @@ serve(async (req) => {
         throw new Error('ID do usuário e nova senha são obrigatórios')
       }
 
+      // Verificar se o usuário existe no Auth antes de tentar atualizar
+      const { data: targetUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
+      if (getUserError || !targetUser?.user) {
+        throw new Error('Usuário não encontrado no sistema de autenticação. Este registro pode estar desatualizado.')
+      }
+
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         userId,
         { password }
