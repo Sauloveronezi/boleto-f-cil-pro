@@ -21,6 +21,15 @@ export default function Usuarios() {
   const { perfis } = usePerfisAcesso();
   const { hasPermission, isMaster, isLoading: isLoadingPermissoes } = usePermissoes();
   const { criarUsuario, alterarSenha } = useManageUsers();
+
+  const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
+  const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
+  const [novoEmail, setNovoEmail] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [novoNome, setNovoNome] = useState('');
   
   const canEdit = hasPermission('usuarios', 'editar');
   const canCreate = hasPermission('usuarios', 'criar');
@@ -49,15 +58,6 @@ export default function Usuarios() {
       </MainLayout>
     );
   }
-
-  const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
-  const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('operador');
-  const [novoEmail, setNovoEmail] = useState('');
-  const [novaSenha, setNovaSenha] = useState('');
-  const [novoNome, setNovoNome] = useState('');
 
   const handleAprovar = (usuario: Usuario) => {
     if (!canEdit) return;
