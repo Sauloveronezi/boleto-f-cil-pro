@@ -81,18 +81,19 @@ serve(async (req) => {
 
       const newUserId = newUser.user.id
 
-      // 2. Criar registro em vv_b_usuarios
+      // 2. Criar registro em vv_b_usuarios (upsert para evitar duplicidade)
       const { error: usuarioError } = await supabaseAdmin
         .from('vv_b_usuarios')
-        .insert({
+        .upsert({
           user_id: newUserId,
           email: email,
           nome: nome || email.split('@')[0],
           ativo: true,
           perfil_acesso_id: perfilAcessoId,
           data_aprovacao: new Date().toISOString(),
-          aprovado_por: user.id
-        })
+          aprovado_por: user.id,
+          deleted: null
+        }, { onConflict: 'user_id' })
 
       if (usuarioError) {
         // Rollback: excluir usuário do auth se falhar a inserção
@@ -100,20 +101,21 @@ serve(async (req) => {
         throw new Error('Erro ao criar registro do usuário: ' + usuarioError.message)
       }
 
-      // 3. Criar registro em vv_b_user_roles
-      const { error: roleError } = await supabaseAdmin
+      // 3. Criar registro em vv_b_user_roles (upsert para evitar duplicidade)
+      const { error: roleError2 } = await supabaseAdmin
         .from('vv_b_user_roles')
-        .insert({
+        .upsert({
           user_id: newUserId,
           role: role,
-          perfil_acesso_id: perfilAcessoId
-        })
+          perfil_acesso_id: perfilAcessoId,
+          deleted: null
+        }, { onConflict: 'user_id,role' })
 
-      if (roleError) {
+      if (roleError2) {
         // Rollback: excluir registros criados
         await supabaseAdmin.from('vv_b_usuarios').delete().eq('user_id', newUserId)
         await supabaseAdmin.auth.admin.deleteUser(newUserId)
-        throw new Error('Erro ao criar role do usuário: ' + roleError.message)
+        throw new Error('Erro ao criar role do usuário: ' + roleError2.message)
       }
 
       return new Response(
