@@ -84,7 +84,8 @@ export function MapeamentoCamposCard({
   integracaoId, 
   integracaoNome, 
   camposApiDetectados = [],
-  onRefreshCampos
+  onRefreshCampos,
+  loadingRefresh = false
 }: MapeamentoCamposCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
