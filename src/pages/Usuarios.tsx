@@ -13,7 +13,7 @@ import { useUsuarios, Usuario } from '@/hooks/useUsuarios';
 import { usePerfisAcesso } from '@/hooks/usePerfisAcesso';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { useManageUsers } from '@/hooks/useManageUsers';
-import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound } from 'lucide-react';
+import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
