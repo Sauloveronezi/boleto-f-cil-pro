@@ -5,6 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { APP_VERSION } from '@/data/changelog';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useEmpresaDados } from '@/hooks/useEmpresaDados';
+import { useEffect } from 'react';
 
 interface HeaderProps {
   modoDemo: boolean;
@@ -14,6 +16,25 @@ export function Header({ modoDemo }: HeaderProps) {
   const { signOut, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { data: empresaDados } = useEmpresaDados();
+
+  // Dynamic favicon
+  useEffect(() => {
+    if (empresaDados?.logoUrl) {
+      const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement
+        || document.createElement('link');
+      link.rel = 'icon';
+      link.href = empresaDados.logoUrl;
+      document.head.appendChild(link);
+    }
+  }, [empresaDados?.logoUrl]);
+
+  // Dynamic page title
+  useEffect(() => {
+    if (empresaDados?.nomeFantasia) {
+      document.title = `${empresaDados.nomeFantasia} — BoletoERP`;
+    }
+  }, [empresaDados?.nomeFantasia]);
 
   const handleLogout = async () => {
     await signOut();
@@ -29,10 +50,20 @@ export function Header({ modoDemo }: HeaderProps) {
       <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <FileText className="h-8 w-8 text-primary" />
+            {empresaDados?.logoUrl ? (
+              <img
+                src={empresaDados.logoUrl}
+                alt="Logo"
+                className="h-9 w-9 rounded object-contain"
+              />
+            ) : (
+              <FileText className="h-8 w-8 text-primary" />
+            )}
             <div>
               <div className="flex items-baseline gap-2">
-                <h1 className="text-xl font-bold">BoletoERP</h1>
+                <h1 className="text-xl font-bold">
+                  {empresaDados?.nomeFantasia || 'BoletoERP'}
+                </h1>
                 <span className="text-xs text-muted-foreground">v{APP_VERSION}</span>
               </div>
               <p className="text-xs text-muted-foreground">Sistema de Gestão de Boletos</p>

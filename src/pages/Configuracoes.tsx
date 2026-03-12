@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Server, Shield, Database, Globe, ToggleLeft, ToggleRight, Save, AlertTriangle, Building2, MapPin, Palette } from 'lucide-react';
 import { GuiaCoresConfig } from '@/components/configuracoes/GuiaCoresConfig';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { LogoUpload } from '@/components/configuracoes/LogoUpload';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -73,6 +74,7 @@ export default function Configuracoes() {
         telefone: empresaDb.telefone || '',
         email: empresaDb.email || '',
         site: empresaDb.site || '',
+        logoUrl: empresaDb.logo_url || '',
       });
     }
   }, [empresaDb]);
@@ -94,6 +96,7 @@ export default function Configuracoes() {
       telefone: empresa.telefone,
       email: empresa.email,
       site: empresa.site,
+      logo_url: empresa.logoUrl || null,
       updated_at: new Date().toISOString(),
     };
 
@@ -164,6 +167,10 @@ export default function Configuracoes() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <LogoUpload
+                    currentLogoPath={empresa.logoUrl || null}
+                    onLogoUploaded={(path) => atualizarEmpresa('logoUrl', path)}
+                  />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Razão Social *</Label>
