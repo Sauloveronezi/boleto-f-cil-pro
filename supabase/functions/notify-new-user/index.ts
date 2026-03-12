@@ -43,10 +43,15 @@ const handler = async (req: Request): Promise<Response> => {
       .eq('ativo', true)
       .is('deleted', null);
 
+    if (emailError) {
+      console.error("[notify-new-user] Erro ao buscar emails:", emailError);
+      throw emailError;
+    }
+
     if (!adminEmails || adminEmails.length === 0) {
-      console.log("[notify-new-user] Nenhum admin/master encontrado para notificar");
+      console.log("[notify-new-user] Nenhum usuário configurado para receber notificações");
       return new Response(
-        JSON.stringify({ success: true, message: "No admins to notify" }),
+        JSON.stringify({ success: true, message: "No users to notify" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
