@@ -50,7 +50,7 @@ serve(async (req) => {
     const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('vv_b_user_roles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .is('deleted', null)
 
     const roles = rolesData?.map(r => r.role) ?? []
