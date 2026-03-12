@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Settings, Server, Shield, Database, Globe, ToggleLeft, ToggleRight, Save, AlertTriangle, Building2, MapPin } from 'lucide-react';
+import { Settings, Server, Shield, Database, Globe, ToggleLeft, ToggleRight, Save, AlertTriangle, Building2, MapPin, Palette } from 'lucide-react';
+import { GuiaCoresConfig } from '@/components/configuracoes/GuiaCoresConfig';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -146,6 +147,7 @@ export default function Configuracoes() {
             <TabsTrigger value="api" className="flex-1">API</TabsTrigger>
             <TabsTrigger value="mapeamento" className="flex-1">Mapeamento Boleto</TabsTrigger>
             <TabsTrigger value="seguranca" className="flex-1">Segurança</TabsTrigger>
+            <TabsTrigger value="cores" className="flex-1 gap-1"><Palette className="h-3.5 w-3.5" />Cores</TabsTrigger>
           </TabsList>
 
           {/* Dados da Empresa */}
@@ -473,6 +475,11 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
           </Protected>
+
+          {/* Guia de Cores */}
+          <TabsContent value="cores">
+            <GuiaCoresConfig />
+          </TabsContent>
         </Tabs>
 
         {/* Botão Salvar */}
