@@ -44,7 +44,7 @@ const App = () => (
             <Route path="/aguardando-aprovacao" element={<AguardandoAprovacao />} />
             <Route path="/smart-redirect" element={<ProtectedRoute><SmartRedirect /></ProtectedRoute>} />
             <Route path="/" element={<ProtectedRoute><Protected modulo="dashboard" fallback={<SmartRedirect />}><Dashboard /></Protected></ProtectedRoute>} />
-            <Route path="/gerar-boletos" element={<ProtectedRoute><Protected modulo="boletos" fallback={<AccessDenied />}><GerarBoletos /></Protected></ProtectedRoute>} />
+            <Route path="/gerar-boletos" element={<ProtectedRoute><Protected modulo="boletos_api" fallback={<AccessDenied />}><BoletosApi /></Protected></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Protected modulo="clientes" fallback={<AccessDenied />}><Clientes /></Protected></ProtectedRoute>} />
             <Route path="/notas" element={<ProtectedRoute><Protected modulo="notas" fallback={<AccessDenied />}><NotasFiscais /></Protected></ProtectedRoute>} />
             <Route path="/bancos" element={<ProtectedRoute><Protected modulo="bancos" fallback={<AccessDenied />}><Bancos /></Protected></ProtectedRoute>} />
