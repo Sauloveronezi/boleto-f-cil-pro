@@ -44,6 +44,7 @@ interface MapeamentoCamposCardProps {
   integracaoNome: string;
   camposApiDetectados?: string[];
   onRefreshCampos?: () => void;
+  loadingRefresh?: boolean;
 }
 
 // Campos padrão que existem na tabela vv_b_boletos_api
