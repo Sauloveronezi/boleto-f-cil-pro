@@ -11,6 +11,7 @@ export interface Usuario {
   aprovado_por: string | null;
   data_aprovacao: string | null;
   perfil_acesso_id: string | null;
+  receber_notificacoes: boolean;
   created_at: string;
   updated_at: string;
   deleted: string | null;
@@ -164,6 +165,23 @@ export function useUsuarios() {
     }
   });
 
+  const toggleNotificacoes = useMutation({
+    mutationFn: async ({ usuarioId, receber }: { usuarioId: string; receber: boolean }) => {
+      const { error } = await supabase
+        .from('vv_b_usuarios')
+        .update({ receber_notificacoes: receber } as any)
+        .eq('id', usuarioId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+      toast({ title: 'Notificações atualizadas' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     usuarios,
     isLoading,
@@ -171,6 +189,7 @@ export function useUsuarios() {
     aprovarUsuario,
     desativarUsuario,
     excluirUsuario,
-    atualizarPerfil
+    atualizarPerfil,
+    toggleNotificacoes
   };
 }

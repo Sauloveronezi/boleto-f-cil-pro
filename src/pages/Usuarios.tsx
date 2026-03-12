@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -12,12 +13,12 @@ import { useUsuarios, Usuario } from '@/hooks/useUsuarios';
 import { usePerfisAcesso } from '@/hooks/usePerfisAcesso';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { useManageUsers } from '@/hooks/useManageUsers';
-import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound } from 'lucide-react';
+import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function Usuarios() {
-  const { usuarios, isLoading, aprovarUsuario, desativarUsuario, excluirUsuario, atualizarPerfil } = useUsuarios();
+  const { usuarios, isLoading, aprovarUsuario, desativarUsuario, excluirUsuario, atualizarPerfil, toggleNotificacoes } = useUsuarios();
   const { perfis } = usePerfisAcesso();
   const { hasPermission, isMaster, isLoading: isLoadingPermissoes } = usePermissoes();
   const { criarUsuario, alterarSenha } = useManageUsers();
@@ -257,6 +258,7 @@ export default function Usuarios() {
                   <TableHead>Email</TableHead>
                   <TableHead>Perfil</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Notificações</TableHead>
                   <TableHead>Aprovado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -280,6 +282,20 @@ export default function Usuarios() {
                       <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
                         {usuario.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={Boolean((usuario as any).receber_notificacoes)}
+                          onCheckedChange={(checked) => 
+                            toggleNotificacoes.mutate({ usuarioId: usuario.id, receber: checked })
+                          }
+                          disabled={!canEdit}
+                        />
+                        {(usuario as any).receber_notificacoes && (
+                          <Bell className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {usuario.data_aprovacao 

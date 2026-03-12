@@ -35,18 +35,23 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`[notify-new-user] Novo usuário cadastrado: ${email} (${nome})`);
 
-    // Buscar emails dos admins e masters
-    const { data: adminEmails, error: emailError } = await supabase.rpc('vv_b_get_admin_emails');
+    // Buscar emails dos usuários que devem receber notificações
+    const { data: adminEmails, error: emailError } = await supabase
+      .from('vv_b_usuarios')
+      .select('email')
+      .eq('receber_notificacoes', true)
+      .eq('ativo', true)
+      .is('deleted', null);
 
     if (emailError) {
-      console.error("[notify-new-user] Erro ao buscar emails dos admins:", emailError);
+      console.error("[notify-new-user] Erro ao buscar emails:", emailError);
       throw emailError;
     }
 
     if (!adminEmails || adminEmails.length === 0) {
-      console.log("[notify-new-user] Nenhum admin/master encontrado para notificar");
+      console.log("[notify-new-user] Nenhum usuário configurado para receber notificações");
       return new Response(
-        JSON.stringify({ success: true, message: "No admins to notify" }),
+        JSON.stringify({ success: true, message: "No users to notify" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }

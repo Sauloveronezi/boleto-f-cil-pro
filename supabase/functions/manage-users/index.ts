@@ -20,18 +20,12 @@ serve(async (req) => {
       throw new Error('Configuração do servidor inválida')
     }
 
-    const supabaseAdmin = createClient(
-      supabaseUrl,
-      supabaseServiceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    // Admin client (bypasses RLS)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
 
-    // Verificar autenticação com claims do token
+    // Verificar autenticação via getClaims
     const authHeader = req.headers.get('Authorization')
     console.log('[manage-users] auth header present:', Boolean(authHeader))
 
@@ -46,28 +40,29 @@ serve(async (req) => {
       throw new Error('Não autorizado')
     }
 
-    const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
+    // Create user-context client with the auth header
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+      auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    const { data: userData, error: userError } = await supabaseAuthClient.auth.getUser(token)
-    const authUserId = userData?.user?.id
-
-    if (userError || !authUserId) {
-      console.error('[manage-users] token validation failed:', userError?.message ?? 'no user id')
+    // Validate JWT using getClaims
+    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token)
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error('[manage-users] getClaims failed:', claimsError?.message ?? 'no claims')
       throw new Error('Não autorizado')
     }
+
+    const authUserId = claimsData.claims.sub as string
+    console.log('[manage-users] authenticated user:', authUserId)
 
     // Verificar se o usuário é Master (suporta múltiplas roles + fallback pelo perfil)
     const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('vv_b_user_roles')
       .select('role')
       .eq('user_id', authUserId)
-      .or('deleted.is.null,deleted.eq.')
+      .is('deleted', null)
 
     const roles = rolesData?.map(r => String(r.role).toLowerCase()) ?? []
     let isMaster = roles.includes('master')
@@ -77,7 +72,7 @@ serve(async (req) => {
         .from('vv_b_usuarios')
         .select('perfil_acesso:vv_b_perfis_acesso(nome)')
         .eq('user_id', authUserId)
-        .or('deleted.is.null,deleted.eq.')
+        .is('deleted', null)
         .limit(1)
         .maybeSingle()
 
@@ -86,6 +81,7 @@ serve(async (req) => {
     }
 
     if (roleError || !isMaster) {
+      console.error('[manage-users] not master. roles:', roles, 'roleError:', roleError?.message)
       throw new Error('Apenas usuários Master podem gerenciar usuários')
     }
 
@@ -93,7 +89,6 @@ serve(async (req) => {
     const { action, email, password, userId, perfilAcessoId, role, nome } = body
 
     if (action === 'create') {
-      // Criar novo usuário
       if (!email || !password) {
         throw new Error('Email e senha são obrigatórios')
       }
@@ -115,7 +110,7 @@ serve(async (req) => {
 
       const newUserId = newUser.user.id
 
-      // 2. Criar registro em vv_b_usuarios (upsert para evitar duplicidade)
+      // 2. Criar registro em vv_b_usuarios
       const { error: usuarioError } = await supabaseAdmin
         .from('vv_b_usuarios')
         .upsert({
@@ -130,12 +125,11 @@ serve(async (req) => {
         }, { onConflict: 'user_id' })
 
       if (usuarioError) {
-        // Rollback: excluir usuário do auth se falhar a inserção
         await supabaseAdmin.auth.admin.deleteUser(newUserId)
         throw new Error('Erro ao criar registro do usuário: ' + usuarioError.message)
       }
 
-      // 3. Criar registro em vv_b_user_roles (upsert para evitar duplicidade)
+      // 3. Criar registro em vv_b_user_roles
       const { error: roleError2 } = await supabaseAdmin
         .from('vv_b_user_roles')
         .upsert({
@@ -146,10 +140,16 @@ serve(async (req) => {
         }, { onConflict: 'user_id,role' })
 
       if (roleError2) {
-        // Rollback: excluir registros criados
         await supabaseAdmin.from('vv_b_usuarios').delete().eq('user_id', newUserId)
         await supabaseAdmin.auth.admin.deleteUser(newUserId)
         throw new Error('Erro ao criar role do usuário: ' + roleError2.message)
+      }
+
+      // 4. Notificar admins por email
+      try {
+        await notifyAdmins(supabaseAdmin, supabaseUrl, supabaseAnonKey, email, nome || email.split('@')[0], 'criado')
+      } catch (e) {
+        console.warn('[manage-users] falha ao notificar admins:', e)
       }
 
       return new Response(
@@ -159,28 +159,24 @@ serve(async (req) => {
     }
 
     if (action === 'update-password') {
-      // Atualizar senha
       if (!userId || !password) {
         throw new Error('ID do usuário e nova senha são obrigatórios')
       }
 
-      // Verificar se o usuário existe no Auth
       const { data: targetUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
 
       if (getUserError || !targetUser?.user) {
-        // Usuário não existe no Auth - buscar email na tabela vv_b_usuarios e re-criar
         const { data: usuarioDb, error: dbError } = await supabaseAdmin
           .from('vv_b_usuarios')
           .select('email, nome')
           .eq('user_id', userId)
-          .or('deleted.is.null,deleted.eq.')
+          .is('deleted', null)
           .single()
 
         if (dbError || !usuarioDb) {
           throw new Error('Usuário não encontrado no banco de dados nem no sistema de autenticação.')
         }
 
-        // Re-criar o usuário no Auth com o mesmo ID
         const { error: createError } = await supabaseAdmin.auth.admin.createUser({
           id: userId,
           email: usuarioDb.email,
@@ -223,9 +219,73 @@ serve(async (req) => {
         ? 403
         : 400
 
+    console.error('[manage-users] error:', errorMessage, 'status:', status)
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
+
+// Notify users marked with receber_notificacoes
+async function notifyAdmins(
+  supabaseAdmin: any,
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  userEmail: string,
+  userName: string,
+  action: string
+) {
+  const resendApiKey = Deno.env.get('RESEND_API_KEY')
+  if (!resendApiKey) {
+    console.log('[manage-users] RESEND_API_KEY not set, skipping notification')
+    return
+  }
+
+  // Buscar usuários que devem receber notificações
+  const { data: notifyUsers, error } = await supabaseAdmin
+    .from('vv_b_usuarios')
+    .select('email')
+    .eq('receber_notificacoes', true)
+    .eq('ativo', true)
+    .is('deleted', null)
+
+  if (error || !notifyUsers?.length) {
+    console.log('[manage-users] no users to notify or error:', error?.message)
+    return
+  }
+
+  const emailList = notifyUsers.map((u: { email: string }) => u.email)
+  console.log(`[manage-users] notifying: ${emailList.join(', ')}`)
+
+  const promises = emailList.map((adminEmail: string) =>
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Sistema de Boletos <onboarding@resend.dev>',
+        to: [adminEmail],
+        subject: `Usuário ${action} no sistema`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #154734;">Notificação de Usuário</h2>
+            <p>Um usuário foi <strong>${action}</strong> no sistema:</p>
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Nome:</strong> ${userName || 'Não informado'}</p>
+              <p style="margin: 5px 0;"><strong>Email:</strong> ${userEmail}</p>
+              <p style="margin: 5px 0;"><strong>Data:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="color: #666; font-size: 12px;">Email automático do Sistema de Boletos.</p>
+          </div>
+        `,
+      }),
+    })
+  )
+
+  await Promise.allSettled(promises)
+}
