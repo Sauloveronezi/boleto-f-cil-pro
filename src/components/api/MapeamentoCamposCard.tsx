@@ -644,9 +644,16 @@ export function MapeamentoCamposCard({
             </Button>
 
             {onRefreshCampos && (
-              <Button variant="outline" size="sm" onClick={onRefreshCampos} className="gap-2">
-                <RefreshCw className="h-4 w-4" />
-                Atualizar Campos
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRefreshCampos} 
+                disabled={loadingRefresh}
+                className="gap-2"
+                title="Verificar novos campos na API sem alterar mapeamentos existentes"
+              >
+                {loadingRefresh ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refazer Mapeamento
               </Button>
             )}
           </div>
