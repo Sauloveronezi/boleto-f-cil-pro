@@ -35,13 +35,13 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`[notify-new-user] Novo usuário cadastrado: ${email} (${nome})`);
 
-    // Buscar emails dos admins e masters
-    const { data: adminEmails, error: emailError } = await supabase.rpc('vv_b_get_admin_emails');
-
-    if (emailError) {
-      console.error("[notify-new-user] Erro ao buscar emails dos admins:", emailError);
-      throw emailError;
-    }
+    // Buscar emails dos usuários que devem receber notificações
+    const { data: adminEmails, error: emailError } = await supabase
+      .from('vv_b_usuarios')
+      .select('email')
+      .eq('receber_notificacoes', true)
+      .eq('ativo', true)
+      .is('deleted', null);
 
     if (!adminEmails || adminEmails.length === 0) {
       console.log("[notify-new-user] Nenhum admin/master encontrado para notificar");
