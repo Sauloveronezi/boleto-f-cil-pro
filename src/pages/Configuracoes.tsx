@@ -147,6 +147,7 @@ export default function Configuracoes() {
             <TabsTrigger value="api" className="flex-1">API</TabsTrigger>
             <TabsTrigger value="mapeamento" className="flex-1">Mapeamento Boleto</TabsTrigger>
             <TabsTrigger value="seguranca" className="flex-1">Segurança</TabsTrigger>
+            <TabsTrigger value="cores" className="flex-1 gap-1"><Palette className="h-3.5 w-3.5" />Cores</TabsTrigger>
           </TabsList>
 
           {/* Dados da Empresa */}
