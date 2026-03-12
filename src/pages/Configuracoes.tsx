@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Server, Shield, Database, Globe, ToggleLeft, ToggleRight, Save, AlertTriangle, Building2, MapPin, Palette } from 'lucide-react';
 import { GuiaCoresConfig } from '@/components/configuracoes/GuiaCoresConfig';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { LogoUpload } from '@/components/configuracoes/LogoUpload';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
