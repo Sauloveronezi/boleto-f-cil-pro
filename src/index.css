@@ -6,118 +6,133 @@
 
 @layer base {
   :root {
-    /* Professional Blue Theme for Financial/ERP System */
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    /* ===== Paleta Vida Veg ===== */
+    /* Verdes institucionais */
+    --vv-green-dark: 161 55% 18%;       /* #154734 - PANTONE 3435C */
+    --vv-green-mid: 158 100% 23%;       /* #00754A - PANTONE 3415C */
+    --vv-green-light: 76 51% 51%;       /* #A1C342 - PANTONE 7480C */
+    /* Terrosos */
+    --vv-brown: 23 48% 27%;             /* #673E24 - PANTONE 469C */
+    --vv-beige: 34 43% 69%;             /* #D5BA8C - PANTONE 467C */
+    --vv-beige-light: 44 46% 76%;       /* #E0D0A6 - PANTONE 7500C */
+    /* Quentes */
+    --vv-orange: 39 100% 50%;           /* #FFA400 - PANTONE 137C */
+    --vv-orange-dark: 22 100% 45%;      /* #E65300 - PANTONE 166C */
+    /* Vibrantes */
+    --vv-pink: 327 82% 48%;             /* #DF1683 - PANTONE 219C */
+    --vv-red: 344 100% 42%;             /* #D50037 - PANTONE 206C */
+
+    /* ===== Tokens Semânticos — Light Mode ===== */
+    --background: 44 30% 96%;
+    --foreground: 161 55% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 161 55% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 161 55% 10%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 158 100% 23%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 44 46% 90%;
+    --secondary-foreground: 161 55% 10%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 44 30% 94%;
+    --muted-foreground: 161 20% 40%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 76 51% 51%;
+    --accent-foreground: 161 55% 10%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 344 100% 42%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
+    --success: 158 100% 23%;
+    --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
+    --warning: 39 100% 50%;
+    --warning-foreground: 161 55% 10%;
 
-    --info: 199 89% 48%;
-    --info-foreground: 210 40% 98%;
+    --info: 76 51% 51%;
+    --info-foreground: 161 55% 10%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --border: 44 30% 85%;
+    --input: 44 30% 85%;
+    --ring: 158 100% 23%;
 
     --radius: 0.5rem;
 
-    /* Custom tokens for boleto system */
-    --header-bg: 222 47% 11%;
-    --header-foreground: 210 40% 98%;
-    --sidebar-bg: 210 20% 98%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-accent: 221 83% 53%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --table-header: 214 32% 91%;
-    --table-row-hover: 210 40% 96%;
-    --badge-blue: 221 83% 53%;
-    --badge-green: 142 76% 36%;
-    --badge-orange: 38 92% 50%;
-    --badge-gray: 215 16% 47%;
+    /* === Header & Sidebar === */
+    --header-bg: 161 55% 18%;
+    --header-foreground: 0 0% 100%;
 
-    --sidebar-background: 210 20% 98%;
-    --sidebar-primary: 221 83% 53%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 221 83% 53%;
+    --sidebar-background: 161 55% 15%;
+    --sidebar-foreground: 44 46% 90%;
+    --sidebar-primary: 76 51% 51%;
+    --sidebar-primary-foreground: 161 55% 10%;
+    --sidebar-accent: 161 55% 22%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 161 40% 22%;
+    --sidebar-ring: 76 51% 51%;
+
+    /* === Extras === */
+    --table-header: 44 30% 92%;
+    --table-row-hover: 44 30% 96%;
+    --badge-blue: 158 100% 23%;
+    --badge-green: 158 100% 23%;
+    --badge-orange: 39 100% 50%;
+    --badge-gray: 161 20% 40%;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background: 161 30% 8%;
+    --foreground: 44 30% 92%;
 
-    --card: 223 47% 15%;
-    --card-foreground: 210 40% 98%;
+    --card: 161 30% 12%;
+    --card-foreground: 44 30% 92%;
 
-    --popover: 223 47% 15%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 161 30% 12%;
+    --popover-foreground: 44 30% 92%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 76 51% 51%;
+    --primary-foreground: 161 55% 10%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 161 30% 16%;
+    --secondary-foreground: 44 30% 92%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 161 30% 16%;
+    --muted-foreground: 44 20% 60%;
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 161 30% 16%;
+    --accent-foreground: 44 30% 92%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 344 80% 35%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 29%;
-    --success-foreground: 210 40% 98%;
+    --success: 158 80% 28%;
+    --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 40%;
-    --warning-foreground: 210 40% 98%;
+    --warning: 39 90% 42%;
+    --warning-foreground: 0 0% 100%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    --border: 161 30% 18%;
+    --input: 161 30% 18%;
+    --ring: 76 51% 51%;
 
-    --header-bg: 223 47% 8%;
-    --header-foreground: 210 40% 98%;
-    --sidebar-bg: 223 47% 12%;
-    --sidebar-foreground: 210 40% 98%;
-    --table-header: 217 33% 17%;
-    --table-row-hover: 217 33% 20%;
+    --header-bg: 161 55% 8%;
+    --header-foreground: 44 30% 92%;
 
-    --sidebar-background: 223 47% 12%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-background: 161 55% 10%;
+    --sidebar-foreground: 44 30% 92%;
+    --sidebar-primary: 76 51% 51%;
+    --sidebar-primary-foreground: 161 55% 10%;
+    --sidebar-accent: 161 40% 16%;
+    --sidebar-accent-foreground: 44 30% 92%;
+    --sidebar-border: 161 30% 18%;
+    --sidebar-ring: 76 51% 51%;
+
+    --table-header: 161 30% 16%;
+    --table-row-hover: 161 30% 18%;
   }
 }
 
@@ -228,33 +243,17 @@
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   @keyframes slideDown {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
