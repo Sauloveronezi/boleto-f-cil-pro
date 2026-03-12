@@ -25,9 +25,11 @@ serve(async (req) => {
 
     // Verificar autenticação
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new Error('Não autorizado')
     }
+
+    const token = authHeader.replace('Bearer ', '')
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -37,8 +39,10 @@ serve(async (req) => {
       }
     )
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
-    if (userError || !user) {
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token)
+    const authUserId = claimsData?.claims?.sub
+
+    if (claimsError || !authUserId || typeof authUserId !== 'string') {
       throw new Error('Não autorizado')
     }
 
@@ -46,7 +50,7 @@ serve(async (req) => {
     const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('vv_b_user_roles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', authUserId)
       .is('deleted', null)
 
     const roles = rolesData?.map(r => r.role) ?? []
@@ -91,7 +95,7 @@ serve(async (req) => {
           ativo: true,
           perfil_acesso_id: perfilAcessoId,
           data_aprovacao: new Date().toISOString(),
-          aprovado_por: user.id,
+          aprovado_por: authUserId,
           deleted: null
         }, { onConflict: 'user_id' })
 
