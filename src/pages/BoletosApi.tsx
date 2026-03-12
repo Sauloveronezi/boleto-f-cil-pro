@@ -1106,12 +1106,6 @@ export default function BoletosApi() {
               </SelectContent>
             </Select>
 
-            {modeloSelecionado && (
-              <div className="flex items-center space-x-2 bg-muted p-2 rounded border border-border">
-                <Checkbox id="imprimir-fundo-api" checked={imprimirFundo} onCheckedChange={(checked) => setImprimirFundo(!!checked)} />
-                <Label htmlFor="imprimir-fundo-api" className="text-xs cursor-pointer">Fundo</Label>
-              </div>
-            )}
 
             <Button className="gap-2" onClick={() => handleImprimirSelecionados()}
               disabled={selecionados.size === 0 || (!canPrint && !isLoadingPermissoes)}

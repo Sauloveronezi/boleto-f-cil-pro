@@ -359,7 +359,7 @@ const camposVia1: DefaultFieldDef[] = [
     key: 'codigo_barras',
     label: '',
     source_ref: 'codigo_barras',
-    bbox: [5, 136, 195, 146],
+    bbox: [15, 136, 155, 146],
     font_size: 10,
     align: 'center',
     is_barcode: true,
