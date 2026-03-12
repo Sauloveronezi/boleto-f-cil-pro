@@ -1095,18 +1095,23 @@ export default function BoletosApi() {
             </p>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
-            <Select value={integracaoSelecionada} onValueChange={setIntegracaoSelecionada}>
-              <SelectTrigger className="w-[200px]"><SelectValue placeholder="Selecione integração" /></SelectTrigger>
-              <SelectContent>
-                {integracoes?.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={handleSincronizar} disabled={syncApi.isPending || !integracaoSelecionada} className="gap-2">
-              <RefreshCw className={`h-4 w-4 ${syncApi.isPending ? 'animate-spin' : ''}`} />
-              Sincronizar
-            </Button>
+            {isAdmin && (
+              <>
+                <Select value={integracaoSelecionada} onValueChange={setIntegracaoSelecionada}>
+                  <SelectTrigger className="w-[200px]"><SelectValue placeholder="Selecione integração" /></SelectTrigger>
+                  <SelectContent>
+                    {integracoes?.map((i) => (<SelectItem key={i.id} value={i.id}>{i.nome}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={handleSincronizar} disabled={syncApi.isPending || !integracaoSelecionada} className="gap-2"
+                  title="Importar novos boletos da API SAP/ERP">
+                  <RefreshCw className={`h-4 w-4 ${syncApi.isPending ? 'animate-spin' : ''}`} />
+                  Sincronizar
+                </Button>
+              </>
+            )}
             <Select value={bancoSelecionado} onValueChange={(v) => setBancoSelecionado(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filtrar banco" /></SelectTrigger>
+              <SelectTrigger className="w-[180px]" title="Filtrar boletos por banco emissor"><SelectValue placeholder="Filtrar banco" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os bancos</SelectItem>
                 {bancos?.filter(b => b.ativo).map((b) => (
@@ -1115,7 +1120,7 @@ export default function BoletosApi() {
               </SelectContent>
             </Select>
             <Select value={modeloSelecionado || 'b0000000-0000-0000-0000-000000000099'} onValueChange={setModeloSelecionado}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-[200px]" title="Modelo de layout para geração do PDF">
                 <Layers className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Modelo de layout" />
               </SelectTrigger>
@@ -1126,14 +1131,15 @@ export default function BoletosApi() {
               </SelectContent>
             </Select>
 
-
-            <Button className="gap-2" onClick={() => handleImprimirSelecionados()}
-              disabled={selecionados.size === 0 || (!canPrint && !isLoadingPermissoes)}
-              title={isLoadingPermissoes ? "Carregando..." : selecionados.size === 0 ? "Selecione boletos" : !canPrint ? "Sem permissão" : "Imprimir selecionados"}
-            >
-              {isLoadingPermissoes ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-              Imprimir ({selecionados.size})
-            </Button>
+            {canPrint && (
+              <Button className="gap-2" onClick={() => handleImprimirSelecionados()}
+                disabled={selecionados.size === 0}
+                title={selecionados.size === 0 ? "Selecione boletos na tabela para emitir" : `Gerar PDF com ${selecionados.size} boleto(s) selecionado(s)`}
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir ({selecionados.size})
+              </Button>
+            )}
 
             {/* Botão config - somente admin */}
             {isAdmin && <BoletosApiConfigDialog />}
