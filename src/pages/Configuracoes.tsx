@@ -73,6 +73,7 @@ export default function Configuracoes() {
         telefone: empresaDb.telefone || '',
         email: empresaDb.email || '',
         site: empresaDb.site || '',
+        logoUrl: empresaDb.logo_url || '',
       });
     }
   }, [empresaDb]);
