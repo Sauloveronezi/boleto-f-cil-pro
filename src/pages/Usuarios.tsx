@@ -173,7 +173,10 @@ export default function Usuarios() {
     );
   }
 
-  const usuariosPendentes = usuarios.filter(u => !u.ativo);
+  // Pendentes: nunca foram aprovados (sem data_aprovacao)
+  const usuariosPendentes = usuarios.filter(u => !u.ativo && !u.data_aprovacao);
+  // Bloqueados: foram aprovados antes, mas estão inativos agora
+  const usuariosBloqueados = usuarios.filter(u => !u.ativo && u.data_aprovacao);
   const usuariosAtivos = usuarios.filter(u => u.ativo);
 
   return (
