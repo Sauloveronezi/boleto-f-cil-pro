@@ -30,7 +30,7 @@ export default function Auth() {
       if (isPendente) {
         navigate('/aguardando-aprovacao', { replace: true });
       } else if (isAtivo) {
-        navigate('/', { replace: true });
+        navigate('/smart-redirect', { replace: true });
       }
     }
   }, [user, authLoading, usuarioLoading, isAtivo, isPendente, navigate]);
@@ -46,7 +46,7 @@ export default function Auth() {
 
   // Already logged in and active
   if (user && isAtivo) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/smart-redirect" replace />;
   }
 
   // Already logged in but pending
