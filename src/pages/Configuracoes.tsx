@@ -167,6 +167,10 @@ export default function Configuracoes() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <LogoUpload
+                    currentLogoPath={empresa.logoUrl || null}
+                    onLogoUploaded={(path) => atualizarEmpresa('logoUrl', path)}
+                  />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Razão Social *</Label>
