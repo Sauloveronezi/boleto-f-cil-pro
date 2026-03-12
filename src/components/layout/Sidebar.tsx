@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -12,20 +13,30 @@ import {
   CloudDownload,
   UserCog,
   Shield,
-  HelpCircle
+  HelpCircle,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissoes } from '@/hooks/usePermissoes';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 export function Sidebar() {
   const location = useLocation();
   const { canAccess } = usePermissoes();
+  const [collapsed, setCollapsed] = useState(false);
 
   const menuItems = [
     {
       title: 'Principal',
       items: [
-        ...(canAccess('dashboard') ? [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }] : [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }]),
+        { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
         ...(canAccess('boletos_api') ? [{ icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' }] : []),
       ]
     },
@@ -69,37 +80,70 @@ export function Sidebar() {
   ].filter(section => section.items.length > 0);
 
   return (
-    <aside className="w-64 bg-sidebar border-r border-sidebar-border min-h-[calc(100vh-60px)]">
-      <nav className="p-4 space-y-6">
-        {menuItems.map((section) => (
-          <div key={section.title}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-3">
-              {section.title}
-            </h3>
-            <ul className="space-y-1">
-              {section.items.map((item) => {
-                const isActive = location.pathname === item.href;
-                return (
-                  <li key={item.href}>
+    <TooltipProvider delayDuration={0}>
+      <aside
+        className={cn(
+          'bg-sidebar border-r border-sidebar-border min-h-[calc(100vh-60px)] transition-all duration-200 relative',
+          collapsed ? 'w-16' : 'w-52'
+        )}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute -right-3 top-3 z-10 h-6 w-6 rounded-full border border-sidebar-border bg-sidebar shadow-sm"
+          onClick={() => setCollapsed(!collapsed)}
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+        >
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+        </Button>
+
+        <nav className={cn('p-3 space-y-4', collapsed && 'px-2')}>
+          {menuItems.map((section) => (
+            <div key={section.title}>
+              {!collapsed && (
+                <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">
+                  {section.title}
+                </h3>
+              )}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => {
+                  const isActive = location.pathname === item.href;
+                  const linkContent = (
                     <Link
                       to={item.href}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                        'flex items-center gap-2.5 rounded-md text-sm font-medium transition-colors',
+                        collapsed ? 'justify-center px-2 py-2' : 'px-2.5 py-2',
                         isActive
                           ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                           : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                       )}
                     >
-                      <item.icon className="h-5 w-5" />
-                      {item.label}
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span className="truncate text-[13px]">{item.label}</span>}
                     </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
-    </aside>
+                  );
+
+                  if (collapsed) {
+                    return (
+                      <li key={item.href}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                          <TooltipContent side="right" className="text-xs">
+                            {item.label}
+                          </TooltipContent>
+                        </Tooltip>
+                      </li>
+                    );
+                  }
+
+                  return <li key={item.href}>{linkContent}</li>;
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </aside>
+    </TooltipProvider>
   );
 }
