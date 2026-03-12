@@ -30,7 +30,7 @@ export default function Auth() {
       if (isPendente) {
         navigate('/aguardando-aprovacao', { replace: true });
       } else if (isAtivo) {
-        navigate('/', { replace: true });
+        navigate('/smart-redirect', { replace: true });
       }
     }
   }, [user, authLoading, usuarioLoading, isAtivo, isPendente, navigate]);
