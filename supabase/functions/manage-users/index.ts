@@ -32,7 +32,7 @@ serve(async (req) => {
       }
     )
 
-    // Verificar autenticação (verify_jwt=false no config -> validar assinatura manualmente)
+    // Verificar autenticação com claims do token
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       throw new Error('Não autorizado')
@@ -43,34 +43,45 @@ serve(async (req) => {
       throw new Error('Não autorizado')
     }
 
-    const JWKS = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`))
+    const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
 
-    let authUserId: string | null = null
-    try {
-      const { payload } = await jwtVerify(token, JWKS, {
-        issuer: `${supabaseUrl}/auth/v1`,
-        audience: 'authenticated'
-      })
+    const { data: claimsData, error: claimsError } = await supabaseAuthClient.auth.getClaims(token)
+    const authUserId = claimsData?.claims?.sub
 
-      authUserId = typeof payload.sub === 'string' ? payload.sub : null
-    } catch {
+    if (claimsError || typeof authUserId !== 'string' || !authUserId) {
       throw new Error('Não autorizado')
     }
 
-    if (!authUserId) {
-      throw new Error('Não autorizado')
-    }
-
-    // Verificar se o usuário é Master (suporta múltiplas roles)
+    // Verificar se o usuário é Master (suporta múltiplas roles + fallback pelo perfil)
     const { data: rolesData, error: roleError } = await supabaseAdmin
       .from('vv_b_user_roles')
       .select('role')
       .eq('user_id', authUserId)
-      .is('deleted', null)
+      .or('deleted.is.null,deleted.eq.')
 
-    const roles = rolesData?.map(r => r.role) ?? []
+    const roles = rolesData?.map(r => String(r.role).toLowerCase()) ?? []
+    let isMaster = roles.includes('master')
 
-    if (roleError || !roles.includes('master')) {
+    if (!isMaster) {
+      const { data: usuarioData } = await supabaseAdmin
+        .from('vv_b_usuarios')
+        .select('perfil_acesso:vv_b_perfis_acesso(nome)')
+        .eq('user_id', authUserId)
+        .or('deleted.is.null,deleted.eq.')
+        .limit(1)
+        .maybeSingle()
+
+      const perfilNome = (usuarioData?.perfil_acesso as { nome?: string } | null)?.nome
+      isMaster = String(perfilNome || '').toLowerCase() === 'master'
+    }
+
+    if (roleError || !isMaster) {
       throw new Error('Apenas usuários Master podem gerenciar usuários')
     }
 
