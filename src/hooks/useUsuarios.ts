@@ -165,6 +165,23 @@ export function useUsuarios() {
     }
   });
 
+  const toggleNotificacoes = useMutation({
+    mutationFn: async ({ usuarioId, receber }: { usuarioId: string; receber: boolean }) => {
+      const { error } = await supabase
+        .from('vv_b_usuarios')
+        .update({ receber_notificacoes: receber } as any)
+        .eq('id', usuarioId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+      toast({ title: 'Notificações atualizadas' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     usuarios,
     isLoading,
@@ -172,6 +189,7 @@ export function useUsuarios() {
     aprovarUsuario,
     desativarUsuario,
     excluirUsuario,
-    atualizarPerfil
+    atualizarPerfil,
+    toggleNotificacoes
   };
 }
