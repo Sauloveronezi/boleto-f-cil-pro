@@ -66,12 +66,13 @@ const ESTADOS_BRASIL = [
 
 export default function BoletosApi() {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const [filtros, setFiltros] = useState<Record<string, string>>({});
   const [integracaoSelecionada, setIntegracaoSelecionada] = useState<string>('');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [ocultarEmitidos, setOcultarEmitidos] = useState(true);
   const [bancoSelecionado, setBancoSelecionado] = useState<string>('');
-  const [modeloSelecionado, setModeloSelecionado] = useState<string>('');
+  const [modeloSelecionado, setModeloSelecionado] = useState<string>('b0000000-0000-0000-0000-000000000099');
   const [imprimirFundo, setImprimirFundo] = useState(false);
   const [barcodeConflicts, setBarcodeConflicts] = useState<{ nota: string; antigo: string; novo: string }[]>([]);
   const [showBarcodeAlert, setShowBarcodeAlert] = useState(false);
