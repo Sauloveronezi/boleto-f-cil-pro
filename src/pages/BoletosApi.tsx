@@ -119,6 +119,25 @@ export default function BoletosApi() {
     }
   }, [boletos]);
 
+  // Aplicar filtros vindos do Dashboard via URL params
+  useEffect(() => {
+    const filtroParam = searchParams.get('filtro');
+    const zonaParam = searchParams.get('zona');
+    if (filtroParam === 'pendentes') {
+      setOcultarEmitidos(true);
+      setFiltrarComErros(false);
+    } else if (filtroParam === 'emitidos') {
+      setOcultarEmitidos(false);
+      // mostrar apenas emitidos - não há filtro direto, mas o usuário verá todos
+    } else if (filtroParam === 'erros') {
+      setOcultarEmitidos(false);
+      setFiltrarComErros(true);
+    }
+    if (zonaParam) {
+      setFiltros(f => ({ ...f, 'dyn_zonatransporte__multi': zonaParam }));
+    }
+  }, [searchParams]);
+
   const { data: templatesV2 } = useBoletoTemplates();
   const { data: templateFieldsV2 } = useBoletoTemplateFields(modeloSelecionado || undefined);
   const seedDefault = useSeedDefaultTemplate();
