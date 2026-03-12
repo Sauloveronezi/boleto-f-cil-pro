@@ -95,7 +95,7 @@ serve(async (req) => {
           ativo: true,
           perfil_acesso_id: perfilAcessoId,
           data_aprovacao: new Date().toISOString(),
-          aprovado_por: userId,
+          aprovado_por: authUserId,
           deleted: null
         }, { onConflict: 'user_id' })
 
