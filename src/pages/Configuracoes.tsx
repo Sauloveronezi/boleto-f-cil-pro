@@ -475,6 +475,11 @@ export default function Configuracoes() {
             </Card>
           </TabsContent>
           </Protected>
+
+          {/* Guia de Cores */}
+          <TabsContent value="cores">
+            <GuiaCoresConfig />
+          </TabsContent>
         </Tabs>
 
         {/* Botão Salvar */}
