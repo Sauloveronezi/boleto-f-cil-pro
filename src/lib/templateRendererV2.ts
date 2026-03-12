@@ -85,8 +85,8 @@ function drawBarcodeI25(page: PDFPage, value: string, x: number, y: number, w: n
     '0': 'nnwwn', '1': 'wnnnw', '2': 'nwnnw', '3': 'wwnnn', '4': 'nnwnw',
     '5': 'wnwnn', '6': 'nwwnn', '7': 'nnnww', '8': 'wnnwn', '9': 'nwnwn',
   };
-  const modules = { n: 1, w: 3 };
-  const quiet = modules.w * 2;
+  const modules = { n: 1, w: 2.5 };
+  const quiet = 4;
   const start = 'nnnn';
   const stop = 'wnn';
 
