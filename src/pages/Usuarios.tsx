@@ -258,6 +258,7 @@ export default function Usuarios() {
                   <TableHead>Email</TableHead>
                   <TableHead>Perfil</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Notificações</TableHead>
                   <TableHead>Aprovado em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
