@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5.9.6'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
 serve(async (req) => {
@@ -12,9 +13,17 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+      throw new Error('Configuração do servidor inválida')
+    }
+
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      supabaseUrl,
+      supabaseServiceRoleKey,
       {
         auth: {
           autoRefreshToken: false,
@@ -23,26 +32,32 @@ serve(async (req) => {
       }
     )
 
-    // Verificar autenticação
+    // Verificar autenticação (verify_jwt=false no config -> validar assinatura manualmente)
     const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       throw new Error('Não autorizado')
     }
 
-    const token = authHeader.replace('Bearer ', '')
+    const token = authHeader.replace('Bearer ', '').trim()
+    if (!token) {
+      throw new Error('Não autorizado')
+    }
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: { headers: { Authorization: authHeader } }
-      }
-    )
+    const JWKS = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`))
 
-    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token)
-    const authUserId = claimsData?.claims?.sub
+    let authUserId: string | null = null
+    try {
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: `${supabaseUrl}/auth/v1`,
+        audience: 'authenticated'
+      })
 
-    if (claimsError || !authUserId || typeof authUserId !== 'string') {
+      authUserId = typeof payload.sub === 'string' ? payload.sub : null
+    } catch {
+      throw new Error('Não autorizado')
+    }
+
+    if (!authUserId) {
       throw new Error('Não autorizado')
     }
 
@@ -54,7 +69,7 @@ serve(async (req) => {
       .is('deleted', null)
 
     const roles = rolesData?.map(r => r.role) ?? []
-    
+
     if (roleError || !roles.includes('master')) {
       throw new Error('Apenas usuários Master podem gerenciar usuários')
     }
@@ -136,7 +151,7 @@ serve(async (req) => {
 
       // Verificar se o usuário existe no Auth
       const { data: targetUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
-      
+
       if (getUserError || !targetUser?.user) {
         // Usuário não existe no Auth - buscar email na tabela vv_b_usuarios e re-criar
         const { data: usuarioDb, error: dbError } = await supabaseAdmin
@@ -187,9 +202,15 @@ serve(async (req) => {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    const status = errorMessage === 'Não autorizado'
+      ? 401
+      : errorMessage.includes('Apenas usuários Master')
+        ? 403
+        : 400
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
