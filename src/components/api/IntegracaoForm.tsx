@@ -172,8 +172,8 @@ export function IntegracaoForm({ integracao, onSave, onCamposDetectados }: Integ
           sample: data.sample_data
         });
         
-        // Notificar componente pai sobre campos detectados
-        if (onCamposDetectados && data.campos_detectados) {
+        // Notificar componente pai sobre campos detectados SOMENTE para novas integrações
+        if (!integracao && onCamposDetectados && data.campos_detectados) {
           onCamposDetectados(data.campos_detectados);
         }
 
