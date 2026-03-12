@@ -33,12 +33,16 @@ serve(async (req) => {
 
     // Verificar autenticação com claims do token
     const authHeader = req.headers.get('Authorization')
+    console.log('[manage-users] auth header present:', Boolean(authHeader))
+
     if (!authHeader?.startsWith('Bearer ')) {
+      console.error('[manage-users] missing or invalid bearer header')
       throw new Error('Não autorizado')
     }
 
     const token = authHeader.replace('Bearer ', '').trim()
     if (!token) {
+      console.error('[manage-users] empty bearer token')
       throw new Error('Não autorizado')
     }
 
@@ -54,6 +58,7 @@ serve(async (req) => {
     const authUserId = userData?.user?.id
 
     if (userError || !authUserId) {
+      console.error('[manage-users] token validation failed:', userError?.message ?? 'no user id')
       throw new Error('Não autorizado')
     }
 
