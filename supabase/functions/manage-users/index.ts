@@ -25,9 +25,11 @@ serve(async (req) => {
 
     // Verificar autenticação
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new Error('Não autorizado')
     }
+
+    const token = authHeader.replace('Bearer ', '')
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -37,8 +39,10 @@ serve(async (req) => {
       }
     )
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
-    if (userError || !user) {
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token)
+    const userId = claimsData?.claims?.sub
+
+    if (claimsError || !userId || typeof userId !== 'string') {
       throw new Error('Não autorizado')
     }
 
