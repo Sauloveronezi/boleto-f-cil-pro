@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Protected } from "@/components/auth/Protected";
+import { SmartRedirect } from "@/components/auth/SmartRedirect";
 import Dashboard from "./pages/Dashboard";
 import GerarBoletos from "./pages/GerarBoletos";
 import Clientes from "./pages/Clientes";
