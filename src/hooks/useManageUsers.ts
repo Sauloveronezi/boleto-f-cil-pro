@@ -63,6 +63,9 @@ export function useManageUsers() {
       });
 
       if (response.error) {
+        if ((response.data as any)?.error) {
+          throw new Error((response.data as any).error);
+        }
         throw new Error(response.error.message);
       }
 
