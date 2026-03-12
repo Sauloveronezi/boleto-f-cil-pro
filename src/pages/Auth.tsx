@@ -46,7 +46,7 @@ export default function Auth() {
 
   // Already logged in and active
   if (user && isAtivo) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/smart-redirect" replace />;
   }
 
   // Already logged in but pending
