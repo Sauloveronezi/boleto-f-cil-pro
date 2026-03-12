@@ -26,7 +26,6 @@ export function Sidebar() {
       title: 'Principal',
       items: [
         ...(canAccess('dashboard') ? [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }] : [{ icon: LayoutDashboard, label: 'Dashboard', href: '/' }]),
-        ...(canAccess('boletos') ? [{ icon: FileText, label: 'Gerar Boletos', href: '/gerar-boletos' }] : []),
         ...(canAccess('boletos_api') ? [{ icon: CloudDownload, label: 'Boletos via API', href: '/boletos-api' }] : []),
       ]
     },
