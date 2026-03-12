@@ -42,7 +42,7 @@ serve(async (req) => {
     const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token)
     const authUserId = claimsData?.claims?.sub
 
-    if (claimsError || !userId || typeof userId !== 'string') {
+    if (claimsError || !authUserId || typeof authUserId !== 'string') {
       throw new Error('Não autorizado')
     }
 
