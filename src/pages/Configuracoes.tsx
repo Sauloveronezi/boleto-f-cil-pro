@@ -95,6 +95,7 @@ export default function Configuracoes() {
       telefone: empresa.telefone,
       email: empresa.email,
       site: empresa.site,
+      logo_url: empresa.logoUrl || null,
       updated_at: new Date().toISOString(),
     };
 
