@@ -11,6 +11,7 @@ export interface Usuario {
   aprovado_por: string | null;
   data_aprovacao: string | null;
   perfil_acesso_id: string | null;
+  receber_notificacoes: boolean;
   created_at: string;
   updated_at: string;
   deleted: string | null;
