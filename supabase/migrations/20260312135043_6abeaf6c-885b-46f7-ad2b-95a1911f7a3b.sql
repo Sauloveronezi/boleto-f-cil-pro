@@ -1,0 +1,1 @@
+ALTER TABLE public.vv_b_usuarios ADD COLUMN IF NOT EXISTS receber_notificacoes boolean DEFAULT false;

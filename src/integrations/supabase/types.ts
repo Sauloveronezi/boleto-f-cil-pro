@@ -2641,6 +2641,7 @@ export type Database = {
           id: string
           nome: string | null
           perfil_acesso_id: string | null
+          receber_notificacoes: boolean | null
           updated_at: string | null
           user_id: string
           usuario_delete_id: string | null
@@ -2656,6 +2657,7 @@ export type Database = {
           id?: string
           nome?: string | null
           perfil_acesso_id?: string | null
+          receber_notificacoes?: boolean | null
           updated_at?: string | null
           user_id: string
           usuario_delete_id?: string | null
@@ -2671,6 +2673,7 @@ export type Database = {
           id?: string
           nome?: string | null
           perfil_acesso_id?: string | null
+          receber_notificacoes?: boolean | null
           updated_at?: string | null
           user_id?: string
           usuario_delete_id?: string | null
