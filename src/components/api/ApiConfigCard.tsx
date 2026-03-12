@@ -1,10 +1,18 @@
 import { useState } from 'react';
-import { RefreshCw, Globe, Clock, ChevronDown, ChevronUp, Play, Settings2, Check, AlertCircle } from 'lucide-react';
+import { RefreshCw, Globe, Clock, ChevronDown, ChevronUp, Play, Settings2, Check, AlertCircle, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -41,17 +49,29 @@ interface SyncLog {
   created_at: string;
 }
 
+interface CamposDiff {
+  novos: string[];
+  removidos: string[];
+  mantidos: string[];
+  integracaoId: string;
+  todosNovos: string[];
+}
+
 export function ApiConfigCard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { hasPermission } = usePermissoes();
   const [expandedIntegracao, setExpandedIntegracao] = useState<string | null>(null);
   const [syncingIntegracaoId, setSyncingIntegracaoId] = useState<string | null>(null);
+  const [camposDiff, setCamposDiff] = useState<CamposDiff | null>(null);
+  const [showDiffDialog, setShowDiffDialog] = useState(false);
+  const [loadingDiff, setLoadingDiff] = useState(false);
 
   const canCreate = hasPermission('boletos_api', 'criar');
   const canEdit = hasPermission('boletos_api', 'editar');
 
-  const handleAtualizarCampos = async (integracaoId: string) => {
+  // Detectar novos campos SEM aplicar - mostra preview das diferenças
+  const handleDetectarCampos = async (integracaoId: string) => {
     if (!canEdit) {
       toast({
         title: 'Sem permissão',
@@ -60,10 +80,11 @@ export function ApiConfigCard() {
       });
       return;
     }
+
+    setLoadingDiff(true);
     try {
-      // Buscar campos existentes antes de atualizar
       const integracaoAtual = integracoes?.find(i => i.id === integracaoId);
-      const camposExistentes = new Set<string>(integracaoAtual?.campos_api_detectados || []);
+      const camposAtuais = new Set<string>(integracaoAtual?.campos_api_detectados || []);
 
       const { data, error } = await supabase.functions.invoke('test-api-connection', {
         body: { integracao_id: integracaoId, limit: 1 }
@@ -72,25 +93,53 @@ export function ApiConfigCard() {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Falha ao testar API');
 
-      // Merge: manter campos existentes + adicionar novos detectados
-      const novosCampos: string[] = data.campos_detectados || [];
-      novosCampos.forEach((c: string) => camposExistentes.add(c));
-      const camposMerged = Array.from(camposExistentes);
+      const novosCamposApi: string[] = data.campos_detectados || [];
+      const novosCamposSet = new Set(novosCamposApi);
 
-      // Atualizar com lista mergeada
+      const novos = novosCamposApi.filter(c => !camposAtuais.has(c));
+      const removidos = Array.from(camposAtuais).filter(c => !novosCamposSet.has(c));
+      const mantidos = novosCamposApi.filter(c => camposAtuais.has(c));
+
+      // Merge: mantém todos os existentes + adiciona novos
+      const todosNovos = [...Array.from(camposAtuais), ...novos];
+
+      if (novos.length === 0 && removidos.length === 0) {
+        toast({
+          title: 'Campos atualizados',
+          description: `Nenhuma alteração detectada. ${mantidos.length} campos mantidos.`,
+        });
+      } else {
+        setCamposDiff({ novos, removidos, mantidos, integracaoId, todosNovos });
+        setShowDiffDialog(true);
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao detectar campos', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoadingDiff(false);
+    }
+  };
+
+  // Aplicar as mudanças de campos após confirmação do usuário
+  const handleAplicarCampos = async () => {
+    if (!camposDiff) return;
+
+    try {
       await supabase
         .from('vv_b_api_integracoes')
-        .update({ campos_api_detectados: camposMerged as any } as any)
-        .eq('id', integracaoId);
+        .update({ campos_api_detectados: camposDiff.todosNovos as any } as any)
+        .eq('id', camposDiff.integracaoId);
 
       toast({
         title: 'Campos atualizados',
-        description: `${camposMerged.length} campos disponíveis (${novosCampos.length} detectados).`
+        description: `${camposDiff.novos.length} novos campos adicionados. ${camposDiff.mantidos.length} mantidos.`
       });
 
       queryClient.invalidateQueries({ queryKey: ['api-integracoes'] });
     } catch (err: any) {
-      toast({ title: 'Erro ao atualizar campos', description: err.message, variant: 'destructive' });
+      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' });
+    } finally {
+      setShowDiffDialog(false);
+      setCamposDiff(null);
     }
   };
 
@@ -146,7 +195,6 @@ export function ApiConfigCard() {
     if (syncApi.isPending) return;
 
     try {
-      // Validar mapeamentos obrigatórios antes de sincronizar
       const { data: mapeamentos, error: mapError } = await supabase
         .from('vv_b_api_mapeamento_campos')
         .select('campo_destino')
@@ -156,7 +204,6 @@ export function ApiConfigCard() {
       if (mapError) throw mapError;
 
       const destinos = new Set((mapeamentos || []).map((m: any) => m.campo_destino));
-      // Somente numero_nota e numero_cobranca são obrigatórios - cliente NÃO é obrigatório
       const obrigatorios = [
         { key: 'numero_nota', label: 'Número da Nota' },
         { key: 'numero_cobranca', label: 'Número Cobrança' },
@@ -219,6 +266,73 @@ export function ApiConfigCard() {
 
   return (
     <div className="space-y-6">
+      {/* Dialog de preview de alterações nos campos detectados */}
+      <Dialog open={showDiffDialog} onOpenChange={setShowDiffDialog}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Alterações nos Campos Detectados
+            </DialogTitle>
+            <DialogDescription>
+              Revise as alterações antes de aplicar. Os mapeamentos existentes não serão afetados.
+            </DialogDescription>
+          </DialogHeader>
+
+          {camposDiff && (
+            <div className="space-y-4">
+              {camposDiff.novos.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">
+                    + {camposDiff.novos.length} Novos campos detectados
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {camposDiff.novos.map(c => (
+                      <Badge key={c} className="text-xs font-mono bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        + {c}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {camposDiff.removidos.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                    ⚠ {camposDiff.removidos.length} Campos não encontrados na API (serão mantidos)
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {camposDiff.removidos.map(c => (
+                      <Badge key={c} variant="outline" className="text-xs font-mono text-amber-700 dark:text-amber-400 border-amber-300">
+                        ~ {c}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Esses campos continuarão disponíveis para mapeamento.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-muted-foreground">
+                  {camposDiff.mantidos.length} Campos mantidos (sem alteração)
+                </h4>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiffDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleAplicarCampos} title="Aplicar as alterações detectadas nos campos">
+              Aplicar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Integrações de API</h2>
@@ -257,6 +371,7 @@ export function ApiConfigCard() {
                         size="sm"
                         onClick={() => handleSyncronizar(integracao.id, integracao.modo_demo)}
                         disabled={syncApi.isPending}
+                        title="Sincronizar dados da API com a tabela de boletos"
                       >
                         {syncApi.isPending && syncingIntegracaoId === integracao.id ? (
                           <RefreshCw className="h-4 w-4 animate-spin" />
@@ -267,7 +382,7 @@ export function ApiConfigCard() {
                       </Button>
                       <IntegracaoForm integracao={integracao as any} onSave={refetch} />
                       <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" title="Expandir detalhes da integração">
                           {expandedIntegracao === integracao.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </Button>
                       </CollapsibleTrigger>
@@ -292,7 +407,8 @@ export function ApiConfigCard() {
                       integracaoId={integracao.id}
                       integracaoNome={integracao.nome}
                       camposApiDetectados={integracao.campos_api_detectados || []}
-                      onRefreshCampos={() => handleAtualizarCampos(integracao.id)}
+                      onRefreshCampos={() => handleDetectarCampos(integracao.id)}
+                      loadingRefresh={loadingDiff}
                     />
                   </CardContent>
                 </CollapsibleContent>
