@@ -1093,15 +1093,14 @@ export default function BoletosApi() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={modeloSelecionado} onValueChange={setModeloSelecionado}>
+            <Select value={modeloSelecionado || 'b0000000-0000-0000-0000-000000000099'} onValueChange={setModeloSelecionado}>
               <SelectTrigger className="w-[200px]">
                 <Layers className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Modelo de layout" />
               </SelectTrigger>
               <SelectContent>
-                {templatesV2?.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name} {t.is_default && '⭐'}</SelectItem>))}
-                {modelos?.filter(m => !templatesV2?.some(t => t.id === m.id)).map((m) => (
-                  <SelectItem key={m.id} value={m.id}>{m.nome_modelo} (legado)</SelectItem>
+                {templatesV2?.filter(t => t.id === 'b0000000-0000-0000-0000-000000000099').map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name} {t.is_default && '⭐'}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
