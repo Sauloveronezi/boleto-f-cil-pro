@@ -284,6 +284,20 @@ export default function Usuarios() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={Boolean((usuario as any).receber_notificacoes)}
+                          onCheckedChange={(checked) => 
+                            toggleNotificacoes.mutate({ usuarioId: usuario.id, receber: checked })
+                          }
+                          disabled={!canEdit}
+                        />
+                        {(usuario as any).receber_notificacoes && (
+                          <Bell className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       {usuario.data_aprovacao 
                         ? format(new Date(usuario.data_aprovacao), "dd/MM/yyyy", { locale: ptBR })
                         : '-'}
