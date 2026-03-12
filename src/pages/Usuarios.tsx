@@ -13,7 +13,7 @@ import { useUsuarios, Usuario } from '@/hooks/useUsuarios';
 import { usePerfisAcesso } from '@/hooks/usePerfisAcesso';
 import { usePermissoes } from '@/hooks/usePermissoes';
 import { useManageUsers } from '@/hooks/useManageUsers';
-import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound, Bell } from 'lucide-react';
+import { Check, X, UserCog, Trash2, Loader2, Shield, ShieldCheck, ShieldAlert, Plus, KeyRound, Bell, Ban, UserX } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -173,7 +173,10 @@ export default function Usuarios() {
     );
   }
 
-  const usuariosPendentes = usuarios.filter(u => !u.ativo);
+  // Pendentes: nunca foram aprovados (sem data_aprovacao)
+  const usuariosPendentes = usuarios.filter(u => !u.ativo && !u.data_aprovacao);
+  // Bloqueados: foram aprovados antes, mas estão inativos agora
+  const usuariosBloqueados = usuarios.filter(u => !u.ativo && u.data_aprovacao);
   const usuariosAtivos = usuarios.filter(u => u.ativo);
 
   return (
@@ -234,6 +237,79 @@ export default function Usuarios() {
                             Aprovar
                           </Button>
                         )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {usuariosBloqueados.length > 0 && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Ban className="h-5 w-5" />
+                Usuários Bloqueados ({usuariosBloqueados.length})
+              </CardTitle>
+              <CardDescription>
+                Usuários que tiveram o acesso bloqueado
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Perfil anterior</TableHead>
+                    <TableHead>Bloqueado desde</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {usuariosBloqueados.map((usuario) => (
+                    <TableRow key={usuario.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <UserX className="h-4 w-4 text-destructive" />
+                          {usuario.nome || '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell>{usuario.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {usuario.perfil_acesso?.nome || 'Sem perfil'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {usuario.updated_at
+                          ? format(new Date(usuario.updated_at), "dd/MM/yyyy", { locale: ptBR })
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleAprovar(usuario)}
+                              className="gap-1"
+                            >
+                              <Check className="h-4 w-4" />
+                              Reativar
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleExcluir(usuario)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
