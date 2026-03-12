@@ -47,7 +47,7 @@ serve(async (req) => {
       .from('vv_b_user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .or('deleted.is.null,deleted.eq.')
+      .is('deleted', null)
 
     const roles = rolesData?.map(r => r.role) ?? []
     
