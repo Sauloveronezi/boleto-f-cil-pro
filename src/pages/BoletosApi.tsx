@@ -352,6 +352,26 @@ export default function BoletosApi() {
         if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return false;
       }
 
+      // Multi-select por checkboxes (ex.: Zona Transp)
+      const multiSelectKeys = Object.keys(filtros).filter(k => k.endsWith('__multi'));
+      for (const key of multiSelectKeys) {
+        const selecionadosMulti = (filtros[key] || '')
+          .split('||')
+          .map(v => v.trim())
+          .filter(Boolean);
+
+        if (selecionadosMulti.length === 0) continue;
+
+        const baseChave = key.replace(/__multi$/, '');
+        const valorLinha = baseChave === 'transportadora' || baseChave === 'dyn_zonatransporte'
+          ? getTransportadora(b)
+          : getCellValue(b, baseChave);
+
+        const valorNormalizado = String(valorLinha || '').trim().toLowerCase();
+        const encontrado = selecionadosMulti.some(item => item.toLowerCase() === valorNormalizado);
+        if (!encontrado) return false;
+      }
+
       // Generic range filters for _de / _ate keys
       const rangeFilterKeys = Object.keys(filtros).filter(k => (k.endsWith('_de') || k.endsWith('_ate')) && filtros[k]);
       for (const key of rangeFilterKeys) {
