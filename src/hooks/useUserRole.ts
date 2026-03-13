@@ -20,7 +20,7 @@ export function useUserRole() {
         .from('vv_b_user_roles')
         .select('role')
         .eq('user_id', user.id)
-        .is('deleted', null);
+        .or('deleted.is.null,deleted.eq.');
 
       if (error) {
         console.error('Erro ao buscar roles:', error);
@@ -51,7 +51,7 @@ export function useUserRole() {
         .from('vv_b_user_roles')
         .select('id')
         .in('role', ['admin', 'master'])
-        .is('deleted', null)
+        .or('deleted.is.null,deleted.eq.')
         .limit(1);
 
       if (error) {
@@ -74,7 +74,7 @@ export function useUserRole() {
         .from('vv_b_user_roles')
         .select('id')
         .in('role', ['admin', 'master'])
-        .is('deleted', null)
+        .or('deleted.is.null,deleted.eq.')
         .limit(1);
 
       if (existingAdmin && existingAdmin.length > 0) {

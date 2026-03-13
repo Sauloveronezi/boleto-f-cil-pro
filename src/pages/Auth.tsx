@@ -157,6 +157,24 @@ export default function Auth() {
         title: 'Cadastro realizado!',
         description: 'Verifique seu e-mail para confirmar a conta.',
       });
+
+      // Notificar administradores sobre novo cadastro
+      try {
+        const notifyResponse = await supabase.functions.invoke('notify-new-user', {
+          body: { email, nome: email.split('@')[0] },
+        });
+
+        if (notifyResponse.error) {
+          throw notifyResponse.error;
+        }
+
+        const notifyData = notifyResponse.data as { success?: boolean; error?: string } | null;
+        if (notifyData?.success === false) {
+          throw new Error(notifyData.error || 'Falha ao enviar notificações de novo usuário');
+        }
+      } catch (e) {
+        console.warn('[Auth] Falha ao notificar admins:', e);
+      }
     }
   };
 
