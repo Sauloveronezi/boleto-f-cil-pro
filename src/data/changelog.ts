@@ -11,6 +11,15 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.4.2',
+    date: '2026-03-13',
+    changes: [
+      { type: 'fix', description: 'Correção crítica: geração de boletos multi-banco agora agrupa por código do banco e aplica layout/configuração corretos para cada grupo' },
+      { type: 'feat', description: 'PDFs separados por banco ao imprimir boletos de bancos diferentes simultaneamente' },
+      { type: 'refactor', description: 'Refatoração do fluxo de impressão: mapeamento de dados usa banco/configuração individual por boleto ao invés de usar apenas o primeiro' },
+    ]
+  },
+  {
     version: '0.4.1',
     date: '2026-03-13',
     changes: [
