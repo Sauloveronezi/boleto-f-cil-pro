@@ -11,6 +11,17 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.4.1',
+    date: '2026-03-13',
+    changes: [
+      { type: 'feat', description: 'Filtros numéricos com intervalo De → Até para campos como Nº Nota (BR_NFeNumber), Nº Cobrança, Nosso Número, Documento Contábil e valores monetários' },
+      { type: 'feat', description: 'Normalização numérica inteligente: busca por "2429" encontra registros formatados como "000002429-1", ignorando zeros à esquerda e sufixos' },
+      { type: 'feat', description: 'Detecção automática de campos numéricos por nome (amount, number, numero) para aplicar filtros de intervalo' },
+      { type: 'fix', description: 'Correção de filtro CNPJ para ignorar formatação (pontos, barras, traços) na comparação' },
+      { type: 'refactor', description: 'Refatoração do motor de filtros para tratamento genérico de intervalos numéricos e datas' },
+    ]
+  },
+  {
     version: '0.4.0',
     date: '2026-02-24',
     changes: [

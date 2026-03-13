@@ -182,6 +182,7 @@ export default function BoletosApi() {
       if (error && error.code !== 'PGRST116') {
         console.error('Erro ao carregar dados da empresa:', error);
       }
+      console.log('[BoletosApi] empresa carregada:', data?.razao_social, data?.cnpj);
       return data;
     }
   });
@@ -313,6 +314,19 @@ export default function BoletosApi() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
   };
 
+  // Campos considerados numéricos para filtro De→Até
+  const NUMERIC_FILTER_KEYS = new Set([
+    'valor', 'numero_nota', 'numero_cobranca', 'nosso_numero',
+    'br_nfenumber', 'br_nfnumber', 'billingdocument', 'doc_contabil',
+    'companycode', 'empresa', 'cod_barras', 'dyn_conta',
+    'amountintransactioncurrency', 'amountinfunctionalcurrency',
+  ]);
+
+  const isNumericFilterKey = (chave: string) => {
+    const lower = chave.toLowerCase();
+    return NUMERIC_FILTER_KEYS.has(lower) || lower.includes('amount') || lower.includes('number') || lower.includes('numero');
+  };
+
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (ocultarEmitidos && b.cod_barras_calculado) return false;
@@ -338,34 +352,17 @@ export default function BoletosApi() {
         if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return false;
       }
 
-      // Filtro CNPJ (texto livre)
+      // Filtro CNPJ (texto livre, ignora formatação)
       if (filtros.cnpj) {
-        const cnpj = getCnpj(b);
-        if (!String(cnpj).includes(filtros.cnpj)) return false;
+        const cnpj = String(getCnpj(b)).replace(/\D/g, '');
+        const cnpjFiltro = String(filtros.cnpj).replace(/\D/g, '');
+        if (!cnpj.includes(cnpjFiltro)) return false;
       }
 
       // Filtro cliente nome (texto livre)
       if (filtros.clienteNome) {
         const nome = b.dyn_nome_do_cliente || b.cliente?.razao_social || '';
         if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return false;
-      }
-
-      // Range filters para número da nota
-      if (filtros.numero_nota_de) {
-        const val = String(b.numero_nota || '');
-        if (val < filtros.numero_nota_de) return false;
-      }
-      if (filtros.numero_nota_ate) {
-        const val = String(b.numero_nota || '');
-        if (val > filtros.numero_nota_ate) return false;
-      }
-
-      // Range filters para valor
-      if (filtros.valor_de) {
-        if ((b.valor || 0) < parseFloat(filtros.valor_de)) return false;
-      }
-      if (filtros.valor_ate) {
-        if ((b.valor || 0) > parseFloat(filtros.valor_ate)) return false;
       }
 
       // Multi-select por checkboxes (ex.: Zona Transp)
@@ -388,28 +385,39 @@ export default function BoletosApi() {
         if (!encontrado) return false;
       }
 
-      // Date range filters - generic for any date field
-      const dateFilterKeys = Object.keys(filtros).filter(k => k.endsWith('_de') || k.endsWith('_ate'));
-      for (const key of dateFilterKeys) {
+      // Generic range filters for _de / _ate keys
+      const rangeFilterKeys = Object.keys(filtros).filter(k => (k.endsWith('_de') || k.endsWith('_ate')) && filtros[k]);
+      for (const key of rangeFilterKeys) {
         const val = filtros[key];
         if (!val) continue;
         const isAte = key.endsWith('_ate');
         const baseChave = isAte ? key.replace(/_ate$/, '') : key.replace(/_de$/, '');
 
-        const rawVal = getCellValue(b, baseChave);
-        if (rawVal === '-') continue;
-
-        let dateStr = '';
-        if (typeof rawVal === 'string' && rawVal.includes('/')) {
-          const parts = rawVal.split('/');
-          if (parts.length === 3) dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        // Decide if this is a numeric or date filter
+        if (isNumericFilterKey(baseChave)) {
+          // Numeric comparison — strip non-digits from both sides
+          const rawVal = getCellValue(b, baseChave);
+          const numVal = parseFloat(String(rawVal === '-' ? '' : (b[baseChave] ?? getNested(b, `dados_extras.${baseChave}`) ?? rawVal ?? '')).replace(/[^\d]/g, '')) || 0;
+          const numFiltro = parseFloat(String(val).replace(/[^\d]/g, '')) || 0;
+          if (isAte && numVal > numFiltro) return false;
+          if (!isAte && numVal < numFiltro) return false;
         } else {
-          dateStr = String(b[baseChave] || getNested(b, `dados_extras.${baseChave}`) || '').substring(0, 10);
-        }
+          // Date comparison
+          const rawVal = getCellValue(b, baseChave);
+          if (rawVal === '-') continue;
 
-        if (!dateStr) continue;
-        if (isAte && dateStr > val) return false;
-        if (!isAte && dateStr < val) return false;
+          let dateStr = '';
+          if (typeof rawVal === 'string' && rawVal.includes('/')) {
+            const parts = rawVal.split('/');
+            if (parts.length === 3) dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          } else {
+            dateStr = String(b[baseChave] || getNested(b, `dados_extras.${baseChave}`) || '').substring(0, 10);
+          }
+
+          if (!dateStr) continue;
+          if (isAte && dateStr > val) return false;
+          if (!isAte && dateStr < val) return false;
+        }
       }
 
       // Generic text filters for any other configured filter
@@ -877,6 +885,7 @@ export default function BoletosApi() {
     }
   };
 
+
   // Detect filter type from key
   const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'transportadora' | 'text' | 'cnpj' | 'cliente' => {
     const lower = chave.toLowerCase();
@@ -892,7 +901,7 @@ export default function BoletosApi() {
     ) return 'transportadora';
     if (lower === 'cnpj' || lower.includes('taxnumber') || lower.includes('cnpj')) return 'cnpj';
     if (lower === 'clienteid' || lower === 'cliente' || lower === 'dyn_nome_do_cliente' || lower.includes('nome')) return 'cliente';
-    if (lower === 'valor' || lower.includes('amount') || lower === 'numero_nota' || lower === 'numero_cobranca' || lower === 'nosso_numero') return 'number';
+    if (isNumericFilterKey(lower)) return 'number';
     return 'text';
   };
 
