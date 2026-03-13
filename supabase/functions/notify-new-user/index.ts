@@ -134,7 +134,19 @@ const handler = async (req: Request): Promise<Response> => {
       throw lastError ?? new Error(`Falha ao enviar para ${adminEmail}`);
     };
 
-    const results = await Promise.allSettled(emailList.map(sendNotificationEmail));
+    const results: PromiseSettledResult<{ adminEmail: string; responseBody: string }>[] = [];
+
+    for (const adminEmail of emailList) {
+      const result = await sendNotificationEmail(adminEmail)
+        .then((value) => ({ status: "fulfilled", value }) as PromiseFulfilledResult<{ adminEmail: string; responseBody: string }>)
+        .catch((reason) => ({ status: "rejected", reason }) as PromiseRejectedResult);
+
+      results.push(result);
+
+      if (emailList.length > 1) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
 
     const failedResults = results
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
