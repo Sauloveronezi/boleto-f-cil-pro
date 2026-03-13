@@ -237,16 +237,29 @@ export default function Usuarios() {
                         {format(new Date(usuario.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleAprovar(usuario)}
-                            className="gap-1"
-                          >
-                            <Check className="h-4 w-4" />
-                            Aprovar
-                          </Button>
-                        )}
+                        <div className="flex justify-end gap-2">
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleAprovar(usuario)}
+                              className="gap-1"
+                            >
+                              <Check className="h-4 w-4" />
+                              Aprovar
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleReprovar(usuario)}
+                              className="gap-1"
+                            >
+                              <X className="h-4 w-4" />
+                              Reprovar
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
