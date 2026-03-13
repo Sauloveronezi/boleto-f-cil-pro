@@ -88,7 +88,7 @@ export default function ReferenciaVersoes() {
                           <span className="text-sm text-foreground/90 leading-relaxed">
                             {change.description}
                           </span>
-                          {isMaster && change.technical && (
+                          {canViewTechnical && change.technical && (
                             <span className="shrink-0 mt-0.5" aria-label="Visível apenas para Master">
                               <ShieldAlert className="h-4 w-4 text-muted-foreground" />
                             </span>

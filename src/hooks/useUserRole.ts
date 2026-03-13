@@ -74,7 +74,7 @@ export function useUserRole() {
         .from('vv_b_user_roles')
         .select('id')
         .in('role', ['admin', 'master'])
-        .is('deleted', null)
+        .or('deleted.is.null,deleted.eq.')
         .limit(1);
 
       if (existingAdmin && existingAdmin.length > 0) {
