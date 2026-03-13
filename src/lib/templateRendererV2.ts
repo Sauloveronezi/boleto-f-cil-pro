@@ -302,8 +302,8 @@ export async function renderBoletoV2(
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
       const labelText = field.label || '';
       if (labelText && !field.key.startsWith('mask_')) {
-        const labelFont = fonts.helvetica;
-        const labelColor = rgb(0.4, 0.4, 0.4);
+        const labelFont = fonts.helveticaBold;
+        const labelColor = rgb(0.15, 0.15, 0.15);
         const maxLabelW = labelFont.widthOfTextAtSize(labelText, labelSize);
         const truncLabel = maxLabelW > w - 2 ? labelText.substring(0, Math.floor(labelText.length * (w - 2) / maxLabelW)) : labelText;
         if (truncLabel) {
