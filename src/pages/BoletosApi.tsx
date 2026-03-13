@@ -339,10 +339,11 @@ export default function BoletosApi() {
         if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return false;
       }
 
-      // Filtro CNPJ (texto livre)
+      // Filtro CNPJ (texto livre, ignora formatação)
       if (filtros.cnpj) {
-        const cnpj = getCnpj(b);
-        if (!String(cnpj).includes(filtros.cnpj)) return false;
+        const cnpj = String(getCnpj(b)).replace(/\D/g, '');
+        const cnpjFiltro = String(filtros.cnpj).replace(/\D/g, '');
+        if (!cnpj.includes(cnpjFiltro)) return false;
       }
 
       // Filtro cliente nome (texto livre)
