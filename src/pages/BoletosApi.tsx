@@ -605,35 +605,11 @@ export default function BoletosApi() {
     return dados;
   };
 
-  // ===== Gerar PDF para um grupo de boletos do MESMO banco =====
-  const gerarPDFParaGrupoBanco = async (
+  // ===== Gerar PDF bytes para um grupo de boletos do MESMO banco (sem download) =====
+  const gerarPDFBytesParaGrupoBanco = async (
     bancoObj: any, configObj: any,
     boletosDoGrupo: any[], dadosDoGrupo: any[],
-    forceOverride: boolean
-  ) => {
-    // ===== Verificar conflito de código de barras =====
-    if (!forceOverride) {
-      const conflicts: { nota: string; antigo: string; novo: string }[] = [];
-      for (let i = 0; i < boletosDoGrupo.length; i++) {
-        const boleto = boletosDoGrupo[i];
-        const novoBarras = dadosDoGrupo[i]?.codigo_barras;
-        const barrasExistente = (boleto as any).cod_barras_calculado;
-        if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
-          conflicts.push({
-            nota: boleto.numero_nota || boleto.id,
-            antigo: String(barrasExistente),
-            novo: novoBarras,
-          });
-        }
-      }
-      if (conflicts.length > 0) {
-        setBarcodeConflicts(conflicts);
-        setPendingPrintAction(() => () => handleImprimirSelecionados(true));
-        setShowBarcodeAlert(true);
-        return;
-      }
-    }
-
+  ): Promise<Uint8Array | null> => {
     // Tentar template V2
     const UNIVERSAL_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000099';
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
@@ -656,10 +632,8 @@ export default function BoletosApi() {
               ? { usarFundo: true }
               : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
             const pdfBytes = await renderBoletosV2(templateV2, parsedFields, dadosDoGrupo, renderOpts);
-            const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-            downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
             await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-            return;
+            return pdfBytes;
           }
         } catch (e) {
           console.warn('[BoletosApi] Falha ao re-seed universal:', e);
@@ -669,17 +643,15 @@ export default function BoletosApi() {
         ? { usarFundo: true }
         : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
       const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosDoGrupo, renderOpts);
-      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
       await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-      return;
+      return pdfBytes;
     }
 
     // Fallback modelo legado
     if (modeloSelecionado) {
       const modelo = modelos?.find(m => m.id === modeloSelecionado);
-      if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return; }
-      if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return; }
+      if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return null; }
+      if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return null; }
       const { data: modeloCompleto, error: modeloError } = await supabase
         .from('vv_b_modelos_boleto').select('campos_mapeados').eq('id', modeloSelecionado).single();
       if (modeloError) throw new Error('Erro ao carregar modelo');
@@ -695,13 +667,11 @@ export default function BoletosApi() {
         espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
       })) || [];
       const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosDoGrupo, undefined, imprimirFundo);
-      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      downloadPDF(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
       await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-      return;
+      return pdfBytes;
     }
 
-    // Fallback sem modelo
+    // Fallback sem modelo — usa geração legada (retorna null, faz download direto)
     const notasParaImprimir = boletosDoGrupo.map((boleto: any) => ({
       id: boleto.id, numero_nota: boleto.numero_nota,
       serie: boleto.dados_extras?.serie || '1', codigo_cliente: boleto.cliente_id || '',
@@ -722,6 +692,7 @@ export default function BoletosApi() {
         index === self.findIndex((c) => c.id === cliente.id)
       );
     gerarPDFBoletos(notasParaImprimir, clientesParaImprimir, bancoObj, configObj, 'API_CDS', 'arquivo_unico');
+    return null; // fallback faz download direto
   };
 
   const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[], bancoObj?: any) => {
