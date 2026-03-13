@@ -774,9 +774,10 @@ export default function BoletosApi() {
       return;
     }
 
-    // Processar cada grupo de banco separadamente
+    // Processar cada grupo de banco e coletar bytes para PDF único
     let totalGerados = 0;
     let totalInvalidos = 0;
+    const allPdfBytes: Uint8Array[] = [];
 
     for (const [, grupo] of gruposPorBanco) {
       const { banco: bancoObj, configuracao: configObj, boletos: boletosDoGrupo } = grupo;
