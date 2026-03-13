@@ -885,18 +885,6 @@ export default function BoletosApi() {
     }
   };
 
-  // Campos considerados numéricos para filtro De→Até
-  const NUMERIC_FILTER_KEYS = new Set([
-    'valor', 'numero_nota', 'numero_cobranca', 'nosso_numero',
-    'br_nfenumber', 'br_nfnumber', 'billingdocument', 'doc_contabil',
-    'companycode', 'empresa', 'cod_barras', 'dyn_conta',
-    'amountintransactioncurrency', 'amountinfunctionalcurrency',
-  ]);
-
-  const isNumericFilterKey = (chave: string) => {
-    const lower = chave.toLowerCase();
-    return NUMERIC_FILTER_KEYS.has(lower) || lower.includes('amount') || lower.includes('number') || lower.includes('numero');
-  };
 
   // Detect filter type from key
   const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'transportadora' | 'text' | 'cnpj' | 'cliente' => {
