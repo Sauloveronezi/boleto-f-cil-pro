@@ -83,6 +83,13 @@ export default function Usuarios() {
     setDialogOpen(true);
   };
 
+  const handleReprovar = (usuario: Usuario) => {
+    if (!canDelete) return;
+    setSelectedUsuario(usuario);
+    setDialogMode('reprovar');
+    setDialogOpen(true);
+  };
+
   const handleCriarUsuario = () => {
     if (!canCreate) return;
     setSelectedUsuario(null);
