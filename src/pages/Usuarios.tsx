@@ -558,22 +558,24 @@ export default function Usuarios() {
               </Button>
               <Button 
                 onClick={handleConfirmar}
-                variant={dialogMode === 'excluir' ? 'destructive' : 'default'}
+                variant={dialogMode === 'excluir' || dialogMode === 'reprovar' ? 'destructive' : 'default'}
                 disabled={
                   (dialogMode === 'criar' && (!novoEmail || !novaSenha || novaSenha.length < 6 || !selectedPerfilId)) ||
                   (dialogMode === 'senha' && (!novaSenha || novaSenha.length < 6)) ||
                   ((dialogMode === 'aprovar' || dialogMode === 'editar') && !selectedPerfilId) ||
                   aprovarUsuario.isPending ||
+                  reprovarUsuario.isPending ||
                   atualizarPerfil.isPending ||
                   excluirUsuario.isPending ||
                   criarUsuario.isPending ||
                   alterarSenha.isPending
                 }
               >
-                {(aprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending || criarUsuario.isPending || alterarSenha.isPending) && (
+                {(aprovarUsuario.isPending || reprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending || criarUsuario.isPending || alterarSenha.isPending) && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 {dialogMode === 'aprovar' && 'Aprovar'}
+                {dialogMode === 'reprovar' && 'Reprovar'}
                 {dialogMode === 'editar' && 'Salvar'}
                 {dialogMode === 'excluir' && 'Excluir'}
                 {dialogMode === 'criar' && 'Criar'}
