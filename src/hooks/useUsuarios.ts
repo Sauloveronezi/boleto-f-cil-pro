@@ -42,6 +42,12 @@ export function useUsuarios() {
     }
   });
 
+  const getAuthenticatedUserId = async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return data.user?.id ?? null;
+  };
+
   const aprovarUsuario = useMutation({
     mutationFn: async ({ 
       usuarioId, 
@@ -108,12 +114,15 @@ export function useUsuarios() {
 
   const excluirUsuario = useMutation({
     mutationFn: async (usuarioId: string) => {
+      const usuarioDeleteId = await getAuthenticatedUserId();
+
       const { error } = await supabase
         .from('vv_b_usuarios')
         .update({
           deleted: 'X',
-          data_delete: new Date().toISOString()
-        })
+          data_delete: new Date().toISOString(),
+          usuario_delete_id: usuarioDeleteId
+        } as any)
         .eq('id', usuarioId);
       
       if (error) throw error;
@@ -128,6 +137,37 @@ export function useUsuarios() {
     onError: (error: Error) => {
       toast({
         title: 'Erro ao excluir usuário',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  });
+
+  const reprovarUsuario = useMutation({
+    mutationFn: async (usuarioId: string) => {
+      const usuarioDeleteId = await getAuthenticatedUserId();
+
+      const { error } = await supabase
+        .from('vv_b_usuarios')
+        .update({
+          deleted: 'X',
+          data_delete: new Date().toISOString(),
+          usuario_delete_id: usuarioDeleteId
+        } as any)
+        .eq('id', usuarioId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] });
+      toast({
+        title: 'Usuário reprovado',
+        description: 'O usuário foi reprovado e removido da fila de aprovação.'
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Erro ao reprovar usuário',
         description: error.message,
         variant: 'destructive'
       });
@@ -188,6 +228,7 @@ export function useUsuarios() {
     error,
     aprovarUsuario,
     desativarUsuario,
+    reprovarUsuario,
     excluirUsuario,
     atualizarPerfil,
     toggleNotificacoes

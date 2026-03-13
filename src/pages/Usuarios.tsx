@@ -18,14 +18,14 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function Usuarios() {
-  const { usuarios, isLoading, aprovarUsuario, desativarUsuario, excluirUsuario, atualizarPerfil, toggleNotificacoes } = useUsuarios();
+  const { usuarios, isLoading, aprovarUsuario, desativarUsuario, reprovarUsuario, excluirUsuario, atualizarPerfil, toggleNotificacoes } = useUsuarios();
   const { perfis } = usePerfisAcesso();
-  const { hasPermission, isMaster, isLoading: isLoadingPermissoes } = usePermissoes();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const { criarUsuario, alterarSenha } = useManageUsers();
 
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
+  const [dialogMode, setDialogMode] = useState<'aprovar' | 'reprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
   const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
   
   const [novoEmail, setNovoEmail] = useState('');
@@ -83,6 +83,13 @@ export default function Usuarios() {
     setDialogOpen(true);
   };
 
+  const handleReprovar = (usuario: Usuario) => {
+    if (!canDelete) return;
+    setSelectedUsuario(usuario);
+    setDialogMode('reprovar');
+    setDialogOpen(true);
+  };
+
   const handleCriarUsuario = () => {
     if (!canCreate) return;
     setSelectedUsuario(null);
@@ -137,6 +144,9 @@ export default function Usuarios() {
         usuarioId: selectedUsuario.id,
         perfilAcessoId: selectedPerfilId
       });
+    } else if (dialogMode === 'reprovar') {
+      if (!canDelete) return;
+      await reprovarUsuario.mutateAsync(selectedUsuario.id);
     } else if (dialogMode === 'editar') {
       if (!canEdit) return;
       await atualizarPerfil.mutateAsync({
@@ -227,16 +237,29 @@ export default function Usuarios() {
                         {format(new Date(usuario.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canEdit && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleAprovar(usuario)}
-                            className="gap-1"
-                          >
-                            <Check className="h-4 w-4" />
-                            Aprovar
-                          </Button>
-                        )}
+                        <div className="flex justify-end gap-2">
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleAprovar(usuario)}
+                              className="gap-1"
+                            >
+                              <Check className="h-4 w-4" />
+                              Aprovar
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleReprovar(usuario)}
+                              className="gap-1"
+                            >
+                              <X className="h-4 w-4" />
+                              Reprovar
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -431,6 +454,7 @@ export default function Usuarios() {
             <DialogHeader>
               <DialogTitle>
                 {dialogMode === 'aprovar' && 'Aprovar Usuário'}
+                {dialogMode === 'reprovar' && 'Reprovar Usuário'}
                 {dialogMode === 'editar' && 'Editar Usuário'}
                 {dialogMode === 'excluir' && 'Excluir Usuário'}
                 {dialogMode === 'criar' && 'Novo Usuário'}
@@ -438,6 +462,7 @@ export default function Usuarios() {
               </DialogTitle>
               <DialogDescription>
                 {dialogMode === 'aprovar' && `Defina o perfil de acesso para ${selectedUsuario?.email}`}
+                {dialogMode === 'reprovar' && `Tem certeza que deseja reprovar ${selectedUsuario?.email}?`}
                 {dialogMode === 'editar' && `Altere o perfil de acesso de ${selectedUsuario?.email}`}
                 {dialogMode === 'excluir' && `Tem certeza que deseja excluir ${selectedUsuario?.email}?`}
                 {dialogMode === 'criar' && 'Preencha os dados do novo usuário'}
@@ -533,22 +558,24 @@ export default function Usuarios() {
               </Button>
               <Button 
                 onClick={handleConfirmar}
-                variant={dialogMode === 'excluir' ? 'destructive' : 'default'}
+                variant={dialogMode === 'excluir' || dialogMode === 'reprovar' ? 'destructive' : 'default'}
                 disabled={
                   (dialogMode === 'criar' && (!novoEmail || !novaSenha || novaSenha.length < 6 || !selectedPerfilId)) ||
                   (dialogMode === 'senha' && (!novaSenha || novaSenha.length < 6)) ||
                   ((dialogMode === 'aprovar' || dialogMode === 'editar') && !selectedPerfilId) ||
                   aprovarUsuario.isPending ||
+                  reprovarUsuario.isPending ||
                   atualizarPerfil.isPending ||
                   excluirUsuario.isPending ||
                   criarUsuario.isPending ||
                   alterarSenha.isPending
                 }
               >
-                {(aprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending || criarUsuario.isPending || alterarSenha.isPending) && (
+                {(aprovarUsuario.isPending || reprovarUsuario.isPending || atualizarPerfil.isPending || excluirUsuario.isPending || criarUsuario.isPending || alterarSenha.isPending) && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 {dialogMode === 'aprovar' && 'Aprovar'}
+                {dialogMode === 'reprovar' && 'Reprovar'}
                 {dialogMode === 'editar' && 'Salvar'}
                 {dialogMode === 'excluir' && 'Excluir'}
                 {dialogMode === 'criar' && 'Criar'}

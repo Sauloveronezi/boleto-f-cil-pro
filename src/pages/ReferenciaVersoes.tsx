@@ -4,10 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { changelogData, APP_VERSION } from '@/data/changelog';
 import { Tag, Calendar, ShieldAlert } from 'lucide-react';
-import { useUserRole } from '@/hooks/useUserRole';
+import { usePermissoes } from '@/hooks/usePermissoes';
 
 export default function ReferenciaVersoes() {
-  const { isMaster } = useUserRole();
+  const { isMaster, usuarioInfo } = usePermissoes();
+  const isMasterByPerfil = usuarioInfo?.perfil_acesso?.nome?.toLowerCase() === 'master';
+  const canViewTechnical = isMaster || isMasterByPerfil;
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -35,7 +37,7 @@ export default function ReferenciaVersoes() {
   const filteredChangelog = changelogData
     .map(release => ({
       ...release,
-      changes: release.changes.filter(c => isMaster || !c.technical),
+      changes: release.changes.filter(c => canViewTechnical || !c.technical),
     }))
     .filter(release => release.changes.length > 0);
 
@@ -86,7 +88,7 @@ export default function ReferenciaVersoes() {
                           <span className="text-sm text-foreground/90 leading-relaxed">
                             {change.description}
                           </span>
-                          {isMaster && change.technical && (
+                          {canViewTechnical && change.technical && (
                             <span className="shrink-0 mt-0.5" aria-label="Visível apenas para Master">
                               <ShieldAlert className="h-4 w-4 text-muted-foreground" />
                             </span>
