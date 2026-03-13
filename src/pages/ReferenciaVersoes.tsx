@@ -87,7 +87,9 @@ export default function ReferenciaVersoes() {
                             {change.description}
                           </span>
                           {isMaster && change.technical && (
-                            <ShieldAlert className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" title="Visível apenas para Master" />
+                            <span className="shrink-0 mt-0.5" aria-label="Visível apenas para Master">
+                              <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                            </span>
                           )}
                         </div>
                       ))}
