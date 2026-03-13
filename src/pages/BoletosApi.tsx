@@ -774,6 +774,29 @@ export default function BoletosApi() {
       return;
     }
 
+    // ===== Verificar conflitos de código de barras antes de processar =====
+    if (!forceOverride) {
+      const allConflicts: { nota: string; antigo: string; novo: string }[] = [];
+      for (const [, grupo] of gruposPorBanco) {
+        const { banco: bancoObj, configuracao: configObj, boletos: boletosDoGrupo } = grupo;
+        const dadosCalc = boletosDoGrupo.map(b => mapearDadosBoletoIndividual(b, bancoObj, configObj));
+        for (let i = 0; i < boletosDoGrupo.length; i++) {
+          const boleto = boletosDoGrupo[i];
+          const novoBarras = dadosCalc[i]?.codigo_barras;
+          const barrasExistente = (boleto as any).cod_barras_calculado;
+          if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
+            allConflicts.push({ nota: boleto.numero_nota || boleto.id, antigo: String(barrasExistente), novo: novoBarras });
+          }
+        }
+      }
+      if (allConflicts.length > 0) {
+        setBarcodeConflicts(allConflicts);
+        setPendingPrintAction(() => () => handleImprimirSelecionados(true));
+        setShowBarcodeAlert(true);
+        return;
+      }
+    }
+
     // Processar cada grupo de banco e coletar bytes para PDF único
     let totalGerados = 0;
     let totalInvalidos = 0;
