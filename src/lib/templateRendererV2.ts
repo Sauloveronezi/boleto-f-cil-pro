@@ -362,7 +362,7 @@ export async function renderBoletoV2(
     const value = formatValue(rawValue, field.format);
     if (!value) continue;
 
-    const font = getFont(fonts, field.font_family, true);
+    const font = getFont(fonts, field.font_family, field.bold ?? true);
     let fontSize = field.font_size || 10;
     const textColor = hexToRgb(field.color || '#000000');
 

@@ -182,6 +182,7 @@ export default function BoletosApi() {
       if (error && error.code !== 'PGRST116') {
         console.error('Erro ao carregar dados da empresa:', error);
       }
+      console.log('[BoletosApi] empresa carregada:', data?.razao_social, data?.cnpj);
       return data;
     }
   });

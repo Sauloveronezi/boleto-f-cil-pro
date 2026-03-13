@@ -306,6 +306,8 @@ function mapeamentoFallback(row: Record<string, any>): Record<string, string> {
   result.valor_cobrado = valor ? String(valor) : "";
   result.valor_desconto = valorDesconto ? String(valorDesconto) : "";
 
+  console.log("[boletoDataMapper] fallback beneficiario_nome=", result.beneficiario_nome, "beneficiario_cnpj=", result.beneficiario_cnpj);
+
   return result;
 }
 
@@ -378,6 +380,7 @@ export function mapBoletoApiToDadosBoleto(
   dados.beneficiario_cnpj = benefCnpj;
   dados.beneficiario_nome = benefNome && benefCnpj ? `${benefNome} - ${benefCnpj}` : benefNome;
   dados.beneficiario_endereco = configBanco?.beneficiarioEndereco || dados.beneficiario_endereco || "";
+  console.log("[boletoDataMapper] BENEFICIÁRIO: nome=", dados.beneficiario_nome, "cnpj=", dados.beneficiario_cnpj, "endereco=", dados.beneficiario_endereco, "configBanco.beneficiarioNome=", configBanco?.beneficiarioNome);
 
   // Campos fixos padrão (se não vieram do mapeamento)
   if (!dados.local_pagamento) {
