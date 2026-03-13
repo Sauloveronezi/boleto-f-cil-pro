@@ -87,12 +87,14 @@ const handler = async (req: Request): Promise<Response> => {
     const safeNome = escapeHtml(nome || "Não informado");
     const safeEmail = escapeHtml(email);
 
-    const results = await Promise.allSettled(
-      emailList.map(async (adminEmail) => {
+    const sendNotificationEmail = async (adminEmail: string) => {
+      let lastError: Error | null = null;
+
+      for (const [index, apiKey] of resendApiKeys.entries()) {
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${resendApiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -120,13 +122,19 @@ const handler = async (req: Request): Promise<Response> => {
 
         const responseBody = await response.text();
 
-        if (!response.ok) {
-          throw new Error(`Falha ao enviar para ${adminEmail}: ${response.status} ${responseBody}`);
+        if (response.ok) {
+          return { adminEmail, responseBody };
         }
 
-        return { adminEmail, responseBody };
-      }),
-    );
+        lastError = new Error(
+          `Falha ao enviar para ${adminEmail} (chave ${index + 1}/${resendApiKeys.length}): ${response.status} ${responseBody}`,
+        );
+      }
+
+      throw lastError ?? new Error(`Falha ao enviar para ${adminEmail}`);
+    };
+
+    const results = await Promise.allSettled(emailList.map(sendNotificationEmail));
 
     const failedResults = results
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
