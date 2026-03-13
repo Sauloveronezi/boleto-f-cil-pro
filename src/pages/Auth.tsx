@@ -157,6 +157,15 @@ export default function Auth() {
         title: 'Cadastro realizado!',
         description: 'Verifique seu e-mail para confirmar a conta.',
       });
+
+      // Notificar administradores sobre novo cadastro
+      try {
+        await supabase.functions.invoke('notify-new-user', {
+          body: { email, nome: email.split('@')[0] },
+        });
+      } catch (e) {
+        console.warn('[Auth] Falha ao notificar admins:', e);
+      }
     }
   };
 
