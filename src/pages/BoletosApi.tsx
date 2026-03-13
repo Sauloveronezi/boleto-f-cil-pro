@@ -533,216 +533,90 @@ export default function BoletosApi() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const handleImprimirSelecionados = async (forceOverride = false) => {
-    if (selecionados.size === 0) {
-      toast({ title: 'Nenhum boleto selecionado', description: 'Selecione ao menos um boleto para imprimir', variant: 'destructive' });
-      return;
-    }
-
-    const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
-    const primeiroBoleto = boletosSelecionados[0];
-    const codigoBancoBoleto = primeiroBoleto?.banco?.replace(/\D/g, '').substring(0, 3);
-    const banco = bancos?.find(b => b.codigo_banco.trim() === codigoBancoBoleto);
-    
-    if (!banco) {
-      toast({ title: 'Banco não identificado', description: 'Não foi possível identificar o banco nos boletos selecionados.', variant: 'destructive' });
-      return;
-    }
-
-    const configuracao = configuracoes?.find(c => c.banco_id === banco.id);
-
-    const boletosComFalhaLinhaDigitavel: string[] = [];
-    const mapearDadosBoletos = (boletosList: any[]) => {
-      return boletosList.map((boleto: any) => {
-        // Extrair agência/conta dos dados da API (BankInternalID, BankAccountLongID)
-        const extras = boleto.dados_extras || {};
-        const bankInternalId = boleto.BankInternalID || boleto.bankinternalid || extras?.BankInternalID || extras?.bankinternalid || '';
-        const bankAccountLongId = boleto.BankAccountLongID || boleto.bankaccountlongid || extras?.BankAccountLongID || extras?.bankaccountlongid || '';
-        const bankControlKey = boleto.bankcontrolkey || extras?.bankcontrolkey || '';
-        
-        // BankInternalID pode conter banco+agência (ex: "34171463" = banco 341 + agência 1463)
-        const agenciaApi = bankInternalId ? bankInternalId.toString().replace(/\D/g, '').slice(-4) : '';
-        const contaApi = bankAccountLongId ? bankAccountLongId.toString().replace(/\D/g, '') : '';
-
-        // Usar mapeamento dinâmico se disponível
-        if (mapeamentosCampo.length > 0) {
-          const benefEndereco = empresa
-            ? [
-                [empresa.endereco, empresa.numero].filter(Boolean).join(', '),
-                empresa.complemento,
-                empresa.bairro,
-                [empresa.cidade, empresa.estado].filter(Boolean).join(' - '),
-                empresa.cep,
-              ].filter(Boolean).join(' - ')
-            : '';
-          const configCalculo: ConfigBancoParaCalculo = {
-            agencia: agenciaApi || configuracao?.agencia || '',
-            conta: contaApi || configuracao?.conta || '',
-            carteira: configuracao?.carteira || '09',
-            nomeBanco: banco.nome_banco || '',
-            logoUrl: banco.logo_url || '',
-            beneficiarioNome: empresa?.razao_social || '',
-            beneficiarioCnpj: empresa?.cnpj || '',
-            beneficiarioEndereco: benefEndereco,
-            textoInstrucaoPadrao: configuracao?.texto_instrucao_padrao || '',
-            taxaJurosMensal: configuracao?.taxa_juros_mensal || 0,
-            multaPercentual: configuracao?.multa_percentual || 0,
-            diasCarencia: configuracao?.dias_carencia || 0,
-          };
-          const dados = mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
-          if (!dados.linha_digitavel) {
-            boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
-          }
-          return dados;
-        }
-
-        // Fallback: mapeamento hardcoded legado
-        const notaFiscal = {
-          id: boleto.id,
-          numero_nota: boleto.numero_nota || boleto.documento || '',
-          serie: boleto.dados_extras?.serie || '1',
-          data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
-          data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
-          valor_titulo: boleto.valor || 0,
-          moeda: 'BRL',
-          codigo_cliente: boleto.cliente_id || '',
-          status: 'aberta' as const,
-          referencia_interna: boleto.numero_cobranca || ''
-        };
-        
-        const configOverride = configuracao ? { ...configuracao } : undefined;
-        if (configOverride && agenciaApi) configOverride.agencia = agenciaApi;
-        if (configOverride && contaApi) configOverride.conta = contaApi;
-        if (configOverride && bankControlKey) (configOverride as any).conta_dv = bankControlKey;
-        
-        const dadosCodigoBarras = gerarCodigoBarras(banco, notaFiscal, configOverride);
-        const dados = mapearBoletoApiParaModelo(boleto, undefined, empresa, banco, configuracao, dadosCodigoBarras);
-        // Inject bank logo and formatted code
-        dados.banco_logo_url = banco.logo_url || '';
-        const dvBancoLegacy: Record<string, string> = { '237': '2', '341': '7', '033': '7', '001': '9', '104': '0' };
-        dados.banco_codigo_formatado = `${banco.codigo_banco.trim()}-${dvBancoLegacy[banco.codigo_banco.trim()] || '0'}`;
-        if (!dados.linha_digitavel) {
-          boletosComFalhaLinhaDigitavel.push(boleto.numero_nota || boleto.id);
-        }
-        return dados;
-      });
-    };
-
-  const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[]) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || null;
-    const agora = new Date().toISOString();
-
-    for (let i = 0; i < boletosList.length; i++) {
-      const boleto = boletosList[i];
-      const dados = dadosBoletos[i];
-      if (!dados.linha_digitavel || !dados.codigo_barras) continue;
-
-      try {
-        // Salvar código de barras na tabela do boleto importado
-        await supabase.from('vv_b_boletos_api' as any)
-          .update({
-            cod_barras_calculado: dados.codigo_barras,
-            linha_digitavel_calculada: dados.linha_digitavel,
-            updated_at: agora,
-          } as any)
-          .eq('id', boleto.id);
-
-        // Registrar na tabela de boletos gerados
-        await supabase.from('vv_b_boletos_gerados').insert({
-          nota_fiscal_id: null,
-          modelo_boleto_id: modeloSelecionado || null,
-          banco_id: banco.id,
-          nosso_numero: dados.nosso_numero || '',
-          linha_digitavel: dados.linha_digitavel,
-          codigo_barras: dados.codigo_barras,
-          valor: boleto.valor || 0,
-          data_vencimento: boleto.data_vencimento || null,
-          status: 'gerado',
-          usuario_emissao_id: userId,
-          data_emissao_boleto: agora,
-        } as any);
-      } catch (err) {
-        console.warn('[BoletosApi] Erro ao salvar linha digitável:', err);
-      }
-    }
+  // ===== Resolve banco+configuração para um boleto individual =====
+  const resolverBancoBoleto = (boleto: any) => {
+    const codigoBancoBoleto = boleto?.banco?.replace(/\D/g, '').substring(0, 3);
+    const bancoObj = bancos?.find(b => b.codigo_banco.trim() === codigoBancoBoleto);
+    const configObj = bancoObj ? configuracoes?.find(c => c.banco_id === bancoObj.id) : undefined;
+    return { banco: bancoObj, configuracao: configObj, codigoBanco: codigoBancoBoleto };
   };
 
-    // ===== Validar código de barras: deve ser 44 dígitos numéricos =====
-    const dadosBoletosCalc = mapearDadosBoletos(boletosSelecionados);
-    
-    const isCodigoBarrasValido = (cod: string | undefined | null): boolean => {
-      if (!cod) return false;
-      const limpo = String(cod).trim();
-      return /^\d{44}$/.test(limpo);
+  // ===== Mapear dados de um boleto usando SEU banco/config específico =====
+  const mapearDadosBoletoIndividual = (boleto: any, bancoObj: any, configObj: any) => {
+    const extras = boleto.dados_extras || {};
+    const bankInternalId = boleto.BankInternalID || boleto.bankinternalid || extras?.BankInternalID || extras?.bankinternalid || '';
+    const bankAccountLongId = boleto.BankAccountLongID || boleto.bankaccountlongid || extras?.BankAccountLongID || extras?.bankaccountlongid || '';
+    const bankControlKey = boleto.bankcontrolkey || extras?.bankcontrolkey || '';
+    const agenciaApi = bankInternalId ? bankInternalId.toString().replace(/\D/g, '').slice(-4) : '';
+    const contaApi = bankAccountLongId ? bankAccountLongId.toString().replace(/\D/g, '') : '';
+
+    // Usar mapeamento dinâmico se disponível
+    if (mapeamentosCampo.length > 0) {
+      const benefEndereco = empresa
+        ? [
+            [empresa.endereco, empresa.numero].filter(Boolean).join(', '),
+            empresa.complemento,
+            empresa.bairro,
+            [empresa.cidade, empresa.estado].filter(Boolean).join(' - '),
+            empresa.cep,
+          ].filter(Boolean).join(' - ')
+        : '';
+      const configCalculo: ConfigBancoParaCalculo = {
+        agencia: agenciaApi || configObj?.agencia || '',
+        conta: contaApi || configObj?.conta || '',
+        carteira: configObj?.carteira || '09',
+        nomeBanco: bancoObj.nome_banco || '',
+        logoUrl: bancoObj.logo_url || '',
+        beneficiarioNome: empresa?.razao_social || '',
+        beneficiarioCnpj: empresa?.cnpj || '',
+        beneficiarioEndereco: benefEndereco,
+        textoInstrucaoPadrao: configObj?.texto_instrucao_padrao || '',
+        taxaJurosMensal: configObj?.taxa_juros_mensal || 0,
+        multaPercentual: configObj?.multa_percentual || 0,
+        diasCarencia: configObj?.dias_carencia || 0,
+      };
+      return mapBoletoApiToDadosBoleto(boleto, configCalculo, mapeamentosCampo);
+    }
+
+    // Fallback: mapeamento hardcoded legado
+    const notaFiscal = {
+      id: boleto.id,
+      numero_nota: boleto.numero_nota || boleto.documento || '',
+      serie: boleto.dados_extras?.serie || '1',
+      data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
+      data_vencimento: boleto.data_vencimento || new Date().toISOString().split('T')[0],
+      valor_titulo: boleto.valor || 0,
+      moeda: 'BRL',
+      codigo_cliente: boleto.cliente_id || '',
+      status: 'aberta' as const,
+      referencia_interna: boleto.numero_cobranca || ''
     };
+    
+    const configOverride = configObj ? { ...configObj } : undefined;
+    if (configOverride && agenciaApi) configOverride.agencia = agenciaApi;
+    if (configOverride && contaApi) configOverride.conta = contaApi;
+    if (configOverride && bankControlKey) (configOverride as any).conta_dv = bankControlKey;
+    
+    const dadosCodigoBarras = gerarCodigoBarras(bancoObj, notaFiscal, configOverride);
+    const dados = mapearBoletoApiParaModelo(boleto, undefined, empresa, bancoObj, configObj, dadosCodigoBarras);
+    dados.banco_logo_url = bancoObj.logo_url || '';
+    const dvBancoLegacy: Record<string, string> = { '237': '2', '341': '7', '033': '7', '001': '9', '104': '0' };
+    dados.banco_codigo_formatado = `${bancoObj.codigo_banco.trim()}-${dvBancoLegacy[bancoObj.codigo_banco.trim()] || '0'}`;
+    return dados;
+  };
 
-    // Separar boletos válidos dos inválidos
-    const boletosValidos: any[] = [];
-    const dadosValidos: any[] = [];
-    const boletosInvalidos: any[] = [];
-
-    for (let i = 0; i < boletosSelecionados.length; i++) {
-      const boleto = boletosSelecionados[i];
-      const dados = dadosBoletosCalc[i];
-      if (isCodigoBarrasValido(dados?.codigo_barras) && dados?.linha_digitavel) {
-        boletosValidos.push(boleto);
-        dadosValidos.push(dados);
-      } else {
-        boletosInvalidos.push(boleto);
-      }
-    }
-
-    // Se há boletos inválidos, exibir diálogo de erro e persistir no banco
-    if (boletosInvalidos.length > 0) {
-      setBoletosComFalha(boletosInvalidos);
-      setShowFalhaDialog(true);
-      // Marcar IDs com erro para destaque na tabela
-      setIdsComErro(prev => {
-        const novo = new Set(prev);
-        boletosInvalidos.forEach((b: any) => novo.add(b.id));
-        return novo;
-      });
-      // Persistir erro no banco de dados
-      for (const b of boletosInvalidos) {
-        await supabase
-          .from('vv_b_boletos_api')
-          .update({ erro_emissao: 'Código de barras inválido ou linha digitável ausente' })
-          .eq('id', b.id);
-      }
-    }
-    // Remover IDs válidos do set de erros e limpar erro no banco
-    if (boletosValidos.length > 0) {
-      setIdsComErro(prev => {
-        const novo = new Set(prev);
-        boletosValidos.forEach((b: any) => novo.delete(b.id));
-        return novo.size !== prev.size ? novo : prev;
-      });
-      // Limpar erro no banco para boletos que emitiram com sucesso
-      for (const b of boletosValidos) {
-        await supabase
-          .from('vv_b_boletos_api')
-          .update({ erro_emissao: null })
-          .eq('id', b.id);
-      }
-    }
-
-    // Se NENHUM boleto é válido, abortar completamente
-    if (boletosValidos.length === 0) {
-      toast({ 
-        title: 'Emissão cancelada', 
-        description: `Nenhum dos ${boletosSelecionados.length} boleto(s) possui código de barras válido. Verifique as configurações bancárias.`, 
-        variant: 'destructive' 
-      });
-      return;
-    }
-
-    // ===== Verificar conflito de código de barras (apenas válidos) =====
+  // ===== Gerar PDF para um grupo de boletos do MESMO banco =====
+  const gerarPDFParaGrupoBanco = async (
+    bancoObj: any, configObj: any,
+    boletosDoGrupo: any[], dadosDoGrupo: any[],
+    forceOverride: boolean
+  ) => {
+    // ===== Verificar conflito de código de barras =====
     if (!forceOverride) {
       const conflicts: { nota: string; antigo: string; novo: string }[] = [];
-      for (let i = 0; i < boletosValidos.length; i++) {
-        const boleto = boletosValidos[i];
-        const novoBarras = dadosValidos[i]?.codigo_barras;
+      for (let i = 0; i < boletosDoGrupo.length; i++) {
+        const boleto = boletosDoGrupo[i];
+        const novoBarras = dadosDoGrupo[i]?.codigo_barras;
         const barrasExistente = (boleto as any).cod_barras_calculado;
         if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
           conflicts.push({
@@ -764,12 +638,9 @@ export default function BoletosApi() {
     const UNIVERSAL_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000099';
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
     if (templateV2 && templateFieldsV2 && templateFieldsV2.length > 0) {
-      // Auto-seed universal template to ensure latest field definitions
       if (modeloSelecionado === UNIVERSAL_TEMPLATE_ID) {
         try {
           await seedUniversal.mutateAsync();
-          console.log('[BoletosApi] Universal template re-seeded');
-          // Re-fetch fields after seed
           const { data: freshFields } = await supabase
             .from('vv_b_boleto_template_fields')
             .select('*')
@@ -781,42 +652,26 @@ export default function BoletosApi() {
               ...row,
               bbox: row.bbox as [number, number, number, number],
             }));
-            try {
-              const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
-              toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
-              const renderOpts = imprimirFundo
-                ? { usarFundo: true }
-                : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
-              const pdfBytes = await renderBoletosV2(templateV2, parsedFields, dadosValidos, renderOpts);
-              const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-              downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-              await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
-              toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${templateV2.name}"${msgExtra}` });
-            } catch (error: any) {
-              console.error('[BoletosApi] Erro V2 Universal:', error);
-              toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
-            }
+            const renderOpts = imprimirFundo
+              ? { usarFundo: true }
+              : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
+            const pdfBytes = await renderBoletosV2(templateV2, parsedFields, dadosDoGrupo, renderOpts);
+            const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+            downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
+            await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
             return;
           }
         } catch (e) {
           console.warn('[BoletosApi] Falha ao re-seed universal:', e);
         }
       }
-      try {
-        const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
-        toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
-        const renderOpts = imprimirFundo
-          ? { usarFundo: true }
-          : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
-        const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosValidos, renderOpts);
-        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-        downloadPdfV2(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-        await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
-        toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${templateV2.name}"${msgExtra}` });
-      } catch (error: any) {
-        console.error('[BoletosApi] Erro V2:', error);
-        toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
-      }
+      const renderOpts = imprimirFundo
+        ? { usarFundo: true }
+        : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
+      const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosDoGrupo, renderOpts);
+      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
+      await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
       return;
     }
 
@@ -825,37 +680,29 @@ export default function BoletosApi() {
       const modelo = modelos?.find(m => m.id === modeloSelecionado);
       if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return; }
       if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return; }
-      try {
-        const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
-        toast({ title: 'Gerando boletos...', description: `${boletosValidos.length} boleto(s)${msgExtra}` });
-        const { data: modeloCompleto, error: modeloError } = await supabase
-          .from('vv_b_modelos_boleto').select('campos_mapeados').eq('id', modeloSelecionado).single();
-        if (modeloError) throw new Error('Erro ao carregar modelo');
-        const elementos: ElementoParaRender[] = (modeloCompleto?.campos_mapeados as any[])?.map((c: any) => ({
-          id: c.id || `field_${Date.now()}`, tipo: c.tipo || 'campo', nome: c.nome || '',
-          x: c.posicao_x ?? c.x ?? 0, y: c.posicao_y ?? c.y ?? 0,
-          largura: c.largura || 100, altura: c.altura || 20,
-          variavel: c.variavel || '', textoFixo: c.textoFixo, fonte: c.fonte,
-          tamanhoFonte: c.tamanhoFonte, negrito: c.negrito, italico: c.italico,
-          alinhamento: c.alinhamento, corTexto: c.corTexto, corFundo: c.corFundo,
-          bordaSuperior: c.bordaSuperior, bordaInferior: c.bordaInferior,
-          bordaEsquerda: c.bordaEsquerda, bordaDireita: c.bordaDireita,
-          espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
-        })) || [];
-        const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosValidos, undefined, imprimirFundo);
-        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-        downloadPDF(pdfBytes, `boletos_${banco.codigo_banco}_${dataAtual}.pdf`);
-        await salvarLinhaDigitavelNoBanco(boletosValidos, dadosValidos);
-        toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s) com "${modelo.nome_modelo}"${msgExtra}` });
-      } catch (error: any) {
-        console.error('[BoletosApi] Erro legado:', error);
-        toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
-      }
+      const { data: modeloCompleto, error: modeloError } = await supabase
+        .from('vv_b_modelos_boleto').select('campos_mapeados').eq('id', modeloSelecionado).single();
+      if (modeloError) throw new Error('Erro ao carregar modelo');
+      const elementos: ElementoParaRender[] = (modeloCompleto?.campos_mapeados as any[])?.map((c: any) => ({
+        id: c.id || `field_${Date.now()}`, tipo: c.tipo || 'campo', nome: c.nome || '',
+        x: c.posicao_x ?? c.x ?? 0, y: c.posicao_y ?? c.y ?? 0,
+        largura: c.largura || 100, altura: c.altura || 20,
+        variavel: c.variavel || '', textoFixo: c.textoFixo, fonte: c.fonte,
+        tamanhoFonte: c.tamanhoFonte, negrito: c.negrito, italico: c.italico,
+        alinhamento: c.alinhamento, corTexto: c.corTexto, corFundo: c.corFundo,
+        bordaSuperior: c.bordaSuperior, bordaInferior: c.bordaInferior,
+        bordaEsquerda: c.bordaEsquerda, bordaDireita: c.bordaDireita,
+        espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
+      })) || [];
+      const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosDoGrupo, undefined, imprimirFundo);
+      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      downloadPDF(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
+      await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
       return;
     }
 
-    // Fallback sem modelo - usar apenas boletos válidos
-    const notasParaImprimir = boletosValidos.map((boleto: any) => ({
+    // Fallback sem modelo
+    const notasParaImprimir = boletosDoGrupo.map((boleto: any) => ({
       id: boleto.id, numero_nota: boleto.numero_nota,
       serie: boleto.dados_extras?.serie || '1', codigo_cliente: boleto.cliente_id || '',
       data_emissao: boleto.data_emissao || new Date().toISOString().split('T')[0],
@@ -863,8 +710,7 @@ export default function BoletosApi() {
       valor_titulo: boleto.valor || 0, moeda: 'BRL', status: 'aberta' as const,
       referencia_interna: boleto.numero_cobranca || ''
     }));
-
-    const clientesParaImprimir = boletosValidos
+    const clientesParaImprimir = boletosDoGrupo
       .map((b: any) => b.cliente || {
         id: b.cliente_id || b.id,
         razao_social: b.dyn_nome_do_cliente || 'Cliente Sem Nome',
@@ -875,13 +721,167 @@ export default function BoletosApi() {
       .filter((cliente: any, index: number, self: any[]) => 
         index === self.findIndex((c) => c.id === cliente.id)
       );
+    gerarPDFBoletos(notasParaImprimir, clientesParaImprimir, bancoObj, configObj, 'API_CDS', 'arquivo_unico');
+  };
 
-    try {
-      const msgExtra = boletosInvalidos.length > 0 ? ` (${boletosInvalidos.length} excluído(s) por erro)` : '';
-      gerarPDFBoletos(notasParaImprimir, clientesParaImprimir, banco, configuracao, 'API_CDS', 'arquivo_unico');
-      toast({ title: 'PDF gerado com sucesso', description: `${boletosValidos.length} boleto(s) gerado(s)${msgExtra}` });
-    } catch (error: any) {
-      toast({ title: 'Erro ao gerar PDF', description: error.message, variant: 'destructive' });
+  const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[], bancoObj?: any) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+    const agora = new Date().toISOString();
+    const bancoId = bancoObj?.id || null;
+
+    for (let i = 0; i < boletosList.length; i++) {
+      const boleto = boletosList[i];
+      const dados = dadosBoletos[i];
+      if (!dados.linha_digitavel || !dados.codigo_barras) continue;
+
+      try {
+        await supabase.from('vv_b_boletos_api' as any)
+          .update({
+            cod_barras_calculado: dados.codigo_barras,
+            linha_digitavel_calculada: dados.linha_digitavel,
+            updated_at: agora,
+          } as any)
+          .eq('id', boleto.id);
+
+        await supabase.from('vv_b_boletos_gerados').insert({
+          nota_fiscal_id: null,
+          modelo_boleto_id: modeloSelecionado || null,
+          banco_id: bancoId,
+          nosso_numero: dados.nosso_numero || '',
+          linha_digitavel: dados.linha_digitavel,
+          codigo_barras: dados.codigo_barras,
+          valor: boleto.valor || 0,
+          data_vencimento: boleto.data_vencimento || null,
+          status: 'gerado',
+          usuario_emissao_id: userId,
+          data_emissao_boleto: agora,
+        } as any);
+      } catch (err) {
+        console.warn('[BoletosApi] Erro ao salvar linha digitável:', err);
+      }
+    }
+  };
+
+  const handleImprimirSelecionados = async (forceOverride = false) => {
+    if (selecionados.size === 0) {
+      toast({ title: 'Nenhum boleto selecionado', description: 'Selecione ao menos um boleto para imprimir', variant: 'destructive' });
+      return;
+    }
+
+    const boletosSelecionados = boletosFiltrados.filter((b: any) => selecionados.has(b.id));
+
+    // ===== Agrupar boletos por código de banco =====
+    const gruposPorBanco = new Map<string, { banco: any; configuracao: any; boletos: any[] }>();
+    const boletosNaoIdentificados: any[] = [];
+
+    for (const boleto of boletosSelecionados) {
+      const { banco: bancoObj, configuracao: configObj, codigoBanco } = resolverBancoBoleto(boleto);
+      if (!bancoObj) {
+        boletosNaoIdentificados.push(boleto);
+        continue;
+      }
+      const key = bancoObj.id;
+      if (!gruposPorBanco.has(key)) {
+        gruposPorBanco.set(key, { banco: bancoObj, configuracao: configObj, boletos: [] });
+      }
+      gruposPorBanco.get(key)!.boletos.push(boleto);
+    }
+
+    if (boletosNaoIdentificados.length > 0) {
+      const notas = boletosNaoIdentificados.map(b => b.numero_nota || b.id).join(', ');
+      toast({ 
+        title: 'Banco não identificado', 
+        description: `${boletosNaoIdentificados.length} boleto(s) sem banco reconhecido: ${notas.substring(0, 100)}`, 
+        variant: 'destructive' 
+      });
+    }
+
+    if (gruposPorBanco.size === 0) {
+      toast({ title: 'Nenhum banco identificado', description: 'Não foi possível identificar bancos nos boletos selecionados.', variant: 'destructive' });
+      return;
+    }
+
+    // Processar cada grupo de banco separadamente
+    let totalGerados = 0;
+    let totalInvalidos = 0;
+
+    for (const [, grupo] of gruposPorBanco) {
+      const { banco: bancoObj, configuracao: configObj, boletos: boletosDoGrupo } = grupo;
+
+      // Mapear dados com banco/config corretos para cada boleto
+      const dadosCalc = boletosDoGrupo.map(b => mapearDadosBoletoIndividual(b, bancoObj, configObj));
+
+      // Validar código de barras
+      const isCodigoBarrasValido = (cod: string | undefined | null): boolean => {
+        if (!cod) return false;
+        return /^\d{44}$/.test(String(cod).trim());
+      };
+
+      const boletosValidos: any[] = [];
+      const dadosValidos: any[] = [];
+      const boletosInvalidos: any[] = [];
+
+      for (let i = 0; i < boletosDoGrupo.length; i++) {
+        const boleto = boletosDoGrupo[i];
+        const dados = dadosCalc[i];
+        if (isCodigoBarrasValido(dados?.codigo_barras) && dados?.linha_digitavel) {
+          boletosValidos.push(boleto);
+          dadosValidos.push(dados);
+        } else {
+          boletosInvalidos.push(boleto);
+        }
+      }
+
+      // Marcar erros no banco
+      if (boletosInvalidos.length > 0) {
+        totalInvalidos += boletosInvalidos.length;
+        setBoletosComFalha(prev => [...prev, ...boletosInvalidos]);
+        setShowFalhaDialog(true);
+        setIdsComErro(prev => {
+          const novo = new Set(prev);
+          boletosInvalidos.forEach((b: any) => novo.add(b.id));
+          return novo;
+        });
+        for (const b of boletosInvalidos) {
+          await supabase
+            .from('vv_b_boletos_api')
+            .update({ erro_emissao: 'Código de barras inválido ou linha digitável ausente' })
+            .eq('id', b.id);
+        }
+      }
+
+      if (boletosValidos.length > 0) {
+        setIdsComErro(prev => {
+          const novo = new Set(prev);
+          boletosValidos.forEach((b: any) => novo.delete(b.id));
+          return novo.size !== prev.size ? novo : prev;
+        });
+        for (const b of boletosValidos) {
+          await supabase
+            .from('vv_b_boletos_api')
+            .update({ erro_emissao: null })
+            .eq('id', b.id);
+        }
+      }
+
+      if (boletosValidos.length === 0) continue;
+
+      try {
+        toast({ title: `Gerando boletos - ${bancoObj.nome_banco}...`, description: `${boletosValidos.length} boleto(s)` });
+        await gerarPDFParaGrupoBanco(bancoObj, configObj, boletosValidos, dadosValidos, forceOverride);
+        totalGerados += boletosValidos.length;
+      } catch (error: any) {
+        console.error(`[BoletosApi] Erro ao gerar PDF para banco ${bancoObj.codigo_banco}:`, error);
+        toast({ title: `Erro - ${bancoObj.nome_banco}`, description: error.message, variant: 'destructive' });
+      }
+    }
+
+    if (totalGerados > 0) {
+      const bancosCount = gruposPorBanco.size;
+      const msgBancos = bancosCount > 1 ? ` de ${bancosCount} bancos` : '';
+      const msgErros = totalInvalidos > 0 ? ` (${totalInvalidos} excluído(s) por erro)` : '';
+      toast({ title: 'PDFs gerados com sucesso', description: `${totalGerados} boleto(s)${msgBancos} gerado(s)${msgErros}` });
     }
   };
 
