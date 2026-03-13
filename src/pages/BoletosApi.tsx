@@ -881,6 +881,19 @@ export default function BoletosApi() {
     }
   };
 
+  // Campos considerados numéricos para filtro De→Até
+  const NUMERIC_FILTER_KEYS = new Set([
+    'valor', 'numero_nota', 'numero_cobranca', 'nosso_numero',
+    'br_nfenumber', 'br_nfnumber', 'billingdocument', 'doc_contabil',
+    'companycode', 'empresa', 'cod_barras', 'dyn_conta',
+    'amountintransactioncurrency', 'amountinfunctionalcurrency',
+  ]);
+
+  const isNumericFilterKey = (chave: string) => {
+    const lower = chave.toLowerCase();
+    return NUMERIC_FILTER_KEYS.has(lower) || lower.includes('amount') || lower.includes('number') || lower.includes('numero');
+  };
+
   // Detect filter type from key
   const getFilterType = (chave: string): 'date' | 'number' | 'estado' | 'cidade' | 'transportadora' | 'text' | 'cnpj' | 'cliente' => {
     const lower = chave.toLowerCase();
@@ -896,7 +909,7 @@ export default function BoletosApi() {
     ) return 'transportadora';
     if (lower === 'cnpj' || lower.includes('taxnumber') || lower.includes('cnpj')) return 'cnpj';
     if (lower === 'clienteid' || lower === 'cliente' || lower === 'dyn_nome_do_cliente' || lower.includes('nome')) return 'cliente';
-    if (lower === 'valor' || lower.includes('amount') || lower === 'numero_nota' || lower === 'numero_cobranca' || lower === 'nosso_numero') return 'number';
+    if (isNumericFilterKey(lower)) return 'number';
     return 'text';
   };
 
