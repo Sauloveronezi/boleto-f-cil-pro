@@ -841,7 +841,10 @@ export default function BoletosApi() {
 
       try {
         toast({ title: `Gerando boletos - ${bancoObj.nome_banco}...`, description: `${boletosValidos.length} boleto(s)` });
-        await gerarPDFParaGrupoBanco(bancoObj, configObj, boletosValidos, dadosValidos, forceOverride);
+        const pdfBytes = await gerarPDFBytesParaGrupoBanco(bancoObj, configObj, boletosValidos, dadosValidos);
+        if (pdfBytes) {
+          allPdfBytes.push(pdfBytes);
+        }
         totalGerados += boletosValidos.length;
       } catch (error: any) {
         console.error(`[BoletosApi] Erro ao gerar PDF para banco ${bancoObj.codigo_banco}:`, error);
@@ -849,11 +852,30 @@ export default function BoletosApi() {
       }
     }
 
+    // Merge all PDF bytes into a single file
+    if (allPdfBytes.length > 0) {
+      try {
+        const mergedDoc = await PDFDocument.create();
+        for (const bytes of allPdfBytes) {
+          const srcDoc = await PDFDocument.load(bytes);
+          const pageIndices = srcDoc.getPageIndices();
+          const copiedPages = await mergedDoc.copyPages(srcDoc, pageIndices);
+          copiedPages.forEach(page => mergedDoc.addPage(page));
+        }
+        const mergedBytes = await mergedDoc.save();
+        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        downloadPdfV2(new Uint8Array(mergedBytes), `boletos_${dataAtual}.pdf`);
+      } catch (mergeErr: any) {
+        console.error('[BoletosApi] Erro ao mesclar PDFs:', mergeErr);
+        toast({ title: 'Erro ao mesclar PDFs', description: mergeErr.message, variant: 'destructive' });
+      }
+    }
+
     if (totalGerados > 0) {
       const bancosCount = gruposPorBanco.size;
       const msgBancos = bancosCount > 1 ? ` de ${bancosCount} bancos` : '';
       const msgErros = totalInvalidos > 0 ? ` (${totalInvalidos} excluído(s) por erro)` : '';
-      toast({ title: 'PDFs gerados com sucesso', description: `${totalGerados} boleto(s)${msgBancos} gerado(s)${msgErros}` });
+      toast({ title: 'PDF gerado com sucesso', description: `${totalGerados} boleto(s)${msgBancos} em arquivo único${msgErros}` });
     }
   };
 
