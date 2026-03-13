@@ -339,10 +339,11 @@ export default function BoletosApi() {
         if (String(cidade).trim().toLowerCase() !== filtros.cidade.toLowerCase()) return false;
       }
 
-      // Filtro CNPJ (texto livre)
+      // Filtro CNPJ (texto livre, ignora formatação)
       if (filtros.cnpj) {
-        const cnpj = getCnpj(b);
-        if (!String(cnpj).includes(filtros.cnpj)) return false;
+        const cnpj = String(getCnpj(b)).replace(/\D/g, '');
+        const cnpjFiltro = String(filtros.cnpj).replace(/\D/g, '');
+        if (!cnpj.includes(cnpjFiltro)) return false;
       }
 
       // Filtro cliente nome (texto livre)
@@ -351,22 +352,24 @@ export default function BoletosApi() {
         if (!String(nome).toLowerCase().includes(filtros.clienteNome.toLowerCase())) return false;
       }
 
-      // Range filters para número da nota
+      // Range filters para número da nota (comparação numérica, ignora zeros à esquerda e sufixos)
       if (filtros.numero_nota_de) {
-        const val = String(b.numero_nota || '');
-        if (val < filtros.numero_nota_de) return false;
+        const numNota = parseFloat(String(b.numero_nota || '').replace(/[^\d]/g, '')) || 0;
+        const numFiltro = parseFloat(String(filtros.numero_nota_de).replace(/[^\d]/g, '')) || 0;
+        if (numNota < numFiltro) return false;
       }
       if (filtros.numero_nota_ate) {
-        const val = String(b.numero_nota || '');
-        if (val > filtros.numero_nota_ate) return false;
+        const numNota = parseFloat(String(b.numero_nota || '').replace(/[^\d]/g, '')) || 0;
+        const numFiltro = parseFloat(String(filtros.numero_nota_ate).replace(/[^\d]/g, '')) || 0;
+        if (numNota > numFiltro) return false;
       }
 
       // Range filters para valor
       if (filtros.valor_de) {
-        if ((b.valor || 0) < parseFloat(filtros.valor_de)) return false;
+        if ((b.valor || 0) < parseFloat(String(filtros.valor_de).replace(/[^\d.,]/g, '').replace(',', '.'))) return false;
       }
       if (filtros.valor_ate) {
-        if ((b.valor || 0) > parseFloat(filtros.valor_ate)) return false;
+        if ((b.valor || 0) > parseFloat(String(filtros.valor_ate).replace(/[^\d.,]/g, '').replace(',', '.'))) return false;
       }
 
       // Multi-select por checkboxes (ex.: Zona Transp)
