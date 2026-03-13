@@ -1,11 +1,14 @@
 import { MainLayout } from '@/components/layout/MainLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { changelogData, APP_VERSION } from '@/data/changelog';
-import { GitCommit, Tag, Calendar } from 'lucide-react';
+import { Tag, Calendar, ShieldAlert } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function ReferenciaVersoes() {
+  const { isMaster } = useUserRole();
+
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'feat': return 'bg-green-500/10 text-green-500 border-green-500/20';
@@ -28,6 +31,14 @@ export default function ReferenciaVersoes() {
     }
   };
 
+  // Filtrar changelog: não-master vê apenas entradas não-técnicas
+  const filteredChangelog = changelogData
+    .map(release => ({
+      ...release,
+      changes: release.changes.filter(c => isMaster || !c.technical),
+    }))
+    .filter(release => release.changes.length > 0);
+
   return (
     <MainLayout>
       <div className="space-y-6 max-w-4xl mx-auto">
@@ -43,7 +54,7 @@ export default function ReferenciaVersoes() {
 
         <ScrollArea className="h-[calc(100vh-200px)] pr-4">
           <div className="space-y-8">
-            {changelogData.map((release, index) => (
+            {filteredChangelog.map((release, index) => (
               <div key={release.version} className="relative pl-8 border-l border-border pb-8 last:pb-0 last:border-0">
                 <div className="absolute left-[-5px] top-0 h-2.5 w-2.5 rounded-full bg-primary ring-4 ring-background" />
                 
@@ -75,6 +86,11 @@ export default function ReferenciaVersoes() {
                           <span className="text-sm text-foreground/90 leading-relaxed">
                             {change.description}
                           </span>
+                          {isMaster && change.technical && (
+                            <span className="shrink-0 mt-0.5" aria-label="Visível apenas para Master">
+                              <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                            </span>
+                          )}
                         </div>
                       ))}
                     </CardContent>
