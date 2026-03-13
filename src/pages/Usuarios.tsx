@@ -25,7 +25,7 @@ export default function Usuarios() {
 
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'aprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
+  const [dialogMode, setDialogMode] = useState<'aprovar' | 'reprovar' | 'editar' | 'excluir' | 'criar' | 'senha'>('aprovar');
   const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
   
   const [novoEmail, setNovoEmail] = useState('');
