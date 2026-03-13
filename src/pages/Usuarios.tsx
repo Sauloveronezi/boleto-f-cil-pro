@@ -454,6 +454,7 @@ export default function Usuarios() {
             <DialogHeader>
               <DialogTitle>
                 {dialogMode === 'aprovar' && 'Aprovar Usuário'}
+                {dialogMode === 'reprovar' && 'Reprovar Usuário'}
                 {dialogMode === 'editar' && 'Editar Usuário'}
                 {dialogMode === 'excluir' && 'Excluir Usuário'}
                 {dialogMode === 'criar' && 'Novo Usuário'}
@@ -461,6 +462,7 @@ export default function Usuarios() {
               </DialogTitle>
               <DialogDescription>
                 {dialogMode === 'aprovar' && `Defina o perfil de acesso para ${selectedUsuario?.email}`}
+                {dialogMode === 'reprovar' && `Tem certeza que deseja reprovar ${selectedUsuario?.email}?`}
                 {dialogMode === 'editar' && `Altere o perfil de acesso de ${selectedUsuario?.email}`}
                 {dialogMode === 'excluir' && `Tem certeza que deseja excluir ${selectedUsuario?.email}?`}
                 {dialogMode === 'criar' && 'Preencha os dados do novo usuário'}
