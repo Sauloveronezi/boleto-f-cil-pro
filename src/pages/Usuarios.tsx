@@ -144,6 +144,9 @@ export default function Usuarios() {
         usuarioId: selectedUsuario.id,
         perfilAcessoId: selectedPerfilId
       });
+    } else if (dialogMode === 'reprovar') {
+      if (!canDelete) return;
+      await reprovarUsuario.mutateAsync(selectedUsuario.id);
     } else if (dialogMode === 'editar') {
       if (!canEdit) return;
       await atualizarPerfil.mutateAsync({
