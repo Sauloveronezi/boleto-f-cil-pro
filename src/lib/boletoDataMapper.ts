@@ -306,6 +306,8 @@ function mapeamentoFallback(row: Record<string, any>): Record<string, string> {
   result.valor_cobrado = valor ? String(valor) : "";
   result.valor_desconto = valorDesconto ? String(valorDesconto) : "";
 
+  console.log("[boletoDataMapper] fallback beneficiario_nome=", result.beneficiario_nome, "beneficiario_cnpj=", result.beneficiario_cnpj);
+
   return result;
 }
 
