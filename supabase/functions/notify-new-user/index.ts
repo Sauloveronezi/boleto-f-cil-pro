@@ -38,9 +38,11 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) {
-      console.log("[notify-new-user] RESEND_API_KEY não configurada, notificação ignorada");
+    const resendApiKeys = [Deno.env.get("RESEND_API_KEY"), Deno.env.get("RESEND_API_KEY2")]
+      .filter((key): key is string => Boolean(key && key.trim().length > 0));
+
+    if (resendApiKeys.length === 0) {
+      console.log("[notify-new-user] RESEND_API_KEY/RESEND_API_KEY2 não configuradas, notificação ignorada");
       return new Response(
         JSON.stringify({ success: true, message: "Email notification skipped - no API key" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
