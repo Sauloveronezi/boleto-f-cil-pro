@@ -234,7 +234,7 @@ export async function renderBoletoV2(
   const showBorders = opts.debugBorders ?? false;
   const borderCol = opts.borderColor ?? { r: 1, g: 0, b: 0 };
   const showLabels = opts.showFieldLabels ?? showBorders;
-  const labelSize = opts.labelFontSize ?? 5;
+  const labelSize = opts.labelFontSize ?? 6;
   const pdfBytes = await fetchPdf(template.background_pdf_url);
   let doc: PDFDocument;
   let page: PDFPage;
