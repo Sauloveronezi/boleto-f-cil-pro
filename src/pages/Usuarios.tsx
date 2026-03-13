@@ -20,7 +20,7 @@ import { ptBR } from 'date-fns/locale';
 export default function Usuarios() {
   const { usuarios, isLoading, aprovarUsuario, desativarUsuario, reprovarUsuario, excluirUsuario, atualizarPerfil, toggleNotificacoes } = useUsuarios();
   const { perfis } = usePerfisAcesso();
-  const { hasPermission, isMaster, isLoading: isLoadingPermissoes } = usePermissoes();
+  const { hasPermission, isLoading: isLoadingPermissoes } = usePermissoes();
   const { criarUsuario, alterarSenha } = useManageUsers();
 
   const [selectedUsuario, setSelectedUsuario] = useState<Usuario | null>(null);
