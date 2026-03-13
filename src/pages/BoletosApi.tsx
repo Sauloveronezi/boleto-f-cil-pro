@@ -314,6 +314,19 @@ export default function BoletosApi() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
   };
 
+  // Campos considerados numéricos para filtro De→Até
+  const NUMERIC_FILTER_KEYS = new Set([
+    'valor', 'numero_nota', 'numero_cobranca', 'nosso_numero',
+    'br_nfenumber', 'br_nfnumber', 'billingdocument', 'doc_contabil',
+    'companycode', 'empresa', 'cod_barras', 'dyn_conta',
+    'amountintransactioncurrency', 'amountinfunctionalcurrency',
+  ]);
+
+  const isNumericFilterKey = (chave: string) => {
+    const lower = chave.toLowerCase();
+    return NUMERIC_FILTER_KEYS.has(lower) || lower.includes('amount') || lower.includes('number') || lower.includes('numero');
+  };
+
   const boletosFiltrados = useMemo(() => {
     return boletos?.filter((b: any) => {
       if (ocultarEmitidos && b.cod_barras_calculado) return false;
