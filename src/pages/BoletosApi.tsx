@@ -49,6 +49,7 @@ import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
+import { PDFDocument } from 'pdf-lib';
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
 import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper';
@@ -605,35 +606,11 @@ export default function BoletosApi() {
     return dados;
   };
 
-  // ===== Gerar PDF para um grupo de boletos do MESMO banco =====
-  const gerarPDFParaGrupoBanco = async (
+  // ===== Gerar PDF bytes para um grupo de boletos do MESMO banco (sem download) =====
+  const gerarPDFBytesParaGrupoBanco = async (
     bancoObj: any, configObj: any,
     boletosDoGrupo: any[], dadosDoGrupo: any[],
-    forceOverride: boolean
-  ) => {
-    // ===== Verificar conflito de código de barras =====
-    if (!forceOverride) {
-      const conflicts: { nota: string; antigo: string; novo: string }[] = [];
-      for (let i = 0; i < boletosDoGrupo.length; i++) {
-        const boleto = boletosDoGrupo[i];
-        const novoBarras = dadosDoGrupo[i]?.codigo_barras;
-        const barrasExistente = (boleto as any).cod_barras_calculado;
-        if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
-          conflicts.push({
-            nota: boleto.numero_nota || boleto.id,
-            antigo: String(barrasExistente),
-            novo: novoBarras,
-          });
-        }
-      }
-      if (conflicts.length > 0) {
-        setBarcodeConflicts(conflicts);
-        setPendingPrintAction(() => () => handleImprimirSelecionados(true));
-        setShowBarcodeAlert(true);
-        return;
-      }
-    }
-
+  ): Promise<Uint8Array | null> => {
     // Tentar template V2
     const UNIVERSAL_TEMPLATE_ID = 'b0000000-0000-0000-0000-000000000099';
     const templateV2 = templatesV2?.find(t => t.id === modeloSelecionado);
@@ -656,10 +633,8 @@ export default function BoletosApi() {
               ? { usarFundo: true }
               : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
             const pdfBytes = await renderBoletosV2(templateV2, parsedFields, dadosDoGrupo, renderOpts);
-            const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-            downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
             await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-            return;
+            return pdfBytes;
           }
         } catch (e) {
           console.warn('[BoletosApi] Falha ao re-seed universal:', e);
@@ -669,17 +644,15 @@ export default function BoletosApi() {
         ? { usarFundo: true }
         : { usarFundo: false, debugBorders: false, borderColor: { r: 0, g: 0, b: 0 }, labelFontSize: 5 };
       const pdfBytes = await renderBoletosV2(templateV2, templateFieldsV2, dadosDoGrupo, renderOpts);
-      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      downloadPdfV2(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
       await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-      return;
+      return pdfBytes;
     }
 
     // Fallback modelo legado
     if (modeloSelecionado) {
       const modelo = modelos?.find(m => m.id === modeloSelecionado);
-      if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return; }
-      if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return; }
+      if (!modelo) { toast({ title: 'Modelo não encontrado', variant: 'destructive' }); return null; }
+      if (!modelo.pdf_storage_path) { toast({ title: 'Modelo sem PDF', variant: 'destructive' }); return null; }
       const { data: modeloCompleto, error: modeloError } = await supabase
         .from('vv_b_modelos_boleto').select('campos_mapeados').eq('id', modeloSelecionado).single();
       if (modeloError) throw new Error('Erro ao carregar modelo');
@@ -695,13 +668,11 @@ export default function BoletosApi() {
         espessuraBorda: c.espessuraBorda, corBorda: c.corBorda, visivel: c.visivel ?? true,
       })) || [];
       const pdfBytes = await gerarBoletosComModelo(modelo.pdf_storage_path, elementos, dadosDoGrupo, undefined, imprimirFundo);
-      const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      downloadPDF(pdfBytes, `boletos_${bancoObj.codigo_banco.trim()}_${dataAtual}.pdf`);
       await salvarLinhaDigitavelNoBanco(boletosDoGrupo, dadosDoGrupo, bancoObj);
-      return;
+      return pdfBytes;
     }
 
-    // Fallback sem modelo
+    // Fallback sem modelo — usa geração legada (retorna null, faz download direto)
     const notasParaImprimir = boletosDoGrupo.map((boleto: any) => ({
       id: boleto.id, numero_nota: boleto.numero_nota,
       serie: boleto.dados_extras?.serie || '1', codigo_cliente: boleto.cliente_id || '',
@@ -722,6 +693,7 @@ export default function BoletosApi() {
         index === self.findIndex((c) => c.id === cliente.id)
       );
     gerarPDFBoletos(notasParaImprimir, clientesParaImprimir, bancoObj, configObj, 'API_CDS', 'arquivo_unico');
+    return null; // fallback faz download direto
   };
 
   const salvarLinhaDigitavelNoBanco = async (boletosList: any[], dadosBoletos: any[], bancoObj?: any) => {
@@ -802,9 +774,33 @@ export default function BoletosApi() {
       return;
     }
 
-    // Processar cada grupo de banco separadamente
+    // ===== Verificar conflitos de código de barras antes de processar =====
+    if (!forceOverride) {
+      const allConflicts: { nota: string; antigo: string; novo: string }[] = [];
+      for (const [, grupo] of gruposPorBanco) {
+        const { banco: bancoObj, configuracao: configObj, boletos: boletosDoGrupo } = grupo;
+        const dadosCalc = boletosDoGrupo.map(b => mapearDadosBoletoIndividual(b, bancoObj, configObj));
+        for (let i = 0; i < boletosDoGrupo.length; i++) {
+          const boleto = boletosDoGrupo[i];
+          const novoBarras = dadosCalc[i]?.codigo_barras;
+          const barrasExistente = (boleto as any).cod_barras_calculado;
+          if (novoBarras && barrasExistente && String(barrasExistente) !== String(novoBarras)) {
+            allConflicts.push({ nota: boleto.numero_nota || boleto.id, antigo: String(barrasExistente), novo: novoBarras });
+          }
+        }
+      }
+      if (allConflicts.length > 0) {
+        setBarcodeConflicts(allConflicts);
+        setPendingPrintAction(() => () => handleImprimirSelecionados(true));
+        setShowBarcodeAlert(true);
+        return;
+      }
+    }
+
+    // Processar cada grupo de banco e coletar bytes para PDF único
     let totalGerados = 0;
     let totalInvalidos = 0;
+    const allPdfBytes: Uint8Array[] = [];
 
     for (const [, grupo] of gruposPorBanco) {
       const { banco: bancoObj, configuracao: configObj, boletos: boletosDoGrupo } = grupo;
@@ -869,7 +865,10 @@ export default function BoletosApi() {
 
       try {
         toast({ title: `Gerando boletos - ${bancoObj.nome_banco}...`, description: `${boletosValidos.length} boleto(s)` });
-        await gerarPDFParaGrupoBanco(bancoObj, configObj, boletosValidos, dadosValidos, forceOverride);
+        const pdfBytes = await gerarPDFBytesParaGrupoBanco(bancoObj, configObj, boletosValidos, dadosValidos);
+        if (pdfBytes) {
+          allPdfBytes.push(pdfBytes);
+        }
         totalGerados += boletosValidos.length;
       } catch (error: any) {
         console.error(`[BoletosApi] Erro ao gerar PDF para banco ${bancoObj.codigo_banco}:`, error);
@@ -877,11 +876,30 @@ export default function BoletosApi() {
       }
     }
 
+    // Merge all PDF bytes into a single file
+    if (allPdfBytes.length > 0) {
+      try {
+        const mergedDoc = await PDFDocument.create();
+        for (const bytes of allPdfBytes) {
+          const srcDoc = await PDFDocument.load(bytes);
+          const pageIndices = srcDoc.getPageIndices();
+          const copiedPages = await mergedDoc.copyPages(srcDoc, pageIndices);
+          copiedPages.forEach(page => mergedDoc.addPage(page));
+        }
+        const mergedBytes = await mergedDoc.save();
+        const dataAtual = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        downloadPdfV2(new Uint8Array(mergedBytes), `boletos_${dataAtual}.pdf`);
+      } catch (mergeErr: any) {
+        console.error('[BoletosApi] Erro ao mesclar PDFs:', mergeErr);
+        toast({ title: 'Erro ao mesclar PDFs', description: mergeErr.message, variant: 'destructive' });
+      }
+    }
+
     if (totalGerados > 0) {
       const bancosCount = gruposPorBanco.size;
       const msgBancos = bancosCount > 1 ? ` de ${bancosCount} bancos` : '';
       const msgErros = totalInvalidos > 0 ? ` (${totalInvalidos} excluído(s) por erro)` : '';
-      toast({ title: 'PDFs gerados com sucesso', description: `${totalGerados} boleto(s)${msgBancos} gerado(s)${msgErros}` });
+      toast({ title: 'PDF gerado com sucesso', description: `${totalGerados} boleto(s)${msgBancos} em arquivo único${msgErros}` });
     }
   };
 

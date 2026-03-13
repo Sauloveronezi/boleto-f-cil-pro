@@ -11,6 +11,15 @@ export interface VersionEntry {
 
 export const changelogData: VersionEntry[] = [
   {
+    version: '0.4.3',
+    date: '2026-03-13',
+    changes: [
+      { type: 'feat', description: 'PDF único multi-banco: boletos de bancos diferentes são mesclados em um único arquivo, cada um com o layout correto do seu banco' },
+      { type: 'fix', description: 'RLS corrigido: operadores agora conseguem ler dados da empresa (beneficiário) e integrações de API para gerar boletos' },
+      { type: 'fix', description: 'Roles faltantes inseridas para usuários operadores e admins sem entrada na tabela vv_b_user_roles' },
+    ]
+  },
+  {
     version: '0.4.2',
     date: '2026-03-13',
     changes: [
