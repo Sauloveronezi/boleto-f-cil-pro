@@ -228,6 +228,7 @@ export function useUsuarios() {
     error,
     aprovarUsuario,
     desativarUsuario,
+    reprovarUsuario,
     excluirUsuario,
     atualizarPerfil,
     toggleNotificacoes
