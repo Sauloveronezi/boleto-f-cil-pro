@@ -234,7 +234,7 @@ export async function renderBoletoV2(
   const showBorders = opts.debugBorders ?? false;
   const borderCol = opts.borderColor ?? { r: 1, g: 0, b: 0 };
   const showLabels = opts.showFieldLabels ?? showBorders;
-  const labelSize = opts.labelFontSize ?? 5;
+  const labelSize = opts.labelFontSize ?? 6;
   const pdfBytes = await fetchPdf(template.background_pdf_url);
   let doc: PDFDocument;
   let page: PDFPage;
@@ -302,8 +302,8 @@ export async function renderBoletoV2(
       page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(borderCol.r, borderCol.g, borderCol.b), borderWidth: 0.5 });
       const labelText = field.label || '';
       if (labelText && !field.key.startsWith('mask_')) {
-        const labelFont = fonts.helvetica;
-        const labelColor = rgb(0.4, 0.4, 0.4);
+        const labelFont = fonts.helveticaBold;
+        const labelColor = rgb(0.15, 0.15, 0.15);
         const maxLabelW = labelFont.widthOfTextAtSize(labelText, labelSize);
         const truncLabel = maxLabelW > w - 2 ? labelText.substring(0, Math.floor(labelText.length * (w - 2) / maxLabelW)) : labelText;
         if (truncLabel) {
