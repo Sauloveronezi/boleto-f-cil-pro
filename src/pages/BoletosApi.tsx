@@ -49,6 +49,7 @@ import { gerarPDFBoletos } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { gerarBoletosComModelo, downloadPDF, DadosBoleto as DadosBoletoModelo, ElementoParaRender } from '@/lib/pdfModelRenderer';
+import { PDFDocument } from 'pdf-lib';
 import { gerarCodigoBarras } from '@/lib/barcodeCalculator';
 import { mapearBoletoApiParaModelo } from '@/lib/boletoMapping';
 import { mapBoletoApiToDadosBoleto, type ConfigBancoParaCalculo, type MapeamentoCampo } from '@/lib/boletoDataMapper';
